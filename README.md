@@ -2,9 +2,9 @@
 
 **Your Nightscout blood glucose, always visible in the macOS menu bar.**
 
-[![CI](https://github.com/josi19/sugarglider/actions/workflows/ci.yml/badge.svg)](https://github.com/josi19/sugarglider/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/josi19/sugarglider?sort=semver&label=release)](https://github.com/josi19/sugarglider/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/josi19/sugarglider/total?label=downloads)](https://github.com/josi19/sugarglider/releases)
+[![CI](https://github.com/nvmddev/sugarglider/actions/workflows/ci.yml/badge.svg)](https://github.com/nvmddev/sugarglider/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/nvmddev/sugarglider?sort=semver&label=release)](https://github.com/nvmddev/sugarglider/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/nvmddev/sugarglider/total?label=downloads)](https://github.com/nvmddev/sugarglider/releases)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000)](#requirements)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -71,7 +71,7 @@ Nightscout site.
 ### Download
 
 Grab the latest `.dmg` (or `.zip`) from the
-[releases page](https://github.com/josi19/sugarglider/releases/latest) and drag
+[releases page](https://github.com/nvmddev/sugarglider/releases/latest) and drag
 **Sugarglider.app** into `/Applications`. The build is a universal binary, so it
 runs natively on both Apple silicon and Intel.
 
@@ -89,7 +89,7 @@ Every release ships a `checksums.txt`; verify your download with
 ### Homebrew
 
 ```sh
-brew install --cask josi19/tap/sugarglider
+brew install --cask nvmddev/tap/sugarglider
 xattr -dr com.apple.quarantine /Applications/Sugarglider.app
 ```
 
@@ -99,7 +99,7 @@ The second line is the same quarantine caveat as above. Homebrew 6 dropped the
 ### Build from source
 
 ```sh
-git clone https://github.com/josi19/sugarglider.git
+git clone https://github.com/nvmddev/sugarglider.git
 cd sugarglider
 ./build.sh
 cp -r Sugarglider.app /Applications/

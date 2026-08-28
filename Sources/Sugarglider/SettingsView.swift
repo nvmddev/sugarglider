@@ -527,8 +527,8 @@ private struct AboutTab: View {
 /// Bundle metadata for the About tab, kept in one place so what Settings shows
 /// can only come from the Info.plist `build.sh` writes.
 enum AppInfo {
-    static let repositoryLabel = "josi19/sugarglider"
-    static let repositoryURL = URL(string: "https://github.com/josi19/sugarglider")!
+    static let repositoryLabel = "nvmddev/sugarglider"
+    static let repositoryURL = URL(string: "https://github.com/nvmddev/sugarglider")!
     static let issuesURL = repositoryURL.appending(path: "issues")
     static let licenseURL = repositoryURL.appending(path: "blob/main/LICENSE")
 

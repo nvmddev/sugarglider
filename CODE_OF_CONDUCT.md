@@ -22,7 +22,7 @@ someone is representing the project.
 ## Reporting
 
 Report problems to the maintainer via a private
-[security advisory](https://github.com/josi19/sugarglider/security/advisories/new)
+[security advisory](https://github.com/nvmddev/sugarglider/security/advisories/new)
 (it's the private channel this repo has) or by emailing the address on the
 maintainer's GitHub profile. Reports stay confidential.
 
