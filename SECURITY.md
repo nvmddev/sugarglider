@@ -8,7 +8,7 @@ before reporting.
 ## Reporting a vulnerability
 
 Report privately through GitHub's
-[security advisory form](https://github.com/josi19/sugarglider/security/advisories/new)
+[security advisory form](https://github.com/nvmddev/sugarglider/security/advisories/new)
 — **not** a public issue. Include what you did, what happened, and the version
 and macOS version you saw it on. Expect a first response within a week.
 

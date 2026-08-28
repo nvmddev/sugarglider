@@ -94,8 +94,8 @@ extension SugargliderTests {
     }
 
     @Test func repositoryLinksPointAtTheProject() {
-        #expect(AppInfo.issuesURL.absoluteString == "https://github.com/josi19/sugarglider/issues")
+        #expect(AppInfo.issuesURL.absoluteString == "https://github.com/nvmddev/sugarglider/issues")
         #expect(AppInfo.licenseURL.absoluteString
-                == "https://github.com/josi19/sugarglider/blob/main/LICENSE")
+                == "https://github.com/nvmddev/sugarglider/blob/main/LICENSE")
     }
 }

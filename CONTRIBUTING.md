@@ -10,7 +10,7 @@ the easiest ones to merge.
 ## Getting set up
 
 ```sh
-git clone https://github.com/josi19/sugarglider.git
+git clone https://github.com/nvmddev/sugarglider.git
 cd sugarglider
 swift build              # debug build
 swift test               # test suite (Swift Testing)
