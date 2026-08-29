@@ -54,8 +54,18 @@ private struct GeneralTab: View {
                     .focused($tokenFieldFocused)
                 LabeledContent("Status") { statusView }
             } footer: {
-                Text("Leave the token empty if your site allows unauthenticated reads.")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Leave the token empty if your site allows unauthenticated reads. "
+                         + "It is kept in your Keychain, not in the preferences file.")
+                    // The one Keychain failure the user can act on — everything
+                    // still works this session, but the token is gone on relaunch.
+                    if settings.tokenStorageFailed {
+                        Text("The Keychain refused to store the token, so Sugarglider will "
+                             + "forget it when it quits.")
+                            .foregroundStyle(.red)
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
             Section {
                 Picker("Theme", selection: $settings.theme) {

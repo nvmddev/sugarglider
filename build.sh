@@ -13,6 +13,11 @@
 #                  both of which notarization rejects the app without.
 #   UNIVERSAL      1 = arm64 + x86_64 fat binary (what releases ship), 0 = host
 #                  arch only (fast local iteration). Default 0.
+#   TEAM_ID        Apple Developer Team ID. Together with a provisioning profile
+#                  it adds the keychain-access-groups entitlement — see the
+#                  signing block below and docs/signing.md.
+#   PROVISION_PROFILE  Path to that profile. Default
+#                  Resources/embedded.provisionprofile (gitignored, optional).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -104,8 +109,39 @@ if [[ "${SIGN_IDENTITY}" == "-" ]]; then
     echo "==> Ad-hoc signing"
     codesign --force --sign - "${APP}" >/dev/null 2>&1 || echo "    (codesign skipped)"
 else
+    # Which Keychain the Nightscout token ends up in is decided here, not in the
+    # app: a keychain-access-groups entitlement moves it to the data-protection
+    # Keychain, which the app reads without ever prompting. That entitlement is
+    # *restricted* — AMFI kills the app at launch unless an embedded provisioning
+    # profile grants it — so it goes in only when both a profile and a Team ID
+    # are present. Without them the app falls back to the file-based login
+    # Keychain (one access prompt after an update) entirely on its own; see
+    # TokenStore.swift, which probes for the difference, and docs/signing.md.
+    SIGN_ARGS=(--force --options runtime --timestamp)
+    PROFILE="${PROVISION_PROFILE:-Resources/embedded.provisionprofile}"
+    if [[ -n "${TEAM_ID:-}" && -f "${PROFILE}" ]]; then
+        cp "${PROFILE}" "${APP}/Contents/embedded.provisionprofile"
+        ENTITLEMENTS=".build/Sugarglider.entitlements"
+        cat > "${ENTITLEMENTS}" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>${TEAM_ID}.${BUNDLE_ID}</string>
+    </array>
+</dict>
+</plist>
+PLIST
+        SIGN_ARGS+=(--entitlements "${ENTITLEMENTS}")
+        echo "==> Embedding provisioning profile (keychain group ${TEAM_ID}.${BUNDLE_ID})"
+    else
+        echo "==> No profile or TEAM_ID — the token falls back to the login Keychain"
+    fi
+
     echo "==> Signing with ${SIGN_IDENTITY}"
-    codesign --force --options runtime --timestamp --sign "${SIGN_IDENTITY}" "${APP}"
+    codesign "${SIGN_ARGS[@]}" --sign "${SIGN_IDENTITY}" "${APP}"
     codesign --verify --strict --verbose=2 "${APP}"
 fi
 

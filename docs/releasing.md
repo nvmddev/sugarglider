@@ -51,6 +51,7 @@ just ad-hoc signed and without the Homebrew cask.
 | `MACOS_CERTIFICATE_P12`      | secret   | Developer ID cert (base64 `.p12`); enables real signing |
 | `MACOS_CERTIFICATE_PASSWORD` | secret   | Password for that `.p12`                                |
 | `MACOS_SIGN_IDENTITY`        | secret   | e.g. `Developer ID Application: Name (TEAMID)`          |
+| `MACOS_PROVISION_PROFILE`    | secret   | Developer ID profile (base64); no Keychain prompt       |
 | `APPLE_ID`                   | secret   | Apple ID; enables notarization and stapling             |
 | `APPLE_TEAM_ID`              | secret   | Team ID for notarization                                |
 | `APPLE_APP_PASSWORD`         | secret   | App-specific password for notarization                  |
@@ -58,9 +59,12 @@ just ad-hoc signed and without the Homebrew cask.
 | `HOMEBREW_TAP_REPO`          | variable | Tap repo, defaults to `<owner>/homebrew-tap`            |
 | `RELEASE_PAT`                | secret   | PAT (contents + pull requests) here; self-merges the PR |
 
-Base64-encode the certificate with `base64 -i cert.p12 | pbcopy`. All of these
-are set on this repository, so the workflow signs and notarizes on its own and
-the release notes carry no Gatekeeper workaround. Without them it degrades
+Base64-encode the certificate with `base64 -i cert.p12 | pbcopy`, and the
+provisioning profile the same way — what it does, and how to create one, is
+[docs/signing.md](signing.md). Without it the app still keeps the access token
+in the Keychain; it just has to ask for access once after each update. All of
+these are set on this repository, so the workflow signs and notarizes on its
+own and the release notes carry no Gatekeeper workaround. Without them it degrades
 instead of failing — no certificate means an ad-hoc build, no `APPLE_ID` means
 signed but unnotarized — which is why `scripts/verify-notarization.sh` runs on
 the notarizing path and fails the release rather than letting a quarantined

@@ -10,6 +10,7 @@ import SwiftUI
 @Observable
 final class AppSettings {
     private let defaults: UserDefaults
+    private let tokens: any TokenStorage
 
     // Subscriptions, not settings — `ReadingStore.start()` installs all three,
     // and no view observes them, so they stay out of change tracking.
@@ -38,13 +39,23 @@ final class AppSettings {
     }
 
     /// Nightscout API access token (e.g. "monitor-1a2b3c4d"). Empty if the
-    /// instance allows unauthenticated reads.
+    /// instance allows unauthenticated reads. Unlike every other setting this
+    /// one is *not* written to `defaults` — it goes to the Keychain, because a
+    /// preferences plist is readable by any process running as the user.
     var token: String = "" {
         didSet {
-            defaults.set(token, forKey: "token")
-            if oldValue != token { onConnectionChanged?() }
+            guard oldValue != token else { return }
+            tokenStorageFailed = !tokens.save(token)
+            onConnectionChanged?()
         }
     }
+
+    /// True when the Keychain refused the last write, so the token is live for
+    /// this session but won't come back after a relaunch. Surfaced by the
+    /// Settings window rather than repaired: nothing else would reveal it, and
+    /// the only honest fallback — the plist the token just left — is the
+    /// problem being fixed. Not persisted; a successful write clears it.
+    var tokenStorageFailed = false
 
     /// Display units. Nightscout stores mg/dL internally; mmol/L divides by 18.
     enum Units: String {
@@ -448,12 +459,13 @@ final class AppSettings {
 
     // MARK: - Init / persistence plumbing
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, tokens: any TokenStorage = KeychainTokenStore()) {
         self.defaults = defaults
+        self.tokens = tokens
         Self.migrateThresholdsToMgdl(in: defaults)
 
         if let v = defaults.string(forKey: "baseURL") { baseURL = v }
-        if let v = defaults.string(forKey: "token") { token = v }
+        (token, tokenStorageFailed) = Self.migrateTokenToKeychain(defaults: defaults, tokens: tokens)
         if let v = defaults.string(forKey: "units").flatMap(Units.init) { units = v }
         if let v = defaults.object(forKey: "targetLow") as? Double { targetLow = v }
         if let v = defaults.object(forKey: "targetHigh") as? Double { targetHigh = v }
@@ -496,6 +508,27 @@ final class AppSettings {
             }
         }
         defaults.set(true, forKey: "thresholdsMgdl")
+    }
+
+    /// One-time migration: the access token used to be persisted in
+    /// `UserDefaults` alongside everything else, i.e. in a plist any process
+    /// running as the user can read with `defaults read`. Move it into the
+    /// Keychain and drop the old key — the plaintext copy going away is the
+    /// whole point, so it goes even when the Keychain already held a token.
+    /// Returns the token to start with (Keychain first) and whether storing it
+    /// failed; the key outlives the migration in that one case only, since
+    /// dropping it there would destroy the last copy.
+    private static func migrateTokenToKeychain(defaults: UserDefaults, tokens: any TokenStorage)
+        -> (token: String, failed: Bool) {
+        let stored = tokens.load()
+        guard let legacy = defaults.string(forKey: "token") else { return (stored, false) }
+        guard stored.isEmpty, !legacy.isEmpty else {
+            defaults.removeObject(forKey: "token")
+            return (stored, false)
+        }
+        guard tokens.save(legacy) else { return (legacy, true) }
+        defaults.removeObject(forKey: "token")
+        return (legacy, false)
     }
 
     /// Write-through for a clamped numeric setting, called from that property's

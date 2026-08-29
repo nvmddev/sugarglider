@@ -10,9 +10,41 @@ import Darwin
 /// domain, so tests can run in any order with no cross-test bleed.
 @Suite @MainActor
 struct SugargliderTests {
-    /// A fresh `AppSettings` backed by its own throwaway `UserDefaults` suite.
-    static func makeSettings() -> AppSettings {
-        AppSettings(defaults: UserDefaults(suiteName: "SugargliderTests-\(UUID().uuidString)")!)
+    /// A fresh `AppSettings` backed by its own throwaway `UserDefaults` suite
+    /// and an in-memory token store — never the real Keychain, which an
+    /// unsigned test binary would prompt for.
+    static func makeSettings(defaults: UserDefaults? = nil,
+                             tokens: any TokenStorage = InMemoryTokenStore()) -> AppSettings {
+        AppSettings(defaults: defaults ?? makeDefaults(), tokens: tokens)
+    }
+
+    /// A throwaway `UserDefaults` suite, for the tests that have to inspect the
+    /// store itself rather than only the settings sitting on top of it.
+    static func makeDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "SugargliderTests-\(UUID().uuidString)")!
+    }
+}
+
+/// Stands in for the Keychain. `AppSettings` would otherwise reach the real
+/// login Keychain during tests — writing items, and prompting for access from
+/// a binary whose signature changes on every build.
+@MainActor
+final class InMemoryTokenStore: TokenStorage {
+    private(set) var stored: String
+
+    /// Makes `save` report failure, which is the only way to reach
+    /// `AppSettings.tokenStorageFailed`.
+    var refuseWrites = false
+
+    init(_ stored: String = "") { self.stored = stored }
+
+    func load() -> String { stored }
+
+    @discardableResult
+    func save(_ token: String) -> Bool {
+        guard !refuseWrites else { return false }
+        stored = token
+        return true
     }
 }
 

@@ -93,13 +93,21 @@ func makeStore(_ settings: AppSettings, readings: [Reading]) -> ReadingStore {
     return store
 }
 
+/// The pictures need no access token, and reaching the real Keychain from a
+/// throwaway binary would only earn an access prompt.
+@MainActor
+struct NoTokenStore: TokenStorage {
+    func load() -> String { "" }
+    func save(_ token: String) -> Bool { true }
+}
+
 /// Isolated defaults, so the pictures show the stock look rather than whatever
 /// the person re-rendering them happens to have configured.
 @MainActor
 func makeSettings(_ configure: (AppSettings) -> Void = { _ in }) -> AppSettings {
     let suite = UserDefaults(suiteName: "dev.nevermind.sugarglider.readme-art")!
     suite.removePersistentDomain(forName: "dev.nevermind.sugarglider.readme-art")
-    let settings = AppSettings(defaults: suite)
+    let settings = AppSettings(defaults: suite, tokens: NoTokenStore())
     settings.baseURL = "https://cgm.example.invalid"   // configured, unreachable
     configure(settings)
     return settings

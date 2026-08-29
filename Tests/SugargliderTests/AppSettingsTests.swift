@@ -590,3 +590,75 @@ extension SugargliderTests {
         #expect(s.chartBackgroundEnabled == true)
     }
 }
+
+// MARK: - Access token storage
+
+extension SugargliderTests {
+    /// The token goes to the Keychain seam and never to `UserDefaults` — it
+    /// having been world-readable plaintext there is the whole point of the move.
+    @Test func tokenPersistsToTheTokenStoreNotDefaults() {
+        let defaults = Self.makeDefaults()
+        let tokens = InMemoryTokenStore()
+        let s = Self.makeSettings(defaults: defaults, tokens: tokens)
+        s.token = "monitor-abc"
+        #expect(tokens.stored == "monitor-abc")
+        #expect(defaults.string(forKey: "token") == nil)
+    }
+
+    /// Clearing the field clears the stored item too, rather than leaving the
+    /// last token behind for the next launch to find.
+    @Test func clearingTheTokenEmptiesTheStore() {
+        let tokens = InMemoryTokenStore("monitor-abc")
+        let s = Self.makeSettings(tokens: tokens)
+        #expect(s.token == "monitor-abc")
+        s.token = ""
+        #expect(tokens.stored == "")
+    }
+
+    /// A token left in the plist by an earlier version moves across on first
+    /// launch, and the plaintext copy goes away with it.
+    @Test func legacyTokenMigratesOutOfDefaults() {
+        let defaults = Self.makeDefaults()
+        defaults.set("monitor-legacy", forKey: "token")
+        let tokens = InMemoryTokenStore()
+        let s = Self.makeSettings(defaults: defaults, tokens: tokens)
+        #expect(s.token == "monitor-legacy")
+        #expect(tokens.stored == "monitor-legacy")
+        #expect(defaults.string(forKey: "token") == nil)
+    }
+
+    /// A stored token wins over a stale plist one — but the plist key is cleared
+    /// either way, since leaving it there is what the migration exists to fix.
+    @Test func storedTokenWinsOverStaleLegacyToken() {
+        let defaults = Self.makeDefaults()
+        defaults.set("monitor-legacy", forKey: "token")
+        let s = Self.makeSettings(defaults: defaults, tokens: InMemoryTokenStore("monitor-current"))
+        #expect(s.token == "monitor-current")
+        #expect(defaults.string(forKey: "token") == nil)
+    }
+
+    /// A refused migration says so instead of pretending, and keeps the old key:
+    /// dropping it would lose the only copy of the token.
+    @Test func refusedMigrationIsReportedAndKeepsTheOldKey() {
+        let defaults = Self.makeDefaults()
+        defaults.set("monitor-legacy", forKey: "token")
+        let tokens = InMemoryTokenStore()
+        tokens.refuseWrites = true
+        let s = Self.makeSettings(defaults: defaults, tokens: tokens)
+        #expect(s.token == "monitor-legacy")
+        #expect(s.tokenStorageFailed)
+        #expect(defaults.string(forKey: "token") == "monitor-legacy")
+    }
+
+    /// The warning tracks the latest write in both directions.
+    @Test func refusedWriteSetsTheFlagAndASuccessClearsIt() {
+        let tokens = InMemoryTokenStore()
+        let s = Self.makeSettings(tokens: tokens)
+        tokens.refuseWrites = true
+        s.token = "monitor-abc"
+        #expect(s.tokenStorageFailed)
+        tokens.refuseWrites = false
+        s.token = "monitor-def"
+        #expect(!s.tokenStorageFailed)
+    }
+}
