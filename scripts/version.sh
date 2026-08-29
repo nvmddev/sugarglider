@@ -13,8 +13,8 @@
 #   any feat:                                 → minor
 #   otherwise                                 → patch
 #
-# `next` deliberately always answers with a number — deciding whether a release
-# is warranted at all is `app-changed`'s job, so the two can be used separately.
+# `next` always answers with a number. Whether a release is warranted at all is
+# `app-changed`'s job, so the two can be used separately.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,9 +32,9 @@ latest_tag() {
 previous_tag() {
     local exclude="$1" tag prev
     # The release <exclude> actually follows: the nearest tag reachable from its
-    # parent, so a higher version tagged on a side branch doesn't win. Fails
-    # when <exclude> isn't a commit yet (the workflow_dispatch path computes the
-    # previous tag *before* creating the new one) — then fall through to the list.
+    # parent, so a higher version tagged on a side branch doesn't win. Fails when
+    # <exclude> isn't a commit yet, which is the workflow_dispatch path computing
+    # the previous tag before creating the new one, hence the fallback below.
     if prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${exclude}^" 2>/dev/null)"; then
         printf '%s' "${prev}"
         return 0
@@ -63,8 +63,8 @@ detect_bump() {
     printf '%s' "${bump}"
 }
 
-# Paths whose contents end up in the shipped bundle. Everything else — CI,
-# scripts, docs — can change without altering a single byte of the app.
+# Paths whose contents end up in the shipped bundle. Everything else (CI,
+# scripts, docs) can change without altering a single byte of the app.
 APP_PATHS=(Sources Resources Package.swift)
 
 case "${1:-}" in
@@ -74,7 +74,7 @@ app-changed)
         echo "changed (no release tag yet)"
         exit 0
     fi
-    # git diff --quiet exits 1 when there *are* differences, hence the inversion.
+    # git diff --quiet exits 1 when there are differences, hence the inversion.
     if git diff --quiet "${tag}" HEAD -- "${APP_PATHS[@]}"; then
         echo "unchanged since ${tag}"
         exit 1

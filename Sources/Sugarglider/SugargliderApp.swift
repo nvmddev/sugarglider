@@ -10,7 +10,7 @@ struct SugargliderApp: App {
         let store = ReadingStore(settings: settings)
         _settings = State(initialValue: settings)
         _store = State(initialValue: store)
-        store.start()   // subscribes to `settings`, then begins polling
+        store.start()
     }
 
     var body: some Scene {

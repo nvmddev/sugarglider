@@ -3,19 +3,16 @@ import AppKit
 
 /// A horizontal slider whose filled track honors an arbitrary color.
 ///
-/// SwiftUI's stock `Slider` is AppKit-backed on macOS and its track is
-/// **not tintable**: `.tint(_:)`/`.accentColor(_:)` are ignored, and so is
-/// `NSSlider.trackFillColor` on the modern control — the fill is a fixed
-/// neutral grey (verified by off-screen renders on macOS 26). Honoring
-/// `AppSettings.sliderColor` therefore means drawing the control ourselves;
-/// this is deliberately the only hand-drawn stock control in the app.
+/// The stock `Slider` is AppKit-backed on macOS and simply cannot be recolored:
+/// `.tint(_:)`, `.accentColor(_:)` and `NSSlider.trackFillColor` are all
+/// ignored, and the fill stays a fixed neutral grey (verified by off-screen
+/// renders on macOS 26). So `AppSettings.sliderColor` means drawing the control
+/// by hand. This is the only hand-drawn control in the app; don't "simplify" it
+/// back to a stock `Slider`.
 ///
-/// Behavior matches `NSSlider`: clicking anywhere on the track jumps the knob
-/// there, dragging tracks continuously, and values snap to `step`. Keyboard
-/// adjustment is the one thing the stock control has and this doesn't — the
-/// VoiceOver increment/decrement actions below cover the accessibility case.
-/// The geometry itself lives in the two static helpers, which are pure and
-/// unit-tested without a live view.
+/// Behavior matches `NSSlider`: a click on the track jumps the knob there,
+/// dragging tracks continuously, values snap to `step`. Keyboard adjustment is
+/// the one thing missing, which the VoiceOver actions below stand in for.
 struct TintedSlider: View {
     @Binding var value: Double
     var range: ClosedRange<Double>
@@ -30,8 +27,8 @@ struct TintedSlider: View {
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
-            // The knob's center travels between the two inset ends, so the
-            // filled track has to stop at the knob's center, not the edge.
+            // The knob's center travels between the two inset ends, so the fill
+            // stops at the knob's center rather than at the edge.
             let usable = max(width - Self.knobDiameter, 1)
             let f = Self.fraction(of: value, in: range)
             ZStack(alignment: .leading) {
@@ -68,16 +65,15 @@ struct TintedSlider: View {
         }
     }
 
-    /// Where `value` sits in `range`, as 0…1 (clamped).
+    /// Where `value` sits in `range`, as a clamped 0…1.
     static func fraction(of value: Double, in range: ClosedRange<Double>) -> Double {
         let span = range.upperBound - range.lowerBound
         guard span > 0 else { return 0 }
         return min(max((value - range.lowerBound) / span, 0), 1)
     }
 
-    /// The value a click/drag at `x` (in view coordinates) selects: the knob's
-    /// travel is inset by half a knob at each end, and the result is snapped to
-    /// `step` (when > 0) and clamped to `range`.
+    /// The value a click or drag at `x` selects. The knob's travel is inset by
+    /// half a knob at each end; the result snaps to `step` when that is > 0.
     static func value(atX x: CGFloat, trackWidth: CGFloat,
                       range: ClosedRange<Double>, step: Double) -> Double {
         let usable = max(trackWidth - knobDiameter, 1)

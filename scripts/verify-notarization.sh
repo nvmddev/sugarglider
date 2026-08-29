@@ -9,8 +9,8 @@
 # on its own. This is the step that does: run it only on the notarizing path.
 #
 # The zip is checked by unpacking it rather than by trusting the app in the
-# working tree — it is what Homebrew installs, and it is rebuilt *after* the
-# staple, so a wrong order there is exactly the mistake worth catching.
+# working tree: it is what Homebrew installs, and it is rebuilt after the staple,
+# so a wrong order there is exactly the mistake worth catching.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

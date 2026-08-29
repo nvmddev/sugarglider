@@ -6,3 +6,8 @@ dist/
 .DS_Store
 .vscode/
 .scratch/
+
+# A Developer ID provisioning profile, when one exists — it authorises the
+# keychain-access-groups entitlement. Not secret in the password sense, but
+# account-specific, so it stays out of the repo. See docs/signing.md.
+Resources/embedded.provisionprofile

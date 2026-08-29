@@ -3,8 +3,7 @@ import Testing
 import SwiftUI
 @testable import Sugarglider
 
-/// Collect a `Path`'s elements — the SwiftUI equivalent of `NSBezierPath`'s
-/// `elementCount`/`element(at:associatedPoints:)`, which `Path` doesn't expose.
+/// `Path` exposes no equivalent of `NSBezierPath.elementCount`, so collect them.
 private func elements(of path: Path) -> [Path.Element] {
     var result: [Path.Element] = []
     path.forEach { result.append($0) }
@@ -35,9 +34,8 @@ extension SugargliderTests {
         #expect(ChartMath.labelsNeedDay(span: 72 * 3600))
     }
 
-    /// One constant, two users: the chart breaks its line on a wider gap than
-    /// this, and `ReadingStore` only merges polled entries into the history when
-    /// they join up within it. They must not drift apart.
+    /// One constant, two users: the chart breaks its line on a wider gap, and
+    /// `ReadingStore` merges polled entries into the history only within it.
     @Test func dropoutThresholdIsSharedWithTheStore() {
         #expect(ChartMath.dropoutThreshold == 15 * 60)
         #expect(ReadingStore.contiguityThreshold == ChartMath.dropoutThreshold)
@@ -107,9 +105,8 @@ extension SugargliderTests {
 
     @Test func nearestIndexFindsClosestByX() {
         let base = Date()
-        // `reading(minutesAgo:)` is seconds-since-`base` × 60 in the past, so
-        // negating it here places these at x = 0, 5, 10 (in the same units `x`
-        // reports below, seconds — not minutes; keep the two in sync).
+        // `reading(minutesAgo:)` counts backwards, so negating puts these at
+        // 0, 300 and 600 seconds after `base`, the same unit `x` returns.
         let readings = [0.0, 300.0, 600.0].map { reading(100, minutesAgo: -$0 / 60, from: base) }
         func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(base)) }
         #expect(ChartMath.nearestIndex(to: 0, x: x, in: readings, maxDistance: 24) == 0)
@@ -184,8 +181,8 @@ extension SugargliderTests {
         #expect(renderedImage(chart) != nil)   // fixed colors + the largest allowed dot
     }
 
-    /// Raw pixels of an off-screen render, so two chart variants can be
-    /// compared. PNG encoding isn't reproducible, the bitmap is.
+    /// Raw pixels of an off-screen render, so two variants can be compared.
+    /// PNG encoding isn't reproducible, the bitmap is.
     private func pixels(of view: some View) -> Data? {
         guard let image = renderedImage(view) else { return nil }
         let rep = NSBitmapImageRep(cgImage: image)
@@ -194,9 +191,9 @@ extension SugargliderTests {
     }
 
     /// The Settings preview's contract: sample data pinned to its own window end
-    /// keeps drawing however long ago it was generated, whereas the same data on
-    /// a wall-clock window ages out into the empty state — which is what the
-    /// live chart wants, and what made the preview go blank.
+    /// keeps drawing however long ago it was generated, whereas on a wall-clock
+    /// window it ages out into the empty state. That's what the live chart wants,
+    /// and what made the preview go blank.
     @Test func pinnedWindowEndKeepsStaleSampleDataVisible() {
         let s = Self.makeSettings()
         let end = Date().addingTimeInterval(-6 * 3600)   // as if generated 6h ago
@@ -213,9 +210,9 @@ extension SugargliderTests {
         #expect(wallClock == emptyState)   // ...and without the pin it wouldn't be
     }
 
-    /// The Colors tab's preview slider spans the real 2…72 h bounds, and the
-    /// sample curve grows with the window (5-min spacing, so 865 points at the
-    /// top end — plus weekday time labels past 24 h).
+    /// The preview slider spans the real 2…72 h bounds and the sample curve
+    /// grows with the window: 5-min spacing, so 865 points at the top end, plus
+    /// weekday time labels past 24 h.
     @Test func rendersWidestPreviewWindow() {
         let s = Self.makeSettings()
         let end = Date()

@@ -3,34 +3,63 @@ import Foundation
 import Darwin
 @testable import Sugarglider
 
-/// Root suite for the whole bundle. `@MainActor` because `AppSettings`/
-/// `ReadingStore`/views are all main-actor isolated. No shared mutable state
-/// to reset between tests — `makeSettings()` gives each test an isolated
-/// `UserDefaults` suite instead of resetting the process-wide `.standard`
-/// domain, so tests can run in any order with no cross-test bleed.
+/// Root suite for the whole bundle. `@MainActor` because `AppSettings`,
+/// `ReadingStore` and the views all are. There's no shared mutable state to
+/// reset between tests, so they can run in any order and concurrently.
 @Suite @MainActor
 struct SugargliderTests {
-    /// A fresh `AppSettings` backed by its own throwaway `UserDefaults` suite.
-    static func makeSettings() -> AppSettings {
-        AppSettings(defaults: UserDefaults(suiteName: "SugargliderTests-\(UUID().uuidString)")!)
+    /// A fresh `AppSettings` on its own throwaway `UserDefaults` suite and an
+    /// in-memory token store. Never the real Keychain, which an unsigned test
+    /// binary would prompt for.
+    static func makeSettings(defaults: UserDefaults? = nil,
+                             tokens: any TokenStorage = InMemoryTokenStore()) -> AppSettings {
+        AppSettings(defaults: defaults ?? makeDefaults(), tokens: tokens)
+    }
+
+    /// For the tests that inspect the store itself rather than only the
+    /// settings sitting on top of it.
+    static func makeDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "SugargliderTests-\(UUID().uuidString)")!
     }
 }
 
-/// A throwaway HTTP/1.1 server bound to the loopback interface, used to exercise
-/// `Nightscout.fetchEntries` end-to-end. `Nightscout` builds its own private
-/// `URLSession`, so a `URLProtocol` stub can't intercept it — a real socket can.
+/// Stands in for the Keychain, which the tests would otherwise write items to
+/// and be prompted by, since the test binary's signature changes every build.
+@MainActor
+final class InMemoryTokenStore: TokenStorage {
+    private(set) var stored: String
+
+    /// Makes `save` report failure, which is the only way to reach
+    /// `AppSettings.tokenStorageFailed`.
+    var refuseWrites = false
+
+    init(_ stored: String = "") { self.stored = stored }
+
+    func load() -> String { stored }
+
+    @discardableResult
+    func save(_ token: String) -> Bool {
+        guard !refuseWrites else { return false }
+        stored = token
+        return true
+    }
+}
+
+/// A throwaway HTTP/1.1 server for exercising `Nightscout.fetchEntries` end to
+/// end. `Nightscout` builds its own private `URLSession`, so a `URLProtocol`
+/// stub can't intercept it, but a real socket can.
 ///
-/// Loopback (`127.0.0.1`) binding is deliberate: it never triggers the macOS
-/// incoming-connection firewall prompt that an all-interfaces bind can. Each
-/// accepted connection gets the same canned status + body, then is closed.
+/// Binding to `127.0.0.1` is deliberate: it never triggers the macOS incoming
+/// connection firewall prompt that an all-interfaces bind can. Every accepted
+/// connection gets the same canned response, then is closed.
 final class LocalHTTPServer {
     let port: UInt16
     private let fd: Int32
     private var stopped = false
 
-    /// Request lines ("GET /path?query HTTP/1.1") as received, so a test can
-    /// assert on what the client actually asked for. Written from the serving
-    /// thread, read from the test's, hence the lock.
+    /// Request lines as received, so a test can assert on what the client
+    /// actually asked for. Written from the serving thread and read from the
+    /// test's, hence the lock.
     private static let requestsLock = NSLock()
     nonisolated(unsafe) private static var requestsByPort: [UInt16: [String]] = [:]
 
@@ -69,8 +98,8 @@ final class LocalHTTPServer {
         self.port = UInt16(bigEndian: addr.sin_port)
         self.fd = sock
 
-        // Serve on a background thread. The closure captures only value types, so
-        // there's no reference back to `self` (and thus no init-order trouble).
+        // The closure captures only value types, so there's no reference back
+        // to `self` and no init-order trouble.
         let serverFD = sock
         let statusCode = status
         let servedPort = self.port
@@ -129,9 +158,9 @@ func fetchEntriesAsync(count: Int, since: Date? = nil, baseURL: String,
     } catch { return .failure(error) }
 }
 
-/// Polls `condition` until it holds, then returns; records an issue after ~2s.
-/// `ReadingStore`'s fetches run in detached `Task`s with no handle to await, so
-/// an integration test has to observe the resulting state instead.
+/// Polls `condition` until it holds, recording an issue after ~2s.
+/// `ReadingStore`'s fetches run in `Task`s with no handle to await, so an
+/// integration test has to observe the resulting state instead.
 @MainActor
 func waitUntil(_ what: String, _ condition: () -> Bool) async throws {
     for _ in 0..<200 {

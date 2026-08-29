@@ -1,10 +1,10 @@
 import SwiftUI
 import AppKit
 
-/// Settings, presented via SwiftUI's native `Settings` scene (⌘,): a real,
-/// non-modal window — edits apply live to `AppSettings`, no Save/Cancel.
-/// Each tab is a `.grouped` form (the System Settings look), which scrolls
-/// when content outgrows the window.
+/// The `Settings` scene (⌘,). Non-modal, like System Settings itself: every
+/// edit applies and persists immediately, there is no Save/Cancel. Each tab is
+/// a `.grouped` form, which unlike a plain one scrolls when the content
+/// outgrows the fixed window frame instead of silently clipping.
 struct SettingsView: View {
     var settings: AppSettings
 
@@ -20,13 +20,11 @@ struct SettingsView: View {
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
         .frame(width: 500, height: 480)
-        // NOT `.windowTheme(_:)` here: SwiftUI actively manages the Settings
-        // scene window's `NSWindow.appearance` and resets a manual override
-        // milliseconds after it's applied. `preferredColorScheme` feeds that
-        // same machinery, so SwiftUI sets the window appearance itself —
-        // which also retints the AppKit dynamic colors the preview chart
-        // draws with. The MenuBarExtra dropdown is the opposite case: it
-        // ignores `preferredColorScheme` entirely and needs `.windowTheme`.
+        // Not `.windowTheme(_:)`: SwiftUI manages this window's appearance and
+        // resets a manual override milliseconds after it's applied.
+        // `preferredColorScheme` feeds the same machinery, so SwiftUI sets the
+        // appearance itself and the preview chart's AppKit colors follow. The
+        // dropdown is the opposite case, see WindowAppearance.swift.
         .preferredColorScheme(settings.theme.colorScheme)
     }
 }
@@ -54,8 +52,16 @@ private struct GeneralTab: View {
                     .focused($tokenFieldFocused)
                 LabeledContent("Status") { statusView }
             } footer: {
-                Text("Leave the token empty if your site allows unauthenticated reads.")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Leave the token empty if your site allows unauthenticated reads. "
+                         + "It is kept in your Keychain, not in the preferences file.")
+                    if settings.tokenStorageFailed {
+                        Text("The Keychain refused to store the token, so Sugarglider will "
+                             + "forget it when it quits.")
+                            .foregroundStyle(.red)
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
             Section {
                 Picker("Theme", selection: $settings.theme) {
@@ -73,8 +79,6 @@ private struct GeneralTab: View {
                     Text("In Dropdown + Menu Bar").tag(AppSettings.DeltaDisplay.menuAndStatusBar)
                 }
                 LabeledContent("Refresh") {
-                    // Wide enough for the 3-digit maximum; out-of-range input
-                    // snaps back because the setting clamps on write.
                     intervalField("Every", value: $settings.pollIntervalSeconds,
                                   unit: "seconds", limits: AppSettings.pollIntervalLimits)
                 }
@@ -92,14 +96,13 @@ private struct GeneralTab: View {
         }
         .formStyle(.grouped)
         .autocorrectionDisabled()
-        // Restarting the task on every URL/token edit cancels the previous
-        // probe, so only the latest values ever report a result.
+        // Restarting on every edit cancels the previous probe, so only the
+        // latest values ever report a result.
         .task(id: settings.baseURL + "\n" + settings.token) { await checkConnection() }
     }
 
-    /// A "<prefix> [n] <unit>" row, as used by the refresh interval and the stale
-    /// delay. The tooltip carries the accepted range; typing outside it snaps
-    /// back, since both settings clamp on write.
+    /// A "<prefix> [n] <unit>" row. The tooltip carries the accepted range;
+    /// typing outside it snaps back, since both settings clamp on write.
     private func intervalField(_ prefix: String, value: Binding<Int>,
                                unit: String, limits: ClosedRange<Int>) -> some View {
         HStack(spacing: 4) {
@@ -131,9 +134,8 @@ private struct GeneralTab: View {
         }
     }
 
-    /// Runs `Nightscout.probe` with the current URL/token — a successful read
-    /// proves the URL is valid *and* the token authenticates. Debounced so
-    /// probes fire between keystrokes, not on each one.
+    /// A successful read proves the URL is valid and the token authenticates.
+    /// Debounced so probes fire between keystrokes, not on each one.
     private func checkConnection() async {
         guard settings.isConfigured else { status = .unconfigured; return }
         status = .checking
@@ -147,9 +149,8 @@ private struct GeneralTab: View {
         }
     }
 
-    /// Shows the token masked ("mo***4d") while the field is unfocused;
-    /// clicking in reveals the real value for editing. The setter ignores the
-    /// mask itself so a stray commit can never overwrite the stored token.
+    /// Masked ("mo***4d") until the field is focused. The setter ignores the
+    /// mask itself, so a stray commit can't overwrite the stored token with it.
     private var tokenText: Binding<String> {
         Binding(
             get: { tokenFieldFocused ? settings.token : AppSettings.maskedToken(settings.token) },
@@ -161,30 +162,26 @@ private struct GeneralTab: View {
     }
 }
 
-/// Every configurable chart color and the presets that snapshot them.
-/// A live preview chart is pinned above the (scrolling) form: it reads
-/// `AppSettings` directly, so every picker edit redraws it immediately. The
-/// data is synthetic (`ChartMath.sampleReadings`) — a curve spanning all five
-/// zones relative to the current thresholds — never the user's real readings.
+/// Every configurable chart color, plus the presets that snapshot them. The
+/// live preview above the form reads `AppSettings` directly, so every picker
+/// edit redraws it. Its data is synthetic, a curve spanning all five zones
+/// relative to the current thresholds, never the user's real readings.
 private struct ColorsTab: View {
     @Bindable var settings: AppSettings
     @State private var showingSavePreset = false
     @State private var newPresetName = ""
-    /// The preview's own chart window, in hours — driven by the `TintedSlider`
-    /// below the preview, which exists so the slider color is visible at all.
-    /// It's the sample chart's range, deliberately *not* `settings.rangeHours`:
-    /// everything inside the preview box is a demo, and editing the dropdown's
-    /// window from the Colors tab would be a surprise. Its bounds and step are
-    /// the real slider's, so what's demoed is the actual control. It starts at
-    /// `rangeHours`' own default rather than mirroring the current setting: on
-    /// the 2h step grid an odd hour count wouldn't survive the first drag, and a
-    /// slider that opens on the real value invites exactly the "why didn't my
+    /// The preview's own window, driven by the slider below it. Deliberately
+    /// not `settings.rangeHours`: everything in that box is a demo, and editing
+    /// the dropdown's window from the Colors tab would be a surprise. It starts
+    /// at `rangeHours`' default rather than mirroring the current setting,
+    /// because an odd hour count wouldn't survive the first drag on the 2h grid,
+    /// and a slider opening on the real value invites exactly the "why didn't my
     /// chart change?" reading this is meant to avoid.
     @State private var previewHours = 6.0
-    /// The sample curve's end, and the chart's window end with it (see
-    /// `ChartCanvas.windowEnd`) — so the preview stays fully in frame however
-    /// long ago the body last ran. Refreshed on appear only to keep the time
-    /// axis near the current clock; nothing depends on it being current.
+    /// The sample curve's end, and with it the chart's window end (see
+    /// `ChartCanvas.windowEnd`), so the preview stays in frame however long ago
+    /// the body last ran. Refreshed on appear only to keep the time axis near
+    /// the current clock; nothing depends on it being current.
     @State private var sampleEnd = Date()
 
     var body: some View {
@@ -200,8 +197,9 @@ private struct ColorsTab: View {
                         settings: settings, windowEnd: sampleEnd)
                 .frame(height: 120)
             // The dropdown's range slider, bounds and 2h step included, applied
-            // to the sample curve — so it demonstrates the slider color *and*
-            // does what a slider should when dragged.
+            // to the sample curve, so it demonstrates the slider color and still
+            // does something when dragged. It used to drive nothing at all,
+            // which just read as a broken control.
             HStack(spacing: 8) {
                 TintedSlider(value: $previewHours, range: Self.previewHoursBounds, step: 2,
                              tint: settings.sliderColor,
@@ -224,23 +222,21 @@ private struct ColorsTab: View {
     private static let previewHoursBounds =
         Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
 
-    /// Hours per sweep through the zones at the narrow end of the range; the
-    /// window's worth of curve is built from repeats of that shape, so a wider
-    /// window reads as more history rather than as one curve stretched wider.
-    /// The count grows with the *square root* of the window: one sweep per 3 h
-    /// straight up would pack 24 of them into a 72 h window — a comb roughly
-    /// 19 pt per sweep — while this keeps the widest window at about five.
+    /// Hours per sweep through the zones at the narrow end of the range. The
+    /// curve is built from repeats of that shape, so a wider window reads as
+    /// more history rather than as one curve stretched wider. The count grows
+    /// with the square root of the window: one sweep per 3 h straight up would
+    /// pack 24 of them into a 72 h window, a comb. This keeps it at about five.
     private static let previewHoursPerCycle = 3.0
 
     private var previewCycles: Double {
         max(1, (previewHours / Self.previewHoursPerCycle).squareRoot())
     }
 
-    /// The sample curve, sized to fill whatever window the preview slider
-    /// selects. The 5-minute spacing is fixed (a wider one would exceed
-    /// `ChartMath.dropoutThreshold` and shatter the line into isolated points),
-    /// so it's the point count that follows the window — 25 points at 2 h, 865
-    /// at 72 h.
+    /// Sized to fill whatever window the preview slider selects. The 5-minute
+    /// spacing is fixed, since a wider one would exceed
+    /// `ChartMath.dropoutThreshold` and shatter the line, so it's the point
+    /// count that follows the window: 25 points at 2 h, 865 at 72 h.
     private var sampleReadings: [Reading] {
         ChartMath.sampleReadings(
             extremeLow: settings.extremeLow, targetLow: settings.targetLow,
@@ -302,17 +298,16 @@ private struct ColorsTab: View {
         }
         .formStyle(.grouped)
         // A sheet, not an `.alert`: macOS alerts render only TextFields and
-        // Buttons, so a list of existing presets to overwrite can't live there.
+        // Buttons, so the list of presets to overwrite can't live in one.
         .sheet(isPresented: $showingSavePreset) {
             SavePresetSheet(settings: settings, name: $newPresetName)
         }
     }
 
-    /// A point-size row: a slider plus the live value. Stock `Slider` is fine
-    /// here — nothing needs tinting inside Settings. It's continuous with a
-    /// rounding binding rather than `step:`, because a stepped macOS slider
-    /// draws one tick mark per step and half-point granularity turns the row
-    /// into a wall of dots.
+    /// A point-size row. The stock `Slider` is fine here, nothing needs tinting
+    /// inside Settings. It's continuous with a rounding binding rather than
+    /// `step:`, because a stepped macOS slider draws one tick mark per step and
+    /// half-point granularity turns the row into a wall of dots.
     private func sizeRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         let halfPoints = Binding(
             get: { value.wrappedValue },
@@ -329,9 +324,8 @@ private struct ColorsTab: View {
         }
     }
 
-    /// Selecting a preset applies its colors immediately; the picker's own
-    /// selection always reflects whichever saved preset (if any) currently
-    /// matches the live colors — there's no separate "selected" state to track.
+    /// The picker's selection is whichever saved preset matches the live colors,
+    /// so there's no separate "selected" state to keep in sync.
     private var presetSelection: Binding<String?> {
         Binding(
             get: { settings.matchingPreset()?.name },
@@ -343,9 +337,8 @@ private struct ColorsTab: View {
     }
 }
 
-/// The save-preset dialog: type a new name, or click an existing preset to
-/// overwrite it (the click fills the name field; the button relabels to
-/// "Overwrite" whenever the name collides with a saved preset).
+/// Type a new name, or click an existing preset to overwrite it. The click
+/// fills the name field, and the button relabels itself on a collision.
 private struct SavePresetSheet: View {
     var settings: AppSettings
     @Binding var name: String
@@ -406,9 +399,8 @@ private struct SavePresetSheet: View {
     }
 }
 
-/// The optimal *range* (a low–high band) plus the very-low/very-high
-/// *thresholds*. Values are edited in the chosen display unit but stored as
-/// mg/dL.
+/// The optimal range plus the very-low/very-high thresholds. Edited in the
+/// chosen display unit, stored as mg/dL.
 private struct GlucoseTab: View {
     @Bindable var settings: AppSettings
 
@@ -422,9 +414,7 @@ private struct GlucoseTab: View {
                 thresholdField("Very low", \.extremeLow)
                 thresholdField("Very high", \.extremeHigh)
             }
-            // Shown rather than enforced: the fields persist as you type, so
-            // clamping them against each other would fight anyone moving a
-            // range around. See `AppSettings.thresholdOrderWarning`.
+            // Shown rather than enforced, see `AppSettings.thresholdOrderWarning`.
             if let warning = settings.thresholdOrderWarning {
                 Section {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
@@ -439,9 +429,9 @@ private struct GlucoseTab: View {
         .formStyle(.grouped)
     }
 
-    /// One threshold row. The value-based field commits on Return or focus
-    /// loss (a text-based binding would reformat on every keystroke and fight
-    /// the user's typing) and rejects non-numeric input on its own.
+    /// The value-based field commits on Return or focus loss and rejects
+    /// non-numeric input on its own. A text-based binding would reformat on
+    /// every keystroke and fight the typing, decimals included.
     private func thresholdField(_ label: String, _ keyPath: ReferenceWritableKeyPath<AppSettings, Double>) -> some View {
         LabeledContent(label) {
             HStack(spacing: 4) {
@@ -463,10 +453,9 @@ private struct GlucoseTab: View {
     }
 }
 
-/// Which version is running, where to report a problem, and the one caveat
-/// that matters. This tab exists because an `LSUIElement` app has **no app
-/// menu** — the usual "About Sugarglider" item simply isn't reachable, so the
-/// Settings window is the only place this can live.
+/// Which version is running, where to report a problem, and the one caveat that
+/// matters. It's a Settings tab because an `LSUIElement` app has no app menu, so
+/// the usual "About Sugarglider" item isn't reachable and can't be added.
 private struct AboutTab: View {
     var settings: AppSettings
     @Environment(\.colorScheme) private var colorScheme
@@ -475,9 +464,8 @@ private struct AboutTab: View {
         Form {
             Section {
                 HStack(spacing: 14) {
-                    // `settings.theme` first, environment second: an explicit
-                    // Light/Dark override must win here even though the window
-                    // it applies to is the one this view is drawn in.
+                    // Theme first, environment second, so an explicit
+                    // Light/Dark override wins over the system appearance.
                     if let icon = AppInfo.appIcon(for: settings.theme.colorScheme ?? colorScheme) {
                         Image(nsImage: icon)
                             .resizable()
@@ -487,8 +475,7 @@ private struct AboutTab: View {
                         Text("Sugarglider").font(.title2.weight(.semibold))
                         Text(AppInfo.versionText)
                             .foregroundStyle(.secondary)
-                            // The one string here anyone is ever asked to
-                            // repeat back, so let them copy it.
+                            // The one string anyone is asked to repeat back.
                             .textSelection(.enabled)
                         Text(AppInfo.copyright)
                             .font(.caption)
@@ -524,29 +511,28 @@ private struct AboutTab: View {
     }
 }
 
-/// Bundle metadata for the About tab, kept in one place so what Settings shows
-/// can only come from the Info.plist `build.sh` writes.
+/// Bundle metadata for the About tab, in one place so what Settings shows can
+/// only come from the Info.plist `build.sh` writes.
 enum AppInfo {
     static let repositoryLabel = "nvmddev/sugarglider"
     static let repositoryURL = URL(string: "https://github.com/nvmddev/sugarglider")!
     static let issuesURL = repositoryURL.appending(path: "issues")
     static let licenseURL = repositoryURL.appending(path: "blob/main/LICENSE")
 
-    /// The app artwork for a given appearance. macOS renders the *bundle* icon
-    /// from `Assets.car`, which does carry a light and a dark variant, but that
-    /// stack is reachable only through the system icon services: asked by name,
-    /// AppKit hands out the light rendition whatever appearance is in effect
-    /// (probed both ways round). Hence the same two artworks as plain PNGs,
-    /// picked here. Falls back to the bundle icon for a bare `swift build`
-    /// binary, which has no Resources at all.
+    /// `Assets.car` does carry a light and a dark variant, but that stack is
+    /// reachable only through the system icon services: asked by name, AppKit
+    /// hands out the light rendition whatever appearance is in effect (probed
+    /// both ways round). Hence the same two artworks as plain PNGs, picked by
+    /// hand. Falls back to the bundle icon for a bare `swift build` binary,
+    /// which has no Resources at all.
     static func appIcon(for scheme: ColorScheme) -> NSImage? {
         NSImage(named: scheme == .dark ? "AppIcon-Dark" : "AppIcon-Light")
             ?? NSImage(named: NSImage.applicationIconName)
     }
 
     /// "Version 0.2.0 (73)" from the bundle. A bare `swift build` binary has no
-    /// Info.plist at all, so the version keys are missing there rather than
-    /// wrong — say so instead of printing a fake number.
+    /// Info.plist, so the keys are missing rather than wrong there: say so
+    /// instead of printing a made-up number.
     static var versionText: String {
         versionText(short: bundleString("CFBundleShortVersionString"),
                     build: bundleString("CFBundleVersion"))

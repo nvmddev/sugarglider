@@ -4,9 +4,9 @@ import SwiftUI
 
 // MARK: - TintedSlider geometry
 //
-// The view itself isn't unit-testable, but its two pure helpers are — and they
-// hold the only real logic: mapping a value to a knob position and a click
-// position back to a stepped value.
+// The view body isn't unit-testable, but the two pure helpers are, and they
+// hold the only real logic: value to knob position, and click position back to
+// a stepped value.
 
 extension SugargliderTests {
     @Test func fractionMapsValueAcrossTheRange() {
@@ -21,8 +21,8 @@ extension SugargliderTests {
         #expect(TintedSlider.fraction(of: 5, in: 5...5) == 0)   // zero-width range
     }
 
-    /// The knob's travel is inset by half a knob at each end, so x = knob/2
-    /// is the minimum and x = width - knob/2 the maximum.
+    /// The travel is inset by half a knob at each end, so x = knob/2 is the
+    /// minimum and x = width - knob/2 the maximum.
     @Test func valueAtXHitsBothEndsExactly() {
         let width: CGFloat = 216   // 200 usable + one knob
         let knob = TintedSlider.knobDiameter
@@ -38,7 +38,7 @@ extension SugargliderTests {
     @Test func valueAtXSnapsToStep() {
         let width: CGFloat = 216
         let knob = TintedSlider.knobDiameter
-        // Halfway along is 25, which isn't on the 2h grid — it snaps to 26.
+        // Halfway along is 25, which isn't on the 2h grid, so it snaps to 26.
         let mid = TintedSlider.value(atX: knob / 2 + 100, trackWidth: width, range: 2...48, step: 2)
         #expect(mid == 26)
         #expect(mid.truncatingRemainder(dividingBy: 2) == 0)

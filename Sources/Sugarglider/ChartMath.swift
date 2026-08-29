@@ -1,16 +1,13 @@
 import SwiftUI
 
-/// Framework-agnostic chart math, shared by `ChartCanvas`'s drawing and its
-/// tests. Kept free of SwiftUI view state so it's trivially unit-testable.
+/// Chart math with no SwiftUI view state, so it's directly unit-testable.
 enum ChartMath {
     /// How far apart two readings may be and still count as one continuous run.
     /// The chart breaks its line on a wider gap rather than interpolating across
-    /// it; `ReadingStore` uses the same value to decide whether freshly polled
-    /// entries join up with the cached history, so the two can't drift apart.
+    /// it, and `ReadingStore` merges polled entries into the history only within
+    /// it, so the two can't drift apart.
     static let dropoutThreshold: TimeInterval = 15 * 60
 
-    /// The five range-zone thresholds and colors used to color the line and
-    /// pick a reading's dot color.
     struct Zones {
         var extremeLow: Double
         var targetLow: Double
@@ -23,8 +20,8 @@ enum ChartMath {
         var extremeHighColor: Color
     }
 
-    /// The color for a reading based on its range zone. Compared in mg/dL —
-    /// the unit thresholds are stored in, independent of the display unit.
+    /// Compared in mg/dL, the unit the thresholds are stored in, independent of
+    /// what the user is shown.
     static func color(for sgv: Int, zones: Zones) -> Color {
         let v = Double(sgv)
         if v < zones.extremeLow { return zones.extremeLowColor }
@@ -34,7 +31,7 @@ enum ChartMath {
         return zones.inRangeColor
     }
 
-    /// Split readings into contiguous runs, breaking where a dropout exceeds `gap`.
+    /// Splits readings into contiguous runs, breaking where a gap exceeds `gap`.
     static func segments(of readings: [Reading], gapThreshold gap: TimeInterval) -> [[Reading]] {
         var result: [[Reading]] = []
         var current: [Reading] = []
@@ -48,7 +45,7 @@ enum ChartMath {
         return result
     }
 
-    /// Catmull-Rom smoothing → a flowing bezier through the points.
+    /// Catmull-Rom smoothing into a flowing bezier through the points.
     static func smooth(_ pts: [CGPoint]) -> Path {
         var path = Path()
         guard let first = pts.first else { return path }
@@ -69,9 +66,8 @@ enum ChartMath {
         return path
     }
 
-    /// The index of the reading nearest `targetX` (by horizontal distance
-    /// only), or nil if none is within `maxDistance`. Pure geometry — the
-    /// hover hit-test, factored out so it's testable without a live view.
+    /// The reading nearest `targetX` by horizontal distance, or nil if none is
+    /// within `maxDistance`. The hover hit-test, factored out of the view.
     static func nearestIndex(to targetX: CGFloat, x: (Date) -> CGFloat, in readings: [Reading], maxDistance: CGFloat) -> Int? {
         var best = 0, bestDist = CGFloat.greatestFiniteMagnitude
         for (i, r) in readings.enumerated() {
@@ -81,18 +77,15 @@ enum ChartMath {
         return bestDist < maxDistance ? best : nil
     }
 
-    /// Synthetic readings for the Settings color preview: a smooth curve that
-    /// deliberately sweeps through all five zones *relative to the given
-    /// thresholds* (mg/dL), so every configurable color is visible no matter
-    /// where the user has set their ranges. Oldest-first, 5-minute spacing,
-    /// ending at `end` — shaped like a real trace: in range, a dip to very low,
-    /// recovery, a spike to very high, then settling back in range.
+    /// Synthetic readings for the Settings color preview: a curve sweeping all
+    /// five zones relative to the given thresholds, so every configurable color
+    /// is visible wherever the user has set their ranges. Never real data.
     ///
-    /// `cycles` repeats that shape (it begins and ends in range with zero slope,
-    /// so the repeats join smoothly). The preview scales it with its window
-    /// instead of stretching one sweep across it: a stretched curve looks
-    /// *identical* at every window width — only the axis labels change — which
-    /// makes the range slider look broken.
+    /// `cycles` repeats the shape, which begins and ends in range with zero
+    /// slope so the repeats join smoothly. The preview scales it with its window
+    /// instead of stretching one sweep across it, because a stretched curve
+    /// looks identical at every width and only the axis labels move, which makes
+    /// the range slider look broken.
     static func sampleReadings(extremeLow: Double, targetLow: Double,
                                targetHigh: Double, extremeHigh: Double,
                                endingAt end: Date, count: Int = 35,
@@ -106,8 +99,8 @@ enum ChartMath {
             (0.00, mid), (0.12, below), (0.25, veryLow), (0.45, mid),
             (0.60, above), (0.75, veryHigh), (1.00, mid),
         ]
-        // Cosine-eased interpolation between keyframes; Catmull-Rom smoothing
-        // in the chart then rounds off the sampled points.
+        // Cosine-eased between keyframes; the chart's Catmull-Rom smoothing
+        // then rounds off the sampled points.
         func value(at t: Double) -> Double {
             guard let i = keyframes.lastIndex(where: { $0.t <= t }), i < keyframes.count - 1 else {
                 return keyframes.last!.v
@@ -119,8 +112,8 @@ enum ChartMath {
         let interval: TimeInterval = 5 * 60
         let cycles = max(cycles, 1)
         return (0..<count).map { i in
-            // Position within the current repeat of the shape; the last point of
-            // a whole cycle lands on 0, which is the same value as 1 (in range).
+            // Position within the current repeat. The last point of a whole
+            // cycle lands on 0, which holds the same value as 1 (in range).
             let progress = Double(i) / Double(count - 1) * cycles
             return Reading(sgv: Int(value(at: progress.truncatingRemainder(dividingBy: 1)).rounded()),
                     direction: "",
@@ -128,16 +121,13 @@ enum ChartMath {
         }
     }
 
-    /// Whether time labels have to name the weekday as well as the clock time.
-    ///
-    /// A window of a full day or more can put the *same* clock time at both ends
-    /// of the axis — 72h ago is "15:03" just like now — which reads as a chart
-    /// spanning nothing at all. Below a day the two ends always differ, so the
-    /// bare time stays unambiguous and shorter.
+    /// Whether time labels need the weekday as well as the clock time. A window
+    /// of a day or more can put the same clock time at both ends of the axis,
+    /// which reads as a chart spanning nothing at all.
     static func labelsNeedDay(span: TimeInterval) -> Bool { span >= 24 * 3600 }
 
-    /// A "nice" gridline step (1/2/5 × 10ⁿ) giving roughly five lines across the
-    /// span — works for both mmol/L and mg/dL ranges.
+    /// A round gridline step (1/2/5 × 10ⁿ) giving roughly five lines across the
+    /// span, for mmol/L and mg/dL ranges alike.
     static func niceStep(_ span: Double) -> Double {
         let rough = max(span / 4, 0.0001)
         let mag = pow(10, floor(log10(rough)))

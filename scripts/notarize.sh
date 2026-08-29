@@ -6,9 +6,9 @@
 # Requires APPLE_ID, APPLE_TEAM_ID and APPLE_APP_PASSWORD (an app-specific
 # password from appleid.apple.com, not the account password).
 #
-# A .zip can be submitted but not stapled — the ticket goes onto the .app
-# *inside* it, so callers notarize the zip, staple the app, then re-zip. A .dmg
-# is both submitted and stapled directly, hence the flag.
+# A .zip can be submitted but not stapled: the ticket goes onto the .app inside
+# it, so callers notarize the zip, staple the app, then re-zip. A .dmg is both
+# submitted and stapled directly, hence the flag.
 set -euo pipefail
 
 FILE="${1:-}"
@@ -20,8 +20,8 @@ STAPLE="${2:-}"
 : "${APPLE_APP_PASSWORD:?APPLE_APP_PASSWORD is required}"
 
 echo "==> Notarizing ${FILE}"
-# Capture rather than stream, so the submission id is still available to fetch
-# the rejection log — "Invalid" is the one verdict where the detail matters.
+# Captured rather than streamed, so the submission id is still available to
+# fetch the log. "Invalid" is the one verdict where the detail matters.
 if output="$(xcrun notarytool submit "${FILE}" \
     --apple-id "${APPLE_ID}" \
     --team-id "${APPLE_TEAM_ID}" \

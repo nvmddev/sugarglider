@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// The content shown when the status-bar item is clicked: the chart, range
-/// slider, current reading, and action buttons.
+/// The dropdown behind the status-bar item: chart, range slider, the current
+/// reading, and the action buttons.
 struct MenuBarContentView: View {
     var settings: AppSettings
     var store: ReadingStore
     @Environment(\.openSettings) private var openSettings
-    /// Tracked so the hours field can be *un*focused deliberately — see
+    /// Tracked so the hours field can be unfocused deliberately, see
     /// `defocusBackdrop`.
     @FocusState private var rangeFieldFocused: Bool
-    /// Whether the hours cell currently hosts a live `TextField`. False until
-    /// it's clicked — see `rangeField`.
+    /// Whether the hours cell currently hosts a live `TextField`, see
+    /// `rangeField`.
     @State private var rangeFieldEditing = false
 
     private let contentWidth: CGFloat = 280
@@ -21,8 +21,8 @@ struct MenuBarContentView: View {
                 .frame(width: contentWidth, height: 160)
 
             HStack(spacing: 6) {
-                // TintedSlider, not SwiftUI's Slider: the stock control's track
-                // ignores every tint mechanism macOS offers — see TintedSlider.
+                // Not SwiftUI's Slider: its track ignores every tint mechanism
+                // macOS offers. See TintedSlider.
                 TintedSlider(value: rangeBinding, range: rangeSliderBounds, step: 2,
                              tint: settings.sliderColor,
                              accessibilityValueText: "\(settings.rangeHours) hours")
@@ -58,22 +58,20 @@ struct MenuBarContentView: View {
         .windowTheme(settings.theme)
     }
 
-    /// A transparent, click-catching layer *behind* the content that drops the
-    /// hours field's focus. The dropdown holds exactly one focusable control,
-    /// so without this the field keeps first responder (and its focus ring) for
-    /// as long as the panel stays open — clicking "somewhere else" has nothing
-    /// to focus instead. Being a `background` rather than an overlay or a
-    /// gesture on the `VStack` matters: clicks on the chart, slider and buttons
-    /// reach those views first and never compete with this tap, while clicks on
-    /// the padding and the inert text areas fall through to here.
+    /// A click-catching layer behind the content that drops the hours field's
+    /// focus. The dropdown holds exactly one focusable control, so without this
+    /// the field keeps first responder for as long as the panel is open: there
+    /// is nothing else to focus by clicking elsewhere. It has to be a
+    /// `background` rather than an overlay or a gesture on the `VStack`, or it
+    /// competes with the slider's drag and the buttons.
     private var defocusBackdrop: some View {
         Color.clear
             .contentShape(Rectangle())
             .onTapGesture { endRangeEditing() }
     }
 
-    /// An action button shown as a symbol only — so the label survives just as
-    /// the tooltip and the accessibility name.
+    /// Symbol only, so the label survives as the tooltip and the accessibility
+    /// name.
     private func iconButton(_ symbol: String, label: String, shortcut: KeyEquivalent,
                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -85,20 +83,18 @@ struct MenuBarContentView: View {
         .accessibilityLabel(label)
     }
 
-    /// The chart range as a typed number, so any whole hour is reachable — the
-    /// slider next to it moves in 2h steps. Value-based (not text-based) so it
-    /// commits on Return/focus loss instead of reformatting mid-typing, same as
-    /// the Settings fields; `AppSettings.rangeHours` clamps whatever is entered
-    /// to 2…72, so an out-of-range number snaps back on commit.
+    /// The chart range as a typed number, so any whole hour is reachable; the
+    /// slider next to it steps by 2. Value-based rather than text-based so it
+    /// commits on Return or focus loss instead of reformatting mid-typing.
+    /// Out-of-range input needs no validation, `rangeHours` clamps it.
     ///
-    /// It is a **click-to-edit** cell rather than a permanently live
-    /// `TextField`: `MenuBarExtra`'s panel hands its initial focus to the first
-    /// focusable control it finds, so a real field here lit up the moment the
-    /// dropdown opened. Swapping the field in only once it's clicked leaves
-    /// nothing for that focus pass to land on. The box is drawn by hand so the
-    /// two states look identical — same frame, same bezel, nothing appears or
-    /// jumps on click; only the border picks up the accent color while editing,
-    /// standing in for the focus ring that `.plain` doesn't draw.
+    /// This is a click-to-edit cell rather than a live `TextField` because
+    /// `MenuBarExtra`'s panel hands its initial focus to the first focusable
+    /// control it finds, and a real field here lit up the moment the dropdown
+    /// opened. Swapping the field in only once it's clicked leaves that focus
+    /// pass nothing to land on. Both states share one hand-drawn frame and
+    /// bezel so nothing jumps; the accent border stands in for the focus ring
+    /// `.plain` doesn't draw.
     private var rangeField: some View {
         HStack(spacing: 3) {
             ZStack {
@@ -116,11 +112,10 @@ struct MenuBarContentView: View {
                         .padding(.trailing, 4)
                         .accessibilityLabel("Chart range in hours")
                         .focused($rangeFieldFocused)
-                        // The field is only in the tree while editing, so it can
-                        // ask for the focus itself.
+                        // Only in the tree while editing, so it can take the
+                        // focus itself.
                         .onAppear { rangeFieldFocused = true }
-                        // Return and Escape both end editing, so the keyboard
-                        // alone can get back out of the field.
+                        // So the keyboard alone can get back out of the field.
                         .onSubmit { endRangeEditing() }
                         .onExitCommand { endRangeEditing() }
                         // Covers a focus loss this view didn't initiate.
@@ -128,9 +123,9 @@ struct MenuBarContentView: View {
                             if !focused { rangeFieldEditing = false }
                         }
                 } else {
-                    // No gesture on the ZStack: a tap recognizer wrapping the
-                    // live TextField would compete with its own click handling
-                    // (placing the caret). Only this inert state carries one.
+                    // The tap goes on the inert Text, never on the ZStack: it
+                    // would otherwise compete with the live field's own click
+                    // handling and stop the caret being placed.
                     Text("\(settings.rangeHours)")
                         .font(rangeFont)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
@@ -154,17 +149,17 @@ struct MenuBarContentView: View {
 
     private var rangeFont: Font { .system(size: 11, design: .monospaced) }
 
-    /// Leaves the editing state without depending on the focus transition: if
-    /// the field never got focus in the first place, `onChange` wouldn't fire
-    /// and the cell would stay stuck looking editable.
+    /// Leaves the editing state without relying on the focus transition: if the
+    /// field never took focus, no `onChange` fires and the cell would stay stuck
+    /// looking editable.
     private func endRangeEditing() {
         rangeFieldFocused = false
         rangeFieldEditing = false
     }
 
     /// Moving the slider also ends editing: a focused `TextField(value:)` keeps
-    /// its own edit buffer and would go on showing the half-typed number while
-    /// the slider moved the real value underneath it.
+    /// its own buffer and would go on showing the half-typed number while the
+    /// slider moved the real value underneath it.
     private var rangeBinding: Binding<Double> {
         Binding(
             get: { Double(settings.rangeHours) },
@@ -184,10 +179,9 @@ struct MenuBarContentView: View {
     }
 
     /// Opens Settings in front *and key*. An accessory (LSUIElement) app is
-    /// normally inactive, so the window must be activated explicitly — and a
-    /// window that is merely ordered front without key status silently ignores
-    /// all typing (text fields can't take focus; mouse-driven controls still
-    /// work). The window is created asynchronously, so poll briefly for it.
+    /// normally inactive, and a window merely ordered front without key status
+    /// silently ignores all typing: mouse-driven controls work, text fields
+    /// never take focus. The window is created asynchronously, hence the poll.
     private func showSettings() {
         NSApp.activate()
         openSettings()
@@ -235,7 +229,7 @@ struct MenuBarContentView: View {
         guard settings.isConfigured else { return "Open Settings to add your Nightscout URL" }
         if let r = store.lastReading {
             var age = "Reading \(ReadingStore.relative(r.date))" + (store.isStale ? " (stale)" : "")
-            if let err = store.lastError { age += " — \(err)" }  // surface errors on the age line
+            if let err = store.lastError { age += " — \(err)" }
             return age
         } else if let err = store.lastError {
             return err

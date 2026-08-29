@@ -13,9 +13,8 @@ extension SugargliderTests {
         #expect(ReadingStore.relative(Date().addingTimeInterval(-7320)) == "2 h ago")
     }
 
-    /// The status-bar form: short enough for the menu bar, and it must never
-    /// round *up* — claiming more time has passed than actually has would be the
-    /// one direction that misleads.
+    /// Short enough for the menu bar, and it must never round up: claiming more
+    /// time has passed than has is the one direction that misleads.
     @Test func compactAgeForTheStatusBar() {
         #expect(ReadingStore.compactAge(Date().addingTimeInterval(-13 * 60)) == "13m")
         #expect(ReadingStore.compactAge(Date().addingTimeInterval(-59 * 60 - 59)) == "59m")
@@ -37,8 +36,8 @@ extension SugargliderTests {
         #expect(store.isStale == true)
     }
 
-    /// The threshold is the user's `staleAfterMinutes`, read live — not a
-    /// constant baked into the store, and not a value captured at launch.
+    /// The threshold is the user's `staleAfterMinutes`, read live rather than
+    /// baked in or captured at launch.
     @Test func isStaleFollowsTheConfiguredDelay() {
         let settings = Self.makeSettings()
         let store = ReadingStore(settings: settings)
@@ -123,7 +122,7 @@ extension SugargliderTests {
         let store = ReadingStore(settings: settings)
         let now = Date()
         store.lastReading = reading(108, minutesAgo: 0, from: now)
-        store.previousReading = reading(90, minutesAgo: -5, from: now)  // in the future → gap <= 0
+        store.previousReading = reading(90, minutesAgo: -5, from: now)  // in the future, so gap <= 0
         #expect(store.deltaText() == nil)
     }
 }
@@ -157,8 +156,8 @@ extension SugargliderTests {
                                            from: now.addingTimeInterval(3600 - 6 * 3600)))
     }
 
-    /// A site with only a few hours of data must not count as uncovered — it
-    /// would refetch its whole window on every single call.
+    /// A site with only a few hours of data must not count as uncovered, or it
+    /// would refetch its whole window on every call.
     @Test func coverageIgnoresHowMuchDataTheSiteActuallyHad() {
         let now = Date()
         let asked = now.addingTimeInterval(-72 * 3600)
@@ -197,7 +196,7 @@ extension SugargliderTests {
 
     /// Widening the range asks for history that was never fetched, so it has to
     /// trip a refetch. Note what this waits on: the recorded window, not the
-    /// request count — the window is only set once the response lands, so
+    /// request count. The window is only set once the response lands, so
     /// counting requests races the fetch and fails intermittently.
     @Test func wideningTheRangeFetchesTheMissingHistory() async throws {
         let nowMs = epochMillis(Date())
@@ -241,7 +240,7 @@ extension SugargliderTests {
         store.previousReading = reading(90, minutesAgo: 5)
         store.lastError = "boom"
         store.readings = [reading(100, minutesAgo: 0)]
-        store.reconnect()   // not configured → refresh()/refreshHistory() no-op, but state still clears
+        store.reconnect()   // unconfigured, so the re-fetch no-ops, but state still clears
         #expect(store.lastReading == nil)
         #expect(store.previousReading == nil)
         #expect(store.lastError == nil)

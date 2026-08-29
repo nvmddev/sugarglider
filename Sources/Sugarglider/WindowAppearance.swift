@@ -2,41 +2,36 @@ import SwiftUI
 import AppKit
 
 extension View {
-    /// Applies the user's theme override to the hosting `NSWindow`'s
-    /// `appearance` (nil follows the system). This is the right mechanism for
-    /// the `MenuBarExtra(.window)` dropdown:
+    /// Applies the theme override to the hosting `NSWindow.appearance`, nil
+    /// meaning follow the system. This is the mechanism the
+    /// `MenuBarExtra(.window)` dropdown needs, and only that one:
     ///
-    /// - `preferredColorScheme` never reaches the borderless panel that
-    ///   `MenuBarExtra(.window)` creates, so the dropdown would ignore the
-    ///   theme entirely.
-    /// - Setting the window appearance retints *everything* consistently —
-    ///   the glass material, SwiftUI semantic styles (`.primary` etc.), and
+    /// - The borderless panel `MenuBarExtra(.window)` creates ignores
+    ///   `preferredColorScheme` entirely.
+    /// - The window appearance retints everything consistently, including the
     ///   AppKit dynamic colors (`.labelColor`, `.separatorColor`) the chart
-    ///   draws with. An environment-only override would leave the AppKit
-    ///   colors resolving against the system appearance.
-    /// - `NSApp.appearance` is deliberately NOT set: that would also retint
-    ///   the status-bar item, which must follow the menu bar to stay legible.
+    ///   draws with. An environment-only override leaves those resolving
+    ///   against the system appearance.
+    /// - `NSApp.appearance` is deliberately not set: it would also retint the
+    ///   status-bar item, which has to follow the menu bar to stay legible.
     ///
-    /// It does NOT work for the `Settings` scene window: SwiftUI manages that
-    /// window's `appearance` itself and resets a manual override milliseconds
-    /// after it's applied (verified via KVO on macOS 26). The Settings window
-    /// uses `preferredColorScheme` instead — SwiftUI's own machinery then
-    /// sets the window-level appearance, so AppKit dynamic colors follow too.
+    /// It does not work for the `Settings` window. SwiftUI manages that one's
+    /// appearance itself and resets a manual override milliseconds after it's
+    /// applied (verified via KVO on macOS 26), so Settings goes through
+    /// `preferredColorScheme` and lets SwiftUI set the appearance.
     func windowTheme(_ theme: AppSettings.Theme) -> some View {
-        // Pinned to zero size, not merely described as such: ImageRenderer
-        // rasterises an NSViewRepresentable as a yellow "prohibited" placeholder
-        // rather than as nothing, and a full-bleed background of that sits
-        // behind the whole view. Off-screen renders (scripts/ReadmeArt.swift,
-        // the ChartCanvas smoke tests) came out as a red circle-slash over a
-        // yellow field until this frame was added. The applier only has to be
-        // in the tree to find its window; its size never mattered.
+        // The zero frame matters: ImageRenderer rasterises an
+        // NSViewRepresentable as a yellow "prohibited" placeholder rather than
+        // as nothing, and a full-bleed one sat behind every off-screen render
+        // (scripts/ReadmeArt.swift, the ChartCanvas smoke tests). The applier
+        // only has to be in the tree to find its window.
         background(WindowThemeApplier(appearance: theme.nsAppearance).frame(width: 0, height: 0))
     }
 }
 
-/// Helper view that forwards the desired appearance to whatever
-/// window it ends up in. Re-applied on window attach (the dropdown's content
-/// view is recreated each time it opens) and on every theme change.
+/// Forwards the desired appearance to whatever window it ends up in. Re-applied
+/// on window attach, since the dropdown's content view is recreated every time
+/// it opens, and on every theme change.
 private struct WindowThemeApplier: NSViewRepresentable {
     var appearance: NSAppearance?
 

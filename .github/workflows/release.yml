@@ -128,10 +128,32 @@ jobs:
             echo "::warning::Signed but not notarized (APPLE_ID secret missing)."
           fi
 
+      # Decides which Keychain the user's Nightscout token lands in: with the
+      # profile the app owns its item outright and never prompts, without it it
+      # falls back to the login Keychain and asks once after an update.
+      - name: Install provisioning profile
+        if: steps.signing.outputs.identity != '-'
+        env:
+          PROFILE: ${{ secrets.MACOS_PROVISION_PROFILE }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PROFILE}" || -z "${TEAM_ID}" ]]; then
+            echo "::warning::No MACOS_PROVISION_PROFILE/APPLE_TEAM_ID — the app will ask once for Keychain access after each update."
+            exit 0
+          fi
+          printf '%s' "${PROFILE}" | base64 --decode > Resources/embedded.provisionprofile
+          # A profile without keychain-access-groups yields an app that signs
+          # cleanly and is then killed at launch by AMFI, so check before using it.
+          security cms -D -i Resources/embedded.provisionprofile \
+            | plutil -extract Entitlements.keychain-access-groups xml1 -o - - > /dev/null
+          echo "Provisioning profile installed"
+
       - name: Build universal app bundle
         env:
           VERSION: ${{ steps.version.outputs.version }}
           SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           UNIVERSAL: "1"
         run: ./build.sh
 

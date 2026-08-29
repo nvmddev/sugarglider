@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The status-bar item's own title: value, an enlarged trend arrow, the
-/// bracketed delta (if enabled for the bar), and — once the reading is stale —
-/// a warning glyph with the reading's age.
+/// The status-bar item's title: the value, an enlarged trend arrow, the
+/// bracketed delta if it's enabled for the bar, and once a reading goes stale
+/// a warning glyph with its age.
 struct MenuBarLabel: View {
     var settings: AppSettings
     var store: ReadingStore
@@ -30,10 +30,10 @@ struct MenuBarLabel: View {
         if settings.deltaDisplay == .menuAndStatusBar, let delta = store.deltaText() {
             t = t + Text("  (\(delta))").font(.system(size: 13, design: .monospaced))
         }
-        // A stale value is worth more than a glyph: how stale decides whether
-        // it's a blip worth ignoring or a feed that stopped. Deliberately the
-        // only escalation — the app never notifies, since short gaps are normal
-        // and it can't tell a sensor gap from an uploader or network one.
+        // The age, not just a glyph: it's what distinguishes a blip from a feed
+        // that stopped. This is the only escalation there is. The app never
+        // notifies, because short gaps are normal and it only sees the
+        // Nightscout site, so it can't tell a sensor gap from a network one.
         if store.isStale {
             t = t + Text(" ⚠ \(ReadingStore.compactAge(r.date))").font(.system(size: 13, design: .monospaced))
         }

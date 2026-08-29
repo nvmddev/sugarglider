@@ -5,8 +5,8 @@
 #   scripts/changelog.sh prepend <version> [from-ref] [to-ref]  → insert into CHANGELOG.md
 #
 # from-ref defaults to the newest tag that isn't <to-ref> itself; to-ref to HEAD.
-# Commits that don't parse as Conventional Commits aren't dropped — they land in
-# "Other changes", so nothing silently disappears from a release's notes.
+# Commits that don't parse as Conventional Commits land under "Other changes"
+# rather than being dropped, so nothing silently disappears from the notes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -61,7 +61,7 @@ title_for() {
     esac
 }
 
-# Conventional Commit type → section.
+# Conventional Commit type to section.
 section_for() {
     case "$1" in
     feat)            echo feat ;;
@@ -153,8 +153,8 @@ HEADER
     render >> "${NEW}"
 
     if [[ -f CHANGELOG.md ]]; then
-        # Keep everything below the existing preamble (i.e. from the first
-        # release heading onwards) so older entries survive verbatim.
+        # Everything from the first release heading onwards, so older entries
+        # survive verbatim.
         first_release="$(grep -n '^## ' CHANGELOG.md | head -n1 | cut -d: -f1 || true)"
         if [[ -n "${first_release}" ]]; then
             printf '\n' >> "${NEW}"
