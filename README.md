@@ -1,6 +1,13 @@
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Resources/AppIcon-Dark.png">
+  <img src="Resources/AppIcon-Light.png" width="112" alt="">
+</picture>
+
 # Sugarglider
 
-**Your Nightscout blood glucose, always visible in the macOS menu bar.**
+Your Nightscout blood glucose, in the macOS menu bar.
 
 [![CI](https://github.com/nvmddev/sugarglider/actions/workflows/ci.yml/badge.svg)](https://github.com/nvmddev/sugarglider/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/nvmddev/sugarglider?sort=semver&label=release)](https://github.com/nvmddev/sugarglider/releases/latest)
@@ -8,121 +15,75 @@
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000)](#requirements)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Sugarglider is a tiny native menu-bar app for [Nightscout](https://nightscout.github.io)
-users. It shows your latest reading, its trend arrow, and how fresh it is — e.g.
-`5.6 ↗` — and opens a chart of recent history when clicked. No Dock icon, no
-window clutter, no third-party services: just your Mac talking to your own
-Nightscout site.
+</div>
 
-<!-- TODO: add a screenshot before publishing, e.g.
-![Sugarglider](docs/screenshot.png)
-(capture with demo data, not real readings) -->
+Your latest reading and its trend arrow sit in the menu bar. Everything else,
+like the chart and the last few hours of history, is one click away. No dock
+icon, no window in the way.
 
-## Features
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/menubar-dark.png">
+  <img src="docs/menubar-light.png" width="303"
+       alt="The menu bar item showing 5.6 with a rising arrow, the same with the change since the last reading, and a stale reading flagged with its age">
+</picture>
 
-- **Glance value in the menu bar** — current glucose with trend arrow, updated
-  on a configurable interval (3–300s, default 60s). Optionally shows the delta
-  to the previous reading (`5.6 ↗ (+0.1)`). Once the newest reading is older
-  than the stale delay — 11 minutes by default, adjustable from 5 to 240 minutes
-  to suit how often your CGM and uploader actually deliver — it is marked with its age —
-  `5.6 ↗ ⚠ 23m` — so a brief gap is easy to tell apart from a feed that
-  stopped. Sugarglider never sends notifications and is not an alarm: it can
-  only see your Nightscout site, so it cannot tell a sensor gap from an
-  uploader or network one.
-- **Chart dropdown** — click the item for a smoothed chart of the last
-  2–72 hours (up to 3 days), adjustable with a slider in 2h steps or by typing
-  any whole number of hours into the field beside it (remembered across
-  launches). Value
-  gridlines, a dashed band marking your target range, and hover to inspect any
-  point's exact value and time. Sensor dropouts (gaps > 15 min) break the line
-  instead of interpolating across them.
-- **Zone colors** — the line is colored by zone (very low / below / in range /
-  above / very high), either switching at each threshold or blending smoothly.
-  Every color is independently pickable with opacity, and the monochrome
-  defaults follow Light/Dark mode. A whole look — all colors plus the blending,
-  shading and dot options below — can be saved as a named preset and switched
-  back to at any time.
-- **Tunable chart details** — the shading under the line can be switched off or
-  given its own color, the dot on the latest reading has adjustable size and
-  halo (either down to zero to hide it) and can keep its zone color or take a
-  fixed one, and the range slider's track color is yours to pick. A live preview
-  in Settings shows every change as you make it.
-- **mmol/L or mg/dL** — switch the display unit any time; values are stored in
-  mg/dL (Nightscout's native unit), so nothing drifts on conversion.
-- **Configurable thresholds** — target range and very-low/very-high bounds,
-  edited in your display unit. Numbers always use a dot as the decimal
-  separator, whatever your region is set to. Settings points out thresholds that
-  are out of order (very low ≤ low < high ≤ very high) rather than quietly
-  rewriting what you typed.
-- **Light/Dark override** — follow the system or force a theme, applied to the
-  dropdown and Settings window.
-- **Native and lightweight** — pure Swift + SwiftUI, zero dependencies, a
-  ~350 KB binary, and one small HTTP request per refresh interval in the
-  background.
+<sub>Actual size. Plain, with the change since the last reading, and flagged
+once it goes stale.</sub>
 
-## Requirements
-
-- macOS 14 (Sonoma) or newer
-- A reachable [Nightscout](https://nightscout.github.io) site
-- To build: Xcode 16+ or the Xcode Command Line Tools (Swift 6)
+> Not a medical device. It shows what your Nightscout site already has, it can
+> show stale or wrong values, and it never alarms. Treatment decisions belong
+> with your approved CGM or meter and your care team.
 
 ## Install
 
-### Download
-
-Grab the latest `.dmg` (or `.zip`) from the
-[releases page](https://github.com/nvmddev/sugarglider/releases/latest) and drag
-**Sugarglider.app** into `/Applications`. The build is a universal binary, so it
-runs natively on both Apple silicon and Intel.
-
-Releases are ad-hoc signed rather than notarized by Apple, so macOS quarantines
-the app on first launch. Either right-click it → **Open** → **Open**, or clear
-the flag yourself:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/Sugarglider.app
-```
-
-Every release ships a `checksums.txt`; verify your download with
-`shasum -a 256 -c checksums.txt`.
-
-### Homebrew
-
 ```sh
 brew install --cask nvmddev/tap/sugarglider
-xattr -dr com.apple.quarantine /Applications/Sugarglider.app
 ```
 
-The second line is the same quarantine caveat as above. Homebrew 6 dropped the
-`--no-quarantine` flag, so clearing the attribute afterwards is the way.
+Or grab the `.dmg` from the [latest release](https://github.com/nvmddev/sugarglider/releases/latest)
+and drag **Sugarglider.app** into `/Applications`. Universal binary, signed and
+notarized, so it opens without a Gatekeeper detour.
 
-### Build from source
+Want it running after a restart? **System Settings → General → Login Items**,
+then add Sugarglider.
 
-```sh
-git clone https://github.com/nvmddev/sugarglider.git
-cd sugarglider
-./build.sh
-cp -r Sugarglider.app /Applications/
-open /Applications/Sugarglider.app
-```
+## Set up
 
-To launch it automatically at login: **System Settings → General → Login
-Items** → add Sugarglider.
+The menu bar shows `CGM ⚙` until you point it at a site. Click it, open
+**Settings…** (or ⌘,) and fill in:
 
-## Setup
+- **Nightscout URL**, e.g. `https://your-site.nightscout.app`
+- **Access token**, if your site needs one. Make it in Nightscout under
+  *Admin Tools → Subjects* with a read role. Leave it empty for a site that
+  allows unauthenticated reads.
 
-The menu-bar item shows `CGM ⚙` until configured. Click it, then
-**Settings…** (or press ⌘, while the dropdown is open) and enter:
+There's no Save button. Settings apply as you type, and the tab tells you
+straight away whether the connection works.
 
-- **Nightscout URL** — e.g. `https://your-site.nightscout.app`
-- **Access token** — create one in Nightscout under *Admin Tools → Subjects*
-  with a read role (`readable`). Leave it empty if your site allows
-  unauthenticated reads. The field masks the token whenever it isn't focused.
+## What it shows
 
-Settings apply immediately — there is no Save button — and the General tab
-shows a live **Connected** / failure status for the URL and token as you type.
-The Colors and Glucose tabs hold the palette and threshold options; About shows
-the running version, which is what to quote when reporting a problem.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/dropdown-dark.png">
+  <img src="docs/dropdown-light.png" width="336"
+       alt="The dropdown: a six hour chart with a target band, a range slider, the current reading with its trend and change, and refresh, settings and quit buttons">
+</picture>
+
+<sub>Made up readings, not anyone's real data.</sub>
+
+- The current value and trend arrow in the menu bar, optionally with the change
+  since the last reading. Once a reading gets old it picks up a `⚠` and its
+  age, so a short gap is easy to tell from a feed that died.
+- A chart of the last 2 to 72 hours. Drag the slider or type an exact number of
+  hours. Hover any point for its value and time. Gaps longer than 15 minutes
+  break the line instead of pretending there was data.
+- Color by zone: very low, below, in range, above, very high. Pick every
+  color yourself, or blend them smoothly, or save a look as a preset and
+  switch back to it later. The stock palette is monochrome and follows
+  light and dark mode.
+- mmol/L or mg/dL, switchable any time. Your target range and the very
+  low/high bounds are yours to set.
+- No notifications, ever. Sugarglider only sees your Nightscout site, so it
+  can't tell a sensor gap from a flat uploader, and it won't pretend otherwise.
 
 ## Trend arrows
 
@@ -136,119 +97,36 @@ the running version, which is what to quote when reporting a problem.
 | ↓     | SingleDown           |
 | ↓↓    | DoubleDown           |
 
-## How it works
+## Privacy
 
-Sugarglider polls `GET {url}/api/v1/entries/sgv.json?count=2` on the refresh
-interval set in Settings → General (3–300s, default 60s; the second entry
-supplies the delta), with generous timer tolerance so macOS can coalesce
-wakeups for minimal energy use. Chart history is fetched only when the dropdown
-opens, and at most once per minute regardless of the refresh interval. Only the
-selected window is requested, and only once: after that the cache is topped up
-with `find[date][$gt]=<newest cached entry>`, which normally returns a handful
-of readings or none at all — and the entries the 60s poll already carries are
-folded in, so opening the dropdown often needs no request. Narrowing the range
-re-slices cached data; widening it past what has been fetched pulls the missing
-history once.
+Sugarglider talks to your Nightscout site and nothing else. No telemetry, no
+analytics, no third party anything. The URL and token stay in the app's
+preferences on your Mac.
 
-Your data never goes anywhere else: the app talks exclusively to the
-Nightscout URL you configure, and there is no telemetry, analytics, or other
-third-party traffic. The URL and token are stored in the app's user defaults
-on your Mac.
+It polls your site once a minute by default, which you can change, and only
+pulls chart history when you open the dropdown. After the first fetch it just
+tops up what's new, so most opens need no request at all.
 
-## Development
+## Requirements
+
+macOS 14 (Sonoma) or newer. Universal binary, so Apple silicon and Intel both
+run natively.
+
+## Build
 
 ```sh
-swift build     # debug build
-swift test      # run the test suite (needs Xcode, not just the CLT)
-./build.sh      # release build + assemble Sugarglider.app
+git clone https://github.com/nvmddev/sugarglider.git
+cd sugarglider
+./build.sh
+open Sugarglider.app
 ```
 
-CI builds and tests every push and pull request on macOS, including a universal
-(arm64 + x86_64) release build, and lints the shell scripts and workflows.
+Pure Swift and SwiftUI, zero dependencies, about a 350 KB binary. `swift test`
+needs Xcode rather than just the Command Line Tools.
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the setup,
-the architecture in a paragraph, and the commit-message convention (the changelog
-and version numbers are generated from it). Past releases are in
-[CHANGELOG.md](CHANGELOG.md).
-
-## Releasing
-
-Maintainers only. Two ways in, both landing in the same
-[release workflow](.github/workflows/release.yml):
-
-```sh
-# Let the workflow pick the version from the Conventional Commits since the
-# last tag, then tag, build and publish:
-gh workflow run release.yml -f bump=auto
-
-# …or force a level, or rehearse without publishing anything:
-gh workflow run release.yml -f bump=minor
-gh workflow run release.yml -f bump=auto -f dry_run=true
-
-# …or just push a tag yourself:
-git tag v1.2.0 && git push origin v1.2.0
-```
-
-The workflow runs the tests, builds a universal signed bundle, packages a `.zip`,
-a `.dmg` and `checksums.txt`, generates the release notes from the commit log,
-publishes the GitHub release, and opens a `docs/changelog-vX.Y.Z` pull request
-with the updated `CHANGELOG.md` — `main` is protected, so it can't push there
-directly. That PR merges itself once CI is green, provided a `RELEASE_PAT`
-secret exists (see below); without one it waits for you to close and reopen it,
-which is what starts its checks.
-
-Nothing releases on its own: landing a commit on `main` only runs CI. `bump=auto`
-additionally refuses when nothing under `Sources/`, `Resources/` or
-`Package.swift` has changed since the last tag — a run of CI-only or docs-only
-commits would otherwise ship a byte-identical app under a new number. Pass an
-explicit `bump=patch` (or push a tag) when you want that anyway.
-
-Everything it does is a script you can run locally, which is the point — a
-release should never be a black box:
-
-```sh
-scripts/version.sh next auto            # what would the next version be?
-scripts/version.sh app-changed          # …and would the app actually differ?
-scripts/release-notes.sh 1.2.0          # what would the notes say?
-VERSION=1.2.0 UNIVERSAL=1 ./build.sh    # the exact bundle CI produces
-VERSION=1.2.0 scripts/make-dmg.sh
-```
-
-### Optional repository configuration
-
-Everything below is optional — without it releases still build and publish,
-just ad-hoc signed and without the Homebrew cask.
-
-| Secret / variable            | Type     | Effect when set                                         |
-| ---------------------------- | -------- | ------------------------------------------------------- |
-| `MACOS_CERTIFICATE_P12`      | secret   | Developer ID cert (base64 `.p12`); enables real signing |
-| `MACOS_CERTIFICATE_PASSWORD` | secret   | Password for that `.p12`                                |
-| `MACOS_SIGN_IDENTITY`        | secret   | e.g. `Developer ID Application: Name (TEAMID)`          |
-| `APPLE_ID`                   | secret   | Apple ID; enables notarization and stapling             |
-| `APPLE_TEAM_ID`              | secret   | Team ID for notarization                                |
-| `APPLE_APP_PASSWORD`         | secret   | App-specific password for notarization                  |
-| `HOMEBREW_TAP_TOKEN`         | secret   | PAT with `contents:write` on the tap; updates the cask  |
-| `HOMEBREW_TAP_REPO`          | variable | Tap repo, defaults to `<owner>/homebrew-tap`            |
-| `RELEASE_PAT`                | secret   | PAT (contents + pull requests) here; self-merges the PR |
-
-Base64-encode the certificate with
-`base64 -i cert.p12 | pbcopy`. Once the Apple secrets exist the workflow signs
-and notarizes automatically, and the Gatekeeper warning disappears from the
-release notes.
-
-`RELEASE_PAT` is a fine-grained token on this repository with **Contents:
-read and write** and **Pull requests: read and write**. It exists because
-nothing pushed or opened with the built-in `GITHUB_TOKEN` starts a workflow
-run: the changelog PR's required checks would never report and it could never
-merge. It grants no extra power over `main` — that PR passes the same ruleset
-as any other.
-
-## Disclaimer
-
-Sugarglider is **not a medical device**. It only displays data already
-collected by your Nightscout site, can show stale or incorrect values, and
-must not be used for treatment decisions. Always rely on your approved
-CGM/meter readings and the guidance of your care team.
+Pull requests welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup, the
+architecture in a paragraph, and the commit message format. Past releases are
+in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

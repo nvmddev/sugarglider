@@ -84,6 +84,10 @@ still one merge click.
 - Anything touching drawing or colors was checked in **both** Light and Dark
   mode, and with both mmol/L and mg/dL if it touches values.
 - Shell scripts pass `shellcheck build.sh scripts/*.sh`.
+- If you changed the menu bar label, the dropdown or the chart, re-run
+  `scripts/make-readme-art.sh` and commit the pictures it writes into
+  `docs/`. They are rendered from the app's own views, with invented
+  readings, so they can't drift from what ships.
 
 CI runs the same checks on macOS, plus a universal (arm64 + x86_64) release
 build, so a PR that builds only on your architecture will be caught.
@@ -102,4 +106,4 @@ This app displays medical data. Two things follow from that:
 
 ## Releasing
 
-Maintainers only — see [Releasing](README.md#releasing).
+Maintainers only, see [docs/releasing.md](docs/releasing.md).

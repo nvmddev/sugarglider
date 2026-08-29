@@ -23,11 +23,18 @@ extension View {
     /// uses `preferredColorScheme` instead — SwiftUI's own machinery then
     /// sets the window-level appearance, so AppKit dynamic colors follow too.
     func windowTheme(_ theme: AppSettings.Theme) -> some View {
-        background(WindowThemeApplier(appearance: theme.nsAppearance))
+        // Pinned to zero size, not merely described as such: ImageRenderer
+        // rasterises an NSViewRepresentable as a yellow "prohibited" placeholder
+        // rather than as nothing, and a full-bleed background of that sits
+        // behind the whole view. Off-screen renders (scripts/ReadmeArt.swift,
+        // the ChartCanvas smoke tests) came out as a red circle-slash over a
+        // yellow field until this frame was added. The applier only has to be
+        // in the tree to find its window; its size never mattered.
+        background(WindowThemeApplier(appearance: theme.nsAppearance).frame(width: 0, height: 0))
     }
 }
 
-/// Zero-size helper view that forwards the desired appearance to whatever
+/// Helper view that forwards the desired appearance to whatever
 /// window it ends up in. Re-applied on window attach (the dropdown's content
 /// view is recreated each time it opens) and on every theme change.
 private struct WindowThemeApplier: NSViewRepresentable {
