@@ -75,13 +75,9 @@ Grab the latest `.dmg` (or `.zip`) from the
 **Sugarglider.app** into `/Applications`. The build is a universal binary, so it
 runs natively on both Apple silicon and Intel.
 
-Releases are ad-hoc signed rather than notarized by Apple, so macOS quarantines
-the app on first launch. Either right-click it → **Open** → **Open**, or clear
-the flag yourself:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/Sugarglider.app
-```
+Releases are signed with an Apple Developer ID certificate and notarized by
+Apple, with the ticket stapled to both the app and the disk image. macOS opens
+them without a Gatekeeper prompt and without any `xattr` incantation.
 
 Every release ships a `checksums.txt`; verify your download with
 `shasum -a 256 -c checksums.txt`.
@@ -90,11 +86,7 @@ Every release ships a `checksums.txt`; verify your download with
 
 ```sh
 brew install --cask nvmddev/tap/sugarglider
-xattr -dr com.apple.quarantine /Applications/Sugarglider.app
 ```
-
-The second line is the same quarantine caveat as above. Homebrew 6 dropped the
-`--no-quarantine` flag, so clearing the attribute afterwards is the way.
 
 ### Build from source
 
@@ -231,10 +223,13 @@ just ad-hoc signed and without the Homebrew cask.
 | `HOMEBREW_TAP_REPO`          | variable | Tap repo, defaults to `<owner>/homebrew-tap`            |
 | `RELEASE_PAT`                | secret   | PAT (contents + pull requests) here; self-merges the PR |
 
-Base64-encode the certificate with
-`base64 -i cert.p12 | pbcopy`. Once the Apple secrets exist the workflow signs
-and notarizes automatically, and the Gatekeeper warning disappears from the
-release notes.
+Base64-encode the certificate with `base64 -i cert.p12 | pbcopy`. All of these
+are set on this repository, so the workflow signs and notarizes on its own and
+the release notes carry no Gatekeeper workaround. Without them it degrades
+instead of failing — no certificate means an ad-hoc build, no `APPLE_ID` means
+signed but unnotarized — which is why `scripts/verify-notarization.sh` runs on
+the notarizing path and fails the release rather than letting a quarantined
+download ship under green checks.
 
 `RELEASE_PAT` is a fine-grained token on this repository with **Contents:
 read and write** and **Pull requests: read and write**. It exists because
