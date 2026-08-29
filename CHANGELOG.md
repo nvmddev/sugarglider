@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 from [Conventional Commits](https://www.conventionalcommits.org/) by
 `scripts/changelog.sh` — edit commit messages, not this file.
 
+## [0.5.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.5.0) — 2026-08-30
+
+### Features
+
+- **security:** keep the Nightscout token in the Keychain (#11) ([`30d968b`](https://github.com/nvmddev/sugarglider/commit/30d968b928ea552293fbf4e19053fcafb3aa9c20))
+- **release:** ship Developer ID-signed, notarized downloads (#10) ([`92ca539`](https://github.com/nvmddev/sugarglider/commit/92ca53979bb3c4ebb6d1b679034a19b127e0be28))
+
+### Documentation
+
+- changelog for v0.4.0 [skip ci] ([`73c5074`](https://github.com/nvmddev/sugarglider/commit/73c5074b2ed1d74f741820e4ed6c9cce29e8f57d))
+
+### Build & CI
+
+- **release:** open the changelog as a PR instead of pushing to main (#8) ([`24c94b3`](https://github.com/nvmddev/sugarglider/commit/24c94b3c30ba241d693df0d0fb6e109a7d0c28e4))
+
+### Chores
+
+- point the repository references at nvmddev (#9) ([`8e35f58`](https://github.com/nvmddev/sugarglider/commit/8e35f58a461581da72cb9df8af23d4f166427442))
+
+**Full changelog**: https://github.com/nvmddev/sugarglider/compare/v0.4.0...v0.5.0
+
 ## [0.4.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.4.0) — 2026-08-06
 
 ### Features
