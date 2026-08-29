@@ -1,33 +1,27 @@
 import SwiftUI
 import AppKit
 
-/// A small line chart of recent glucose readings, drawn with SwiftUI `Canvas`.
-/// It paints on a transparent background so the menu's translucent material
-/// shows through. Hover anywhere to read the exact value and time.
+/// A small line chart of recent glucose readings, on a transparent background
+/// so the menu's material shows through. Hover to read a value and its time.
 ///
-/// The `Canvas` content closure draws in a *flipped* sub-context (y growing
-/// upward, the conventional chart coordinate space); text is drawn through
-/// the unflipped top-level context so glyphs aren't mirrored, with
-/// y-coordinates converted via `screenY(_:)`. `ChartMath` holds the pure,
-/// framework-agnostic pieces (segment splitting, Catmull-Rom smoothing,
-/// gridline stepping, zone coloring, hover hit-testing).
+/// Drawing happens in a flipped sub-context (y growing upward, the conventional
+/// chart coordinate space); text goes through the unflipped top-level context
+/// so glyphs aren't mirrored, with y converted via `Layout.screenY(_:)`.
 struct ChartCanvas: View {
     var readings: [Reading]
     var rangeHours: Int
     var settings: AppSettings
-    /// The instant the window ends at. The live chart leaves this nil and
-    /// anchors to the wall clock, which is what makes a stopped feed show up as
-    /// a growing gap at the right edge. Settings' synthetic preview pins it to
-    /// its own sample data's end instead: that data is generated when the view
-    /// body runs, while `Canvas` redraws whenever it likes, so a wall-clock
-    /// window slid the samples out of range as the app kept running — after
-    /// `rangeHours` the preview showed "No data for this range" until some edit
-    /// re-ran the body and regenerated it.
+    /// Where the window ends. The live chart leaves this nil and anchors to the
+    /// wall clock, which is what makes a stopped feed show as a growing gap at
+    /// the right edge. Settings' preview pins it to its sample data's end
+    /// instead: that data is generated when the body runs while `Canvas` redraws
+    /// on its own schedule, so on a wall-clock window the samples aged out of
+    /// range and the preview went blank until some edit re-ran the body.
     var windowEnd: Date?
 
     @State private var hoverIndex: Int?
-    /// `.onContinuousHover` doesn't hand us the view's size, so track it via a
-    /// zero-cost background GeometryReader.
+    /// `.onContinuousHover` doesn't hand us the view's size, hence the
+    /// GeometryReader in the background.
     @State private var lastSize: CGSize = .zero
 
     private static let timeFmt: DateFormatter = {
@@ -36,16 +30,14 @@ struct ChartCanvas: View {
         return f
     }()
 
-    /// Used instead of `timeFmt` on wide windows — see `ChartMath.labelsNeedDay`.
-    /// The pattern stays fixed 24h like `timeFmt` (the weekday abbreviation still
-    /// localizes through the formatter's locale) so both variants read alike.
+    /// Used on wide windows, see `ChartMath.labelsNeedDay`. Fixed 24h like
+    /// `timeFmt` so both variants read alike; the weekday still localizes.
     private static let dayTimeFmt: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "E HH:mm"
         return f
     }()
 
-    /// Time label for `date` in a window spanning `span`.
     private static func timeLabel(_ date: Date, span: TimeInterval) -> String {
         (ChartMath.labelsNeedDay(span: span) ? dayTimeFmt : timeFmt).string(from: date)
     }
@@ -69,9 +61,8 @@ struct ChartCanvas: View {
 
     // MARK: - Geometry (shared between draw and hover)
 
-    /// Everything the drawing and the hover hit-test need to map readings to
-    /// points. Both go through `x(_:)`/`y(_:)`, so the two can't disagree about
-    /// where a reading sits.
+    /// Everything the drawing and the hover hit-test need to map a reading to a
+    /// point. Both go through `x(_:)`/`y(_:)`, so they can't disagree.
     private struct Layout {
         var visible: [Reading]
         var plot: CGRect       // in flipped chart space: minY = bottom, maxY = top
@@ -82,25 +73,24 @@ struct ChartCanvas: View {
         var hi: Double
         var units: AppSettings.Units
 
-        /// Horizontal position of an instant in the window.
         func x(_ date: Date) -> CGFloat {
             plot.minX + CGFloat(date.timeIntervalSince(start) / end.timeIntervalSince(start)) * plot.width
         }
 
-        /// Vertical position of a value *in display units* (chart space, y up).
+        /// Chart space, y up. Takes a value in display units.
         func y(_ value: Double) -> CGFloat {
             plot.minY + CGFloat((value - lo) / (hi - lo)) * plot.height
         }
 
-        /// `y(_:)` for an mg/dL value, clamped into the plot — for the threshold
-        /// lines and zone bands, which exist even when they fall off the axis.
+        /// `y(_:)` for an mg/dL value, clamped into the plot: threshold lines
+        /// and zone bands exist even when they fall off the axis.
         func bandY(mgdl: Double) -> CGFloat {
             min(max(y(units.display(mgdl)), plot.minY), plot.maxY)
         }
 
         func y(of reading: Reading) -> CGFloat { y(units.value(fromMgdl: reading.sgv)) }
 
-        /// Chart-space y back to the unflipped context's coordinates, for text.
+        /// Back to the unflipped context's coordinates, for text.
         func screenY(_ chartY: CGFloat) -> CGFloat { size.height - chartY }
 
         var span: TimeInterval { end.timeIntervalSince(start) }
@@ -108,9 +98,9 @@ struct ChartCanvas: View {
 
     private func layout(size: CGSize) -> Layout? {
         let leftInset: CGFloat = 0.5
-        // The newest reading sits exactly at the plot's right edge, so its dot
-        // and halo need room there or the `Canvas` frame clips them in half.
-        // Capped so a big halo can't squeeze a narrow chart out of existence.
+        // The newest reading sits on the plot's right edge, so its dot and halo
+        // need room there or the frame clips them in half. Capped so a big halo
+        // can't squeeze a narrow chart out of existence.
         let rightInset = min(max(0.5, settings.dotRadius, settings.dotHaloRadius), size.width / 4)
         let topInset: CGFloat = 10, bottomInset: CGFloat = 16
         let plot = CGRect(
@@ -151,23 +141,19 @@ struct ChartCanvas: View {
             return
         }
 
-        // Flipped drawing context: y grows upward, so the geometry math in
-        // `Layout` reads like a conventional bottom-up chart. `ctx0` stays
-        // unflipped and is what all text is drawn through.
+        // Flipped context: y grows upward, so `Layout`'s math reads like a
+        // conventional bottom-up chart. `ctx0` stays unflipped, for text.
         var chart = ctx0
         chart.translateBy(x: 0, y: size.height)
         chart.scaleBy(x: 1, y: -1)
 
         let clipPath = Path(roundedRect: l.plot, cornerRadius: 10)
 
-        // Optional solid background behind the plot; when off, the menu's
-        // glass material shows through.
         if settings.chartBackgroundEnabled {
             chart.fill(clipPath, with: .color(settings.chartBackgroundColor))
         }
 
-        // Faint rounded container so the plot reads as a distinct surface
-        // (drawn before the clip, so the stroke itself isn't clipped).
+        // Drawn before the clip, so the stroke itself isn't clipped.
         chart.stroke(clipPath, with: .color(Color(nsColor: .separatorColor).opacity(0.4)), lineWidth: 1)
 
         var inner = chart
@@ -180,7 +166,7 @@ struct ChartCanvas: View {
         drawHover(ctx0, chart: &chart, layout: l)
     }
 
-    /// Horizontal gridlines with value labels, at "nice" intervals.
+    /// Horizontal gridlines with value labels, at round intervals.
     private func drawGridlines(_ ctx: GraphicsContext, text ctx0: GraphicsContext, layout l: Layout) {
         let plot = l.plot
         let step = ChartMath.niceStep(l.hi - l.lo)
@@ -218,13 +204,13 @@ struct ChartCanvas: View {
         }
     }
 
-    /// The reading line — split across dropouts, smoothed, optionally shaded
-    /// underneath — plus the dot marking the latest reading. `chart` (unclipped)
-    /// is where the dot goes, so its halo may bleed past the rounded corners.
+    /// The reading line (split across dropouts, smoothed, optionally shaded)
+    /// plus the dot marking the latest reading. The dot goes into the unclipped
+    /// `chart`, so its halo may bleed past the rounded corners.
     private func drawLine(_ inner: GraphicsContext, chart: inout GraphicsContext, layout l: Layout) {
         let plot = l.plot
         let zones = zones()
-        // Zone bands, bottom→top in chart space: extreme-low … extreme-high.
+        // Zone bands, bottom to top in chart space.
         let exLowY = l.bandY(mgdl: settings.extremeLow)
         let lowY = l.bandY(mgdl: settings.targetLow)
         let highY = l.bandY(mgdl: settings.targetHigh)
@@ -259,8 +245,7 @@ struct ChartCanvas: View {
             }
         }
 
-        // Latest reading: halo + solid dot, both sized by the user (either at 0
-        // hides that part).
+        // Latest reading: halo plus solid dot, either sized to 0 to hide it.
         if let last = l.visible.last {
             let p = CGPoint(x: l.x(last.date), y: l.y(of: last))
             let color = dotColor(for: last, zones: zones)
@@ -290,7 +275,6 @@ struct ChartCanvas: View {
             startPoint: CGPoint(x: plot.midX, y: plot.maxY), endPoint: CGPoint(x: plot.midX, y: plot.minY)))
     }
 
-    /// Start and latest timestamps under the plot.
     private func drawTimeAxis(_ ctx0: GraphicsContext, layout l: Layout) {
         let baseline = l.screenY(l.plot.minY) - 2
         for (date, x, anchor) in [(l.start, l.plot.minX, UnitPoint.bottomLeading),
@@ -300,7 +284,6 @@ struct ChartCanvas: View {
         }
     }
 
-    /// The zone thresholds and colors the line, dots and bands are painted with.
     private func zones() -> ChartMath.Zones {
         ChartMath.Zones(
             extremeLow: settings.extremeLow, targetLow: settings.targetLow,
@@ -313,9 +296,8 @@ struct ChartCanvas: View {
 
     private static let lineStroke = StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
 
-    /// Stroke `path` with a vertical gradient that blends the zone colors into
-    /// one another (bottom → top, matching the value axis), so the line's
-    /// color shifts smoothly across thresholds instead of switching abruptly.
+    /// Strokes `path` with a vertical gradient blending the zone colors into
+    /// one another, so the line shifts smoothly across thresholds.
     private func strokeBlended(_ ctx: GraphicsContext, path: Path, bands: [(CGFloat, CGFloat, Color)], plot: CGRect) {
         var stops: [Gradient.Stop] = []
         for (minY, maxY, color) in bands where maxY - minY > 0.5 {
@@ -341,13 +323,13 @@ struct ChartCanvas: View {
         vline.addLine(to: CGPoint(x: px, y: plot.maxY))
         chart.stroke(vline, with: .color(Color(nsColor: .labelColor).opacity(0.25)), lineWidth: 1)
 
-        // The crosshair always needs a visible marker, so this one keeps a floor
-        // even when the latest-reading dot is sized down to nothing.
+        // Keeps a radius floor, so the crosshair still has a visible point when
+        // the latest-reading dot is sized away.
         dot(chart, at: CGPoint(x: px, y: py),
             radius: max(3, settings.dotRadius), color: dotColor(for: r, zones: zones()))
 
         let label = "\(r.text(in: l.units)) · \(Self.timeLabel(r.date, span: l.span))"
-        // Resolve once so measurement and drawing share the same text layout.
+        // Resolve once so measurement and drawing share the same layout.
         let resolved = ctx0.resolve(Text(label).font(.system(size: 10)).foregroundStyle(Color(nsColor: .labelColor)))
         let size = resolved.measure(in: plot.size)
         let pad: CGFloat = 5
@@ -361,8 +343,6 @@ struct ChartCanvas: View {
         ctx0.draw(resolved, at: CGPoint(x: box.minX + pad, y: l.screenY(box.minY + pad / 2)), anchor: .bottomLeading)
     }
 
-    /// The dot color for a reading: its range zone's color by default, or the
-    /// user's fixed `dotColor` when they've opted out of zone coloring.
     private func dotColor(for r: Reading, zones: ChartMath.Zones) -> Color {
         settings.dotUsesZoneColor ? ChartMath.color(for: r.sgv, zones: zones) : settings.dotColor
     }

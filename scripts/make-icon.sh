@@ -2,30 +2,30 @@
 # Compile Resources/AppIcon.icon (an Icon Composer document) into the four
 # artifacts the app bundle ships, all committed next to it:
 #
-#   Resources/Assets.car        the real icon — an image stack carrying separate
+#   Resources/Assets.car        the real icon: an image stack carrying separate
 #                               Aqua / DarkAqua / tintable renditions, which is
 #                               what makes macOS swap the icon with the system
 #                               appearance. Referenced by CFBundleIconName.
 #   Resources/AppIcon.icns      single-appearance fallback for anything that
 #                               predates the catalog. Referenced by CFBundleIconFile.
 #   Resources/AppIcon-Light.png the same artwork as flat images, for the About
-#   Resources/AppIcon-Dark.png  tab — the catalog's variants are reachable only
-#                               through the system icon services, never through
-#                               NSImage(named:). See the icon bullet in CLAUDE.md.
+#   Resources/AppIcon-Dark.png  tab, since the catalog's variants are reachable
+#                               only through the system icon services, never
+#                               through NSImage(named:).
 #
-# Run this only when the artwork changes — `build.sh` just copies the results.
-# That split is deliberate: actool ships only with a full Xcode (26+ for .icon
-# documents), while build.sh is meant to work on a Command Line Tools-only
-# machine, and CI's pinned macos-15 runners have neither. Committing what actool
-# produced keeps every build reproducible without that dependency.
+# Run this only when the artwork changes; build.sh just copies the results.
+# actool ships only with a full Xcode (26+ for .icon documents), while build.sh
+# has to work on a Command Line Tools-only machine, and CI's pinned macos-15
+# runners have neither. Committing what actool produced keeps every build
+# reproducible without that dependency.
 #
 # Usage:
 #   make-icon.sh [compile]   recompile the artifacts and record the source hash
 #   make-icon.sh verify      check that hash without needing Xcode at all
 #
-# `verify` is what closes the loop on committing generated files: edit the
-# artwork, forget to recompile, and the build would otherwise pick up the stale
-# artifacts and ship the wrong icon with everything green. CI runs it.
+# `verify` closes the loop on committing generated files: edit the artwork,
+# forget to recompile, and the build would otherwise ship the old icon with
+# every check green. CI runs it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -74,9 +74,8 @@ verify)
     ;;
 esac
 
-# xcrun resolves actool only when a full Xcode is *selected*; having it merely
-# installed (the common case — `xcode-select -p` still points at the CLT) is
-# enough for us, so fall back to looking for it directly.
+# xcrun resolves actool only when a full Xcode is selected, but merely having
+# one installed is enough for us, so fall back to looking for it directly.
 ACTOOL="$(xcrun --find actool 2>/dev/null || true)"
 if [[ -z "${ACTOOL}" ]]; then
     for candidate in /Applications/Xcode*.app; do
@@ -117,13 +116,12 @@ echo "==> Compiling ${ICON} with ${ACTOOL}"
 compile_icon "${ICON}" "${TMP}/light"
 cp "${TMP}/light/Assets.car" "${TMP}/light/AppIcon.icns" Resources/
 
-# The About tab's two PNGs come out of actool as well rather than out of Icon
-# Composer's export panel: that panel emits iOS/watchOS artwork only — flat and
-# full-bleed — because on macOS the squircle, padding and shadow are applied
-# when the icon is rendered, not when it's drawn. Compiling gives us the real
-# thing. There's no flag for "render the dark appearance", so the dark pass goes
-# through a copy of the document with its dark specializations promoted to
-# defaults; the resulting .icns then holds the dark artwork in macOS form.
+# The About tab's two PNGs come out of actool as well, not out of Icon
+# Composer's export panel: that panel emits iOS/watchOS artwork only, flat and
+# full-bleed, because on macOS the squircle, padding and shadow are applied when
+# the icon is rendered rather than when it's drawn. There's no flag for "render
+# the dark appearance", so the dark pass goes through a copy of the document
+# with its dark specializations promoted to defaults.
 echo "==> Compiling a dark-appearance pass"
 cp -R "${ICON}" "${TMP}/AppIcon.icon"
 python3 - "${TMP}/AppIcon.icon/icon.json" <<'PY'

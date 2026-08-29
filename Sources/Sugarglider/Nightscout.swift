@@ -1,19 +1,16 @@
 import Foundation
 
-/// One glucose reading from Nightscout. `sgv` is always mg/dL (Nightscout's
-/// internal unit); we convert to mmol/L for display.
+/// One glucose reading. `sgv` is always mg/dL, Nightscout's internal unit.
 struct Reading {
     let sgv: Int
     let direction: String
     let date: Date
 
-    /// Reading value in the given display unit.
     func value(in units: AppSettings.Units) -> Double { units.value(fromMgdl: sgv) }
-    /// Formatted reading, e.g. "5.2" (mmol/L) or "94" (mg/dL).
     func text(in units: AppSettings.Units) -> String { units.text(fromMgdl: sgv) }
 
-    /// Trend arrow matching Nightscout's `direction` field. Doubles use paired
-    /// single glyphs (`↑↑`) rather than `⇈`/`⇊`, which render thin and small.
+    /// Doubles use paired single glyphs (`↑↑`) rather than `⇈`/`⇊`, which render
+    /// thin and small.
     var trendArrow: String {
         switch direction {
         case "DoubleUp":      return "↑↑"
@@ -46,16 +43,13 @@ enum NightscoutError: LocalizedError {
     }
 }
 
-/// A pure HTTP client with no hidden dependency on app state — connection info
-/// is passed in by the caller (`ReadingStore`, which reads it from
-/// `AppSettings`) rather than reached for globally. `@MainActor` because the
-/// only caller is main-actor `ReadingStore`; the network wait itself still
-/// happens off the main thread inside `URLSession`.
+/// A pure HTTP client: connection info is passed in by the caller rather than
+/// read from `AppSettings` here. `@MainActor` because the only caller is;
+/// the network wait itself still happens inside `URLSession`, off the main
+/// thread.
 @MainActor
 enum Nightscout {
-    /// One shared, lightweight session. 15s timeout keeps a stalled request
-    /// from pinning the timer, and `waitsForConnectivity` avoids spurious
-    /// failures when the network blips.
+    /// The 15s timeout keeps a stalled request from pinning the poll timer.
     private static let session: URLSession = {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = 15
@@ -64,15 +58,12 @@ enum Nightscout {
         return URLSession(configuration: cfg)
     }()
 
-    /// Reused across requests; every decode happens on the main actor, so one
-    /// instance is enough.
     private static let decoder = JSONDecoder()
 
-    /// One raw row of `entries/sgv.json`. Decoded leniently — each field
-    /// individually — so a single odd row can't fail the whole response the way
-    /// a strict `Decodable` would: a missing `direction` is normal, and sites
-    /// exist that emit a non-numeric `sgv`. `sgv` is read as a `Double` because
-    /// some uploaders report fractional mg/dL.
+    /// One raw row of `entries/sgv.json`, decoded field by field so a single odd
+    /// row can't fail the whole response the way a strict `Decodable` would: a
+    /// missing `direction` is routine, and some sites emit a non-numeric `sgv`.
+    /// `sgv` is a `Double` because fractional mg/dL happens.
     private struct Entry: Decodable {
         let sgv: Double?
         let direction: String?
@@ -87,7 +78,7 @@ enum Nightscout {
             millis = try? row.decodeIfPresent(Double.self, forKey: .date)
         }
 
-        /// Nil for a row without the two fields a plottable reading needs.
+        /// Nil for a row missing either field a plottable reading needs.
         var reading: Reading? {
             guard let sgv, let millis else { return nil }
             return Reading(sgv: Int(sgv.rounded()), direction: direction ?? "",
@@ -95,15 +86,13 @@ enum Nightscout {
         }
     }
 
-    /// Fetch up to `count` recent SGV entries, returned oldest-first so they can
-    /// be plotted left-to-right.
+    /// Fetches up to `count` recent SGV entries, oldest-first so they plot
+    /// left to right.
     ///
-    /// `since` restricts the response to entries *newer* than that instant
-    /// (Nightscout's Mongo-style `find[date][$gt]` on the epoch-millisecond
-    /// `date` field), which is what makes topping a cached history up cheap
-    /// instead of re-downloading the whole window. An empty response is an
-    /// error only for a full fetch: with `since` set, "nothing new since then"
-    /// is the normal, expected answer.
+    /// `since` restricts the response to entries newer than that instant
+    /// (Nightscout's Mongo-style `find[date][$gt]`), which is what makes topping
+    /// up a cached history cheap. An empty response is an error only for a full
+    /// fetch: with `since` set, "nothing new" is the expected answer.
     static func fetchEntries(count: Int, since: Date? = nil,
                              baseURL: String, token: String) async throws -> [Reading] {
         var base = baseURL.trimmingCharacters(in: .whitespaces)
@@ -137,16 +126,14 @@ enum Nightscout {
         return readings
     }
 
-    /// Result of a connection probe: can the site be reached and read with
-    /// these credentials?
     enum ProbeResult: Equatable {
         case connected
         case failed(String)
     }
 
-    /// Check whether `baseURL`/`token` identify a reachable Nightscout site
-    /// the token can read from. A site with no readings yet still counts as
-    /// connected — the credentials work, there's just no data.
+    /// Whether `baseURL`/`token` reach a site the token can read from. A site
+    /// with no readings yet still counts as connected: the credentials work,
+    /// there's just no data.
     static func probe(baseURL: String, token: String) async -> ProbeResult {
         do {
             _ = try await fetchEntries(count: 1, baseURL: baseURL, token: token)

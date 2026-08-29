@@ -39,8 +39,8 @@ immediate exit 137 when the binary is started directly. Three one-time steps:
    (gitignored), and `TEAM_ID` set when building:
 
    ```sh
-   TEAM_ID=3CNF2FUWG7 \
-   SIGN_IDENTITY="Developer ID Application: Josua Bryner (3CNF2FUWG7)" \
+   TEAM_ID=TEAMID \
+   SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
    ./build.sh
    ```
 
@@ -82,16 +82,10 @@ security set-key-partition-list -S apple-tool:,apple:,codesign: \
   -s -k "$LOGIN_KEYCHAIN_PASSWORD" ~/Library/Keychains/login.keychain-db
 ```
 
-## Current state
+## Checking it worked
 
-Both halves are in place: `MACOS_PROVISION_PROFILE` is set on the repository, and
-the profile ("Sugarglider Developer ID", valid to 2044) sits at
-`Resources/embedded.provisionprofile` on the maintainer's machine. It is
-gitignored, so a fresh clone builds without it — download it again from the
-Apple portal, since a repository secret cannot be read back.
-
-Two things confirm the entitled path actually works, both worth repeating if the
-signing setup changes, because a broken one looks fine until launch:
+A broken signing setup looks fine right up until launch, so both of these are
+worth repeating whenever it changes:
 
 ```sh
 codesign -d --entitlements - Sugarglider.app       # keychain-access-groups present
@@ -101,3 +95,6 @@ open Sugarglider.app                               # AMFI kills it instantly if 
 And the giveaway that the *data-protection* Keychain is really in use: after the
 app has stored a token, `security find-generic-password -s dev.nevermind.sugarglider`
 finds nothing. The `security` tool only sees the file-based Keychain.
+
+The profile is gitignored, so a fresh clone builds without it — download it
+again from the Apple portal, since a repository secret cannot be read back.

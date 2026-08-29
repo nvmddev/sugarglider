@@ -30,9 +30,9 @@ extension SugargliderTests {
         #expect(s.extremeHigh == 250)
     }
 
-    /// Out-of-order thresholds are surfaced, not corrected — the fields persist
-    /// as you type, so moving a neighbouring value would fight anyone swapping a
-    /// range around. Settings shows the message; the values stay untouched.
+    /// Out-of-order thresholds are surfaced, not corrected: the fields persist
+    /// as you type, so moving a neighbour would fight anyone swapping a range
+    /// around. Settings shows the message, the values stay untouched.
     @Test func thresholdOrderWarning() {
         let s = Self.makeSettings()
         #expect(s.thresholdOrderWarning == nil)          // defaults are in order
@@ -124,9 +124,9 @@ extension SugargliderTests {
         #expect(s.blendLineColors == true)
     }
 
-    /// These three default to *true*, so they can't be loaded with
-    /// `bool(forKey:)` — an unset key would read back as false and silently
-    /// turn the shading and zone-colored dot off on first launch.
+    /// These three default to true, so they can't be loaded with
+    /// `bool(forKey:)`: an unset key reads back as false and would turn the
+    /// shading and the zone-colored dot off on first launch.
     @Test func trueByDefaultFlagsSurviveAnEmptyStore() {
         let s = Self.makeSettings()
         #expect(s.lineShadingEnabled == true)
@@ -204,7 +204,7 @@ extension SugargliderTests {
     }
 
     /// The clamped setters re-enter themselves with the corrected value, so the
-    /// change hook must still fire exactly once — and only for a real change.
+    /// change hook still has to fire exactly once, and only for a real change.
     @Test func changeHooksFireOncePerChange() {
         let s = Self.makeSettings()
         var range = 0, poll = 0, connection = 0
@@ -249,13 +249,9 @@ extension SugargliderTests {
         #expect(AppSettings.maskedToken("") == "")                 // empty stays empty (prompt shows)
     }
 
-    /// A value is persisted verbatim, including zero — unlike the old
-    /// `Config` (a static enum reading straight from `UserDefaults`), where
-    /// zero was indistinguishable from "never set" and silently snapped back
-    /// to a default. `AppSettings` reads persisted values once at `init` (via
-    /// `object(forKey:)`, which *can* distinguish absent from zero), so that
-    /// ambiguity — and the surprising implicit clamp-on-write it required —
-    /// no longer exists.
+    /// Zero is a value like any other. It's read back through `object(forKey:)`,
+    /// which can tell absent from zero, so nothing has to guess whether a stored
+    /// 0 means "never set".
     @Test func thresholdAcceptsExplicitZero() {
         let s = Self.makeSettings()
         s.targetLow = 0
@@ -266,9 +262,9 @@ extension SugargliderTests {
 // MARK: - Number formatting
 
 extension SugargliderTests {
-    /// Every number is written with a dot and no grouping, whatever the system
+    /// Every number is written with a dot and no grouping whatever the system
     /// region is, so an entry field can't show "5,6" next to a reading rendered
-    /// as "5.6" (`String(format:)` is locale-independent, `FormatStyle` isn't).
+    /// as "5.6". `String(format:)` is locale-independent, `FormatStyle` isn't.
     @Test func numberFormatsAlwaysUseADot() {
         #expect(AppSettings.numberLocale.decimalSeparator == ".")
         #expect(1234.formatted(AppSettings.wholeNumberFormat) == "1234")   // never "1,234"
@@ -279,8 +275,8 @@ extension SugargliderTests {
         s.units = .mgdl
         #expect(180.4.formatted(s.thresholdFormat) == "180")   // mg/dL is integral
         #expect(AppSettings.Units.mmol.text(fromMgdl: 189) == "10.5")   // the display path agrees
-        // The same style type with a comma locale really does differ, so the
-        // assertions above prove the pin rather than this machine's region.
+        // The same style with a comma locale really does differ, so the
+        // assertions above prove the pin and not this machine's region.
         let commaStyle = FloatingPointFormatStyle<Double>(locale: Locale(identifier: "de_DE"))
             .precision(.fractionLength(0...1))
         #expect(10.5.formatted(commaStyle) == "10,5")
@@ -328,7 +324,7 @@ extension SugargliderTests {
 
         defaults.set(3.9, forKey: "targetLow")       // a fresh small value, flag already set
         let s2 = AppSettings(defaults: defaults)
-        #expect(s2.targetLow == 3.9)                 // no re-scaling — migration already ran
+        #expect(s2.targetLow == 3.9)                 // no re-scaling, migration already ran
     }
 }
 
@@ -406,7 +402,7 @@ extension SugargliderTests {
     }
 
     /// `colorSlots` is the one table the load, the reset and the preset
-    /// round-trip all read, so each row has to point at the property it names
+    /// round-trip all read, so every row has to point at the property it names
     /// and carry that property's default.
     @Test func colorSlotsPointAtTheirOwnProperty() {
         let s = Self.makeSettings()
@@ -425,11 +421,9 @@ extension SugargliderTests {
         }
     }
 
-    /// Loading writes the colors through their real setters (a key-path write
-    /// can't skip observers the way a direct `init` assignment does), so the
-    /// suppression has to hold: archiving the defaults back would pin a color
-    /// the user never chose, and a later change to that default would never
-    /// reach them.
+    /// Loading writes the colors through their real setters, so the suppression
+    /// has to hold. Archiving the defaults back would pin a color the user never
+    /// chose, and a later change to that default would never reach them.
     @Test func loadingDoesNotWriteDefaultsBackToTheStore() {
         let defaults = UserDefaults(suiteName: "SugargliderTests-\(UUID().uuidString)")!
         _ = AppSettings(defaults: defaults)
@@ -437,9 +431,9 @@ extension SugargliderTests {
         #expect(archived.isEmpty, "loading archived: \(archived)")
     }
 
-    /// Every key in `colorKeys` must be wired into both directions of the
-    /// preset round-trip — a key that `apply` or `currentPreset` doesn't know
-    /// about would make `matchingPreset()` permanently report "Custom".
+    /// Every key has to be wired into both directions of the round-trip: one
+    /// that `apply` or `currentPreset` doesn't know about makes
+    /// `matchingPreset()` report "Custom" forever.
     @Test func everyColorKeyRoundTripsThroughAPreset() {
         let s = Self.makeSettings()
         let distinct = AppSettings.colorKeys.enumerated().reduce(into: [String: Color]()) { dict, pair in
@@ -534,9 +528,9 @@ extension SugargliderTests {
         #expect(s.appearance.dotRadius == 5)
     }
 
-    /// A preset is the whole look, not just the palette: switching to one has to
-    /// bring its line/shading/dot settings along, survive a relaunch, and count
-    /// as "not selected" as soon as any of them is changed by hand.
+    /// A preset is the whole look, not just the palette: it brings its
+    /// line/shading/dot settings along, survives a relaunch, and stops counting
+    /// as selected as soon as one of them is changed by hand.
     @Test func presetsCarryTheAppearance() throws {
         let defaults = UserDefaults(suiteName: "SugargliderTests-\(UUID().uuidString)")!
         let s = AppSettings(defaults: defaults)
@@ -559,10 +553,9 @@ extension SugargliderTests {
         #expect(AppSettings(defaults: defaults).colorPresets.first?.appearance == look)
     }
 
-    /// Presets saved before appearances were part of one carry no `appearance`:
-    /// they must apply their colors and leave the current line/dot settings
-    /// alone, and must still register as the selected preset rather than
-    /// silently becoming "Custom" after the update.
+    /// Presets saved before appearances existed carry none, so they apply their
+    /// colors, leave the current line/dot settings alone, and still register as
+    /// selected rather than turning into "Custom" after an update.
     @Test func presetsWithoutAnAppearanceApplyColorsOnly() {
         let s = Self.makeSettings()
         let look = AppSettings.Appearance(blendLineColors: true, lineShadingEnabled: false,
@@ -594,8 +587,8 @@ extension SugargliderTests {
 // MARK: - Access token storage
 
 extension SugargliderTests {
-    /// The token goes to the Keychain seam and never to `UserDefaults` — it
-    /// having been world-readable plaintext there is the whole point of the move.
+    /// The token goes to the Keychain seam and never to `UserDefaults`. Having
+    /// been world-readable plaintext there is the whole point of the move.
     @Test func tokenPersistsToTheTokenStoreNotDefaults() {
         let defaults = Self.makeDefaults()
         let tokens = InMemoryTokenStore()
@@ -627,8 +620,8 @@ extension SugargliderTests {
         #expect(defaults.string(forKey: "token") == nil)
     }
 
-    /// A stored token wins over a stale plist one — but the plist key is cleared
-    /// either way, since leaving it there is what the migration exists to fix.
+    /// A stored token wins over a stale plist one, but the plist key is cleared
+    /// either way: leaving it there is what the migration exists to fix.
     @Test func storedTokenWinsOverStaleLegacyToken() {
         let defaults = Self.makeDefaults()
         defaults.set("monitor-legacy", forKey: "token")
@@ -637,8 +630,8 @@ extension SugargliderTests {
         #expect(defaults.string(forKey: "token") == nil)
     }
 
-    /// A refused migration says so instead of pretending, and keeps the old key:
-    /// dropping it would lose the only copy of the token.
+    /// A refused migration says so and keeps the old key, since dropping it
+    /// would lose the only copy of the token.
     @Test func refusedMigrationIsReportedAndKeepsTheOldKey() {
         let defaults = Self.makeDefaults()
         defaults.set("monitor-legacy", forKey: "token")

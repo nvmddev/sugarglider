@@ -2,8 +2,8 @@ import Testing
 import Foundation
 @testable import Sugarglider
 
-/// The `NightscoutError` message for a failed result (each case has a unique one),
-/// or nil on success — a terse way to assert which error occurred.
+/// The `NightscoutError` message for a failed result, or nil on success. Each
+/// case has a unique one, so it's a terse way to assert which error occurred.
 func errorText<T>(_ result: Result<T, Error>) -> String? {
     if case .failure(let e) = result {
         return (e as? NightscoutError)?.errorDescription ?? e.localizedDescription
@@ -24,7 +24,7 @@ extension SugargliderTests {
     }
 
     @Test func fetchBadURL() async {
-        // embedded space → URLComponents fails
+        // The embedded space makes URLComponents fail.
         #expect(errorText(await fetchEntriesAsync(count: 1, baseURL: "http://exa mple.com")) == "Invalid URL")
     }
 }
@@ -47,8 +47,8 @@ extension SugargliderTests {
         #expect(readings[1].sgv == 150)
     }
 
-    /// Each field is decoded on its own (`try?` per key), so one unusable row
-    /// costs only that row — a strict `Decodable` would fail the whole response.
+    /// Each field is decoded on its own, so one unusable row costs only that
+    /// row. A strict `Decodable` would fail the whole response.
     @Test func fetchSkipsMalformedRows() async throws {
         let server = try LocalHTTPServer(json: """
             [{"sgv":100,"direction":"Flat","date":1700000000000},
@@ -111,8 +111,8 @@ extension SugargliderTests {
         #expect(line.contains("count=10"))
     }
 
-    /// The plain fetch must stay plain — no stray filter that would make the
-    /// first, full history request return only recent entries.
+    /// The plain fetch must stay plain: a stray filter would make the first,
+    /// full history request return only recent entries.
     @Test func fetchWithoutSinceSendsNoDateFilter() async throws {
         let server = try LocalHTTPServer(json: """
             [{"sgv":100,"direction":"Flat","date":1700000400000}]

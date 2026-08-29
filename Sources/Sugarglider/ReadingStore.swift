@@ -1,11 +1,11 @@
 import Foundation
 
-/// Live, transient reading state — decoupled from persisted `AppSettings`.
-/// Polls Nightscout on a 60s timer and exposes the latest/previous reading,
-/// chart history, and any error, all reactively via Observation. `init` is
-/// deliberately inert (no timer, no network) so tests can construct a store
-/// and exercise its formatting/delta logic without side effects; `start()` is
-/// the explicit trigger the real app calls once at launch.
+/// Live reading state: the latest and previous reading, the chart history, and
+/// any error. Nothing here is persisted; a single request rebuilds it all.
+///
+/// `init` is deliberately inert (no timer, no network) so tests can construct a
+/// store without side effects. `start()` is the explicit trigger the app calls
+/// once at launch.
 @MainActor
 @Observable
 final class ReadingStore {
@@ -16,23 +16,21 @@ final class ReadingStore {
     var lastError: String?
     var readings: [Reading] = []      // history for the chart
 
-    // Bookkeeping, not display state: nothing observes it, so it's kept out of
-    // Observation's change tracking.
+    // Bookkeeping nothing observes, hence out of Observation's change tracking.
     @ObservationIgnored private var historyFetchedAt: Date?
     @ObservationIgnored private(set) var timer: Timer?
-    /// Bumped by `reconnect()`. In-flight fetches capture the value at launch
-    /// and discard their response if it changed — otherwise a slow response
-    /// from the *previous* Nightscout site could land after a URL change and
-    /// repopulate the store with the wrong site's data.
+    /// Bumped by `reconnect()`. In-flight fetches capture it at launch and drop
+    /// their response if it changed, so a slow answer from the previous site
+    /// can't land after a URL change and repopulate the store with its data.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var reconnectDebounce: Task<Void, Never>?
     @ObservationIgnored private var coverageDebounce: Task<Void, Never>?
-    /// Start of the window the last full history fetch asked for — what the
+    /// Start of the window the last full history fetch asked for, i.e. what the
     /// cache is built to cover. See `coversHistory(from:)`.
     @ObservationIgnored private(set) var historyWindowStart: Date?
 
-    /// How far apart two readings may be and still count as one continuous
-    /// history — the same threshold the chart uses to break a line on a dropout.
+    /// Same threshold the chart uses to break its line on a dropout, so the two
+    /// can't disagree about what counts as one continuous history.
     static let contiguityThreshold = ChartMath.dropoutThreshold
     private var pollInterval: TimeInterval { TimeInterval(settings.pollIntervalSeconds) }
 
@@ -40,10 +38,9 @@ final class ReadingStore {
         self.settings = settings
     }
 
-    /// Subscribes to the settings changes this store has to react to, then starts
-    /// polling. Called once from the app's launch path — the wiring lives here
-    /// rather than at the call site so the store owns which of its own methods
-    /// each change drives.
+    /// Subscribes to the settings changes this store reacts to, then starts
+    /// polling. The wiring lives here rather than at the call site so the store
+    /// owns which of its own methods each change drives.
     func start() {
         settings.onConnectionChanged = { [weak self] in self?.reconnect() }
         settings.onPollIntervalChanged = { [weak self] in self?.restartTimer() }
@@ -56,17 +53,16 @@ final class ReadingStore {
         let t = Timer(timeInterval: pollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
-        // Generous tolerance lets macOS coalesce the wakeup, cutting energy use.
+        // Generous tolerance lets macOS coalesce the wakeup.
         t.tolerance = pollInterval * 0.5
-        // `.common` keeps the poll firing during event tracking (e.g. while
-        // the range slider is being dragged), where `.default`-mode timers stall.
+        // `.common` keeps the poll firing during event tracking, e.g. while the
+        // range slider is dragged, where a `.default`-mode timer stalls.
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
 
-    /// Rebuilds the poll timer at the current `pollInterval` — called when
-    /// `AppSettings.pollIntervalSeconds` changes, so the new interval takes
-    /// effect immediately rather than waiting for the next fire.
+    /// Rebuilds the timer so a changed interval takes effect immediately rather
+    /// than after the next fire.
     func restartTimer() {
         timer?.invalidate()
         startTimer()
@@ -84,10 +80,10 @@ final class ReadingStore {
                 if fetched.count >= 2 { previousReading = fetched[fetched.count - 2] }
                 lastError = nil
                 // The poll's entries are history too, so folding them in keeps
-                // the chart current between history fetches — often making the
+                // the chart current between history fetches, often making the
                 // fetch on the next dropdown open a no-op. Only while they join
-                // up with the cache, though: leaving a gap in place preserves
-                // the `since` boundary the next top-up needs to fill it.
+                // up with the cache though: leaving a gap in place preserves the
+                // `since` boundary the next top-up needs to fill it.
                 if let newest = readings.last, let firstNew = fetched.first,
                    firstNew.date > newest.date,
                    firstNew.date.timeIntervalSince(newest.date) <= Self.contiguityThreshold {
@@ -101,23 +97,19 @@ final class ReadingStore {
     }
 
     /// Upper bound on entries per history request. The date filter is what
-    /// actually selects the window, so this is only a guard against a site that
-    /// uploads far more often than every 5 min (1/min is not unusual): it's
-    /// sized for a per-minute cadence, and capped so even a 72h window can't
-    /// pull an unbounded response. A normal 5-min site never reaches it — a 6h
-    /// window returns ~72 entries whatever this says.
+    /// selects the window, so this is only a guard against a site uploading
+    /// every minute instead of every five. A normal site never reaches it.
     static func historyCount(forRangeHours hours: Int) -> Int {
         min(hours * 60 + 60, 2880)
     }
 
-    /// Whether the cache was already built for a window reaching back to
-    /// `start`, so it only needs topping up at the newest end.
+    /// Whether the cache already reaches back to `start`, so it only needs
+    /// topping up at the newest end.
     ///
-    /// Deliberately compares against the window that was *requested*, not
-    /// against the oldest reading received: a site with nothing older than
-    /// yesterday would otherwise look permanently uncovered and refetch its
-    /// whole window on every call. Note the comparison also self-heals as time
-    /// passes — the recorded start stays put while the window slides forward.
+    /// Compares against the window that was *requested*, not against the oldest
+    /// reading received: a site with nothing older than yesterday would
+    /// otherwise look permanently uncovered and refetch its whole window on
+    /// every call.
     static func historyCovers(requested: Date?, from start: Date) -> Bool {
         guard let requested else { return false }
         return requested <= start
@@ -128,8 +120,8 @@ final class ReadingStore {
     }
 
     /// Fetches only what's missing. The first call for a window pulls the whole
-    /// thing; afterwards the cache is *topped up* with whatever arrived since
-    /// its newest entry, which is normally a handful of readings — or none.
+    /// thing; afterwards the cache is topped up with whatever arrived since its
+    /// newest entry, which is normally a handful of readings, or none.
     func refreshHistory(force: Bool) {
         guard settings.isConfigured else { return }
         if !force, let at = historyFetchedAt, Date().timeIntervalSince(at) < 60 { return }
@@ -137,9 +129,8 @@ final class ReadingStore {
         let covered = coversHistory(from: windowStart)
         // Topping up asks for everything after the newest cached entry; a full
         // fetch asks for the window itself. Either way the server does the
-        // selecting, so the response carries no entries we already have — and
-        // it's never an unfiltered request, not even for a site whose window
-        // came back empty (covered, but with no cached entry to top up from).
+        // selecting, and it's never an unfiltered request, not even for a site
+        // whose window came back empty (covered, but with nothing to top up from).
         let since = (covered ? readings.last?.date : nil) ?? windowStart
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
         let gen = generation
@@ -154,11 +145,10 @@ final class ReadingStore {
         }
     }
 
-    /// Called when the selected range changes: the cache is sized to the window,
-    /// so widening it needs history that was never fetched. Debounced, because
-    /// dragging the slider walks through every step on the way — and it bypasses
-    /// the once-a-minute throttle, since this is a visible gap in the chart
-    /// rather than a routine refresh.
+    /// The cache is sized to the window, so widening the range needs history
+    /// that was never fetched. Debounced because dragging the slider walks
+    /// through every step on the way, and it bypasses the once-a-minute
+    /// throttle: this is a visible gap in the chart, not a routine refresh.
     func ensureHistoryCoverage() {
         guard settings.isConfigured else { return }
         let windowStart = Date().addingTimeInterval(-Double(settings.rangeHours) * 3600)
@@ -172,8 +162,7 @@ final class ReadingStore {
 
     /// Folds `fetched` into the cache, keyed by timestamp so a re-delivered
     /// entry replaces rather than duplicates its cached copy. Trimmed to the
-    /// widest selectable window so a long-running app can't grow the array
-    /// without bound.
+    /// widest selectable window so the array can't grow without bound.
     private func merge(_ fetched: [Reading]) {
         guard !fetched.isEmpty else { return }
         var byDate = Dictionary(readings.map { ($0.date, $0) }, uniquingKeysWith: { _, new in new })
@@ -188,11 +177,10 @@ final class ReadingStore {
         }
     }
 
-    /// Drop cached state and re-fetch — called when the connection info
-    /// (base URL / token) changes, since a new site invalidates everything.
-    /// State clears immediately, but the re-fetch is debounced: Settings is
-    /// non-modal, so this fires on *every keystroke* while the URL/token field
-    /// is edited — without the delay each character would trigger two requests
+    /// Drops cached state and re-fetches, since a new site invalidates
+    /// everything. State clears immediately but the re-fetch is debounced:
+    /// Settings is non-modal, so this fires on every keystroke in the URL and
+    /// token fields, and each character would otherwise trigger two requests
     /// against a half-typed URL.
     func reconnect() {
         generation += 1
@@ -211,9 +199,9 @@ final class ReadingStore {
         }
     }
 
-    /// Signed change since the previous reading in the current unit, e.g. "+0.3"
-    /// (mmol/L) or "+5" (mg/dL). Nil when delta is off, there's no prior reading,
-    /// or the gap is too large to be a meaningful consecutive delta.
+    /// Signed change since the previous reading, e.g. "+0.3". Nil when the delta
+    /// is off, there's no prior reading, or the gap is too large for the two to
+    /// count as consecutive.
     func deltaText() -> String? {
         guard settings.deltaDisplay != .off,
               let cur = lastReading, let prev = previousReading else { return nil }
@@ -224,17 +212,15 @@ final class ReadingStore {
         return units == .mmol ? String(format: "%+.1f", d) : String(format: "%+.0f", d)
     }
 
-    /// Whether the newest reading has gone without a successor for longer than
-    /// the user's `staleAfterMinutes`.
+    /// Read live, so a changed `staleAfterMinutes` applies to the reading
+    /// already on screen.
     var isStale: Bool {
         guard let r = lastReading else { return false }
         return Date().timeIntervalSince(r.date) > settings.staleThreshold
     }
 
-    /// Age in the shortest form that still reads unambiguously — "13m", "2h",
-    /// "3d" — for the status-bar item, where a full "13 min ago" would crowd out
-    /// the menu bar. Only shown once a reading is stale, so the small end never
-    /// appears; rounds down, i.e. it never claims more time has passed than has.
+    /// Age short enough for the menu bar: "13m", "2h", "3d". Rounds down, so it
+    /// never claims more time has passed than has.
     static func compactAge(_ date: Date) -> String {
         let secs = max(0, Int(Date().timeIntervalSince(date)))
         if secs < 3600 { return "\(secs / 60)m" }

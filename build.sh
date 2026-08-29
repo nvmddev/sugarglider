@@ -1,21 +1,20 @@
 #!/bin/bash
 # Build Sugarglider and assemble a menu-bar .app bundle.
 #
-# Environment overrides (all optional — a bare `./build.sh` still does the right
-# thing for local development):
+# All of these are optional; a bare `./build.sh` does the right thing locally.
 #
 #   VERSION        CFBundleShortVersionString. Default: newest git tag without
 #                  its leading "v", or 0.0.0-dev outside a tagged checkout.
-#   BUILD_NUMBER   CFBundleVersion. Default: commit count on HEAD, which is
-#                  monotonically increasing — macOS compares this across updates.
+#   BUILD_NUMBER   CFBundleVersion. Default: commit count on HEAD, which grows
+#                  monotonically, as macOS compares this across updates.
 #   SIGN_IDENTITY  codesign identity. Default "-" = ad-hoc. A real Developer ID
-#                  additionally enables hardened runtime + secure timestamp,
-#                  both of which notarization rejects the app without.
+#                  also enables hardened runtime and a secure timestamp, both of
+#                  which notarization rejects the app without.
 #   UNIVERSAL      1 = arm64 + x86_64 fat binary (what releases ship), 0 = host
-#                  arch only (fast local iteration). Default 0.
-#   TEAM_ID        Apple Developer Team ID. Together with a provisioning profile
-#                  it adds the keychain-access-groups entitlement — see the
-#                  signing block below and docs/signing.md.
+#                  arch only, for fast local iteration. Default 0.
+#   TEAM_ID        Apple Developer Team ID. With a provisioning profile it adds
+#                  the keychain-access-groups entitlement, see the signing block
+#                  below and docs/signing.md.
 #   PROVISION_PROFILE  Path to that profile. Default
 #                  Resources/embedded.provisionprofile (gitignored, optional).
 set -euo pipefail
@@ -32,9 +31,9 @@ SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 UNIVERSAL="${UNIVERSAL:-0}"
 
 if [[ "${UNIVERSAL}" == "1" ]]; then
-    # Two per-arch builds merged with lipo, rather than `swift build --arch a --arch b`:
-    # the latter routes through xcbuild and therefore needs a full Xcode, while
-    # --triple works on a Command Line Tools-only machine too.
+    # Two per-arch builds merged with lipo, not `swift build --arch a --arch b`:
+    # that form routes through xcbuild and needs a full Xcode, while --triple
+    # works on a Command Line Tools-only machine too.
     ARCHS=(arm64 x86_64)
     SLICES=()
     for arch in "${ARCHS[@]}"; do
@@ -55,12 +54,11 @@ echo "==> Assembling ${APP}"
 rm -rf "${APP}"
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 cp "${BIN_PATH}" "${APP}/Contents/MacOS/${BIN}"
-# Three icon artifacts, three distinct consumers — see scripts/make-icon.sh:
-# Assets.car holds the appearance-aware image stack macOS renders the app icon
-# from, AppIcon.icns is the single-appearance fallback, and the two PNGs exist
-# because the catalog's variants are reachable only through the system icon
-# services — `NSImage(named:)` hands out the light rendition whatever the
-# current appearance is (probed), so the About tab picks its artwork by hand.
+# Three icon artifacts, three consumers, see scripts/make-icon.sh: Assets.car
+# holds the appearance-aware stack macOS renders the app icon from, AppIcon.icns
+# is the single-appearance fallback, and the two PNGs are there because the
+# catalog's variants are reachable only through the system icon services, so the
+# About tab has to pick its artwork by hand.
 cp "Resources/Assets.car" "Resources/AppIcon.icns" \
     "Resources/AppIcon-Light.png" "Resources/AppIcon-Dark.png" \
     "${APP}/Contents/Resources/"
@@ -109,14 +107,9 @@ if [[ "${SIGN_IDENTITY}" == "-" ]]; then
     echo "==> Ad-hoc signing"
     codesign --force --sign - "${APP}" >/dev/null 2>&1 || echo "    (codesign skipped)"
 else
-    # Which Keychain the Nightscout token ends up in is decided here, not in the
-    # app: a keychain-access-groups entitlement moves it to the data-protection
-    # Keychain, which the app reads without ever prompting. That entitlement is
-    # *restricted* — AMFI kills the app at launch unless an embedded provisioning
-    # profile grants it — so it goes in only when both a profile and a Team ID
-    # are present. Without them the app falls back to the file-based login
-    # Keychain (one access prompt after an update) entirely on its own; see
-    # TokenStore.swift, which probes for the difference, and docs/signing.md.
+    # keychain-access-groups moves the token to the data-protection Keychain,
+    # which never prompts. It is a restricted entitlement, so AMFI kills the app
+    # at launch unless an embedded profile grants it. See docs/signing.md.
     SIGN_ARGS=(--force --options runtime --timestamp)
     PROFILE="${PROVISION_PROFILE:-Resources/embedded.provisionprofile}"
     if [[ -n "${TEAM_ID:-}" && -f "${PROFILE}" ]]; then
@@ -137,7 +130,7 @@ PLIST
         SIGN_ARGS+=(--entitlements "${ENTITLEMENTS}")
         echo "==> Embedding provisioning profile (keychain group ${TEAM_ID}.${BUNDLE_ID})"
     else
-        echo "==> No profile or TEAM_ID — the token falls back to the login Keychain"
+        echo "==> No profile or TEAM_ID, so the token falls back to the login Keychain"
     fi
 
     echo "==> Signing with ${SIGN_IDENTITY}"
