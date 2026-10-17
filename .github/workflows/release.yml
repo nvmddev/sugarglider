@@ -28,7 +28,9 @@ concurrency:
 jobs:
   release:
     name: Build & publish
-    runs-on: macos-15
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     permissions:
       contents: write # tag, release assets, changelog branch
       pull-requests: write # the changelog PR
