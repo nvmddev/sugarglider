@@ -98,9 +98,14 @@ release, because the two compilers don't accept the same code.
 
 This app displays medical data. Two things follow from that:
 
-- **Never commit real readings, site URLs or tokens** — not in tests, fixtures,
-  screenshots or issue reports. Tests use synthetic data
-  (`ChartMath.sampleReadings`) and a loopback HTTP server for exactly this reason.
+- **Real numbers are fine, personal data never.** Glucose readings, insulin
+  amounts, reservoir levels and their timestamps may go into tests and fixtures
+  exactly as a real site returned them: on their own they identify nobody.
+  Everything around them stays out of commits, screenshots and issue reports:
+  site URLs, access tokens, names, e-mail addresses, device names and serial
+  numbers (an uploader's `device` field often carries its owner's name). Strip
+  those from a captured response before it becomes a fixture. Tests never talk
+  to a real site; they run against a loopback HTTP server.
 - **Correctness beats cleverness.** A wrong or silently stale number on screen is
   worse than a visibly missing one. This is why stale readings get a `⚠`, why
   sensor gaps break the chart line instead of interpolating across them, and why
