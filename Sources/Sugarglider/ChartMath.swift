@@ -69,12 +69,66 @@ enum ChartMath {
     /// The reading nearest `targetX` by horizontal distance, or nil if none is
     /// within `maxDistance`. The hover hit-test, factored out of the view.
     static func nearestIndex(to targetX: CGFloat, x: (Date) -> CGFloat, in readings: [Reading], maxDistance: CGFloat) -> Int? {
+        nearestIndex(to: targetX, x: x, dates: readings.map(\.date), maxDistance: maxDistance)
+    }
+
+    /// The same hit-test over bare dates, for the chart's treatments.
+    static func nearestIndex(to targetX: CGFloat, x: (Date) -> CGFloat, dates: [Date], maxDistance: CGFloat) -> Int? {
         var best = 0, bestDist = CGFloat.greatestFiniteMagnitude
-        for (i, r) in readings.enumerated() {
-            let d = abs(x(r.date) - targetX)
+        for (i, date) in dates.enumerated() {
+            let d = abs(x(date) - targetX)
             if d < bestDist { bestDist = d; best = i }
         }
         return bestDist < maxDistance ? best : nil
+    }
+
+    /// A rate that held from `start` to `end`, one block of the delivery lane.
+    struct DeliveryStep: Equatable {
+        var start: Date
+        var end: Date
+        var rate: Double
+    }
+
+    /// Temp basals as the steps the pump ran: each until its duration is up or
+    /// the next one starts, whichever comes first, clipped to `from...to`. Time
+    /// no temp basal covers stays a gap rather than being bridged with a guess,
+    /// since the profile basal that would apply there isn't read. An uploader
+    /// that reports a closed loop's delivery as temp basals renews each one
+    /// before it runs out, so while data flows there are no gaps.
+    static func deliverySteps(_ treatments: [Treatment], from: Date, to: Date) -> [DeliveryStep] {
+        let temps: [(date: Date, rate: Double, minutes: Double)] = treatments.compactMap {
+            guard case .tempBasal(let rate, let minutes) = $0.kind else { return nil }
+            return ($0.date, rate, minutes)
+        }.sorted { $0.date < $1.date }
+
+        var steps: [DeliveryStep] = []
+        for (i, temp) in temps.enumerated() {
+            var end = temp.date.addingTimeInterval(temp.minutes * 60)
+            if i + 1 < temps.count { end = min(end, temps[i + 1].date) }
+            let start = max(temp.date, from)
+            end = min(end, to)
+            if end > start { steps.append(DeliveryStep(start: start, end: end, rate: temp.rate)) }
+        }
+        return steps
+    }
+
+    /// `steps` split wherever one doesn't start where the previous one ended,
+    /// so each run can be drawn as one shape and a gap shows as a gap.
+    static func contiguousRuns(_ steps: [DeliveryStep]) -> [[DeliveryStep]] {
+        var runs: [[DeliveryStep]] = []
+        for step in steps {
+            if let last = runs.last?.last, step.start.timeIntervalSince(last.end) < 1 {
+                runs[runs.count - 1].append(step)
+            } else {
+                runs.append([step])
+            }
+        }
+        return runs
+    }
+
+    /// The rate in effect at `date`, or nil where no step covers it.
+    static func rate(at date: Date, in steps: [DeliveryStep]) -> Double? {
+        steps.last { $0.start <= date && date < $0.end }?.rate
     }
 
     /// Synthetic readings for the Settings color preview: a curve sweeping all

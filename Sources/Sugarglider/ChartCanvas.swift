@@ -7,6 +7,11 @@ import AppKit
 /// Drawing happens in a flipped sub-context (y growing upward, the conventional
 /// chart coordinate space); text goes through the unflipped top-level context
 /// so glyphs aren't mirrored, with y converted via `Layout.screenY(_:)`.
+///
+/// Pump data adds two layers, each behind its own switch in Settings: an
+/// insulin lane under the plot (boluses as bars, the delivery rate as a step
+/// area) and announcement marks along the plot's top edge. Neither has an
+/// axis; the hover pill reads the numbers and texts out.
 struct ChartCanvas: View {
     var readings: [Reading]
     var rangeHours: Int
@@ -18,8 +23,19 @@ struct ChartCanvas: View {
     /// on its own schedule, so on a wall-clock window the samples aged out of
     /// range and the preview went blank until some edit re-ran the body.
     var windowEnd: Date?
+    /// Boluses, temp basals and announcements. Which of them get drawn is up to
+    /// the chart switches in `settings`; the Settings preview passes none.
+    var treatments: [Treatment] = []
 
-    @State private var hoverIndex: Int?
+    /// What the pointer is over. Identities rather than a position, so moving
+    /// within one target doesn't redraw the whole chart.
+    private struct Hover: Equatable {
+        var reading: Int?    // index into `Layout.visible`
+        var bolus: String?   // treatment ids
+        var note: String?
+    }
+
+    @State private var hover: Hover?
     /// `.onContinuousHover` doesn't hand us the view's size, hence the
     /// GeometryReader in the background.
     @State private var lastSize: CGSize = .zero
@@ -51,7 +67,7 @@ struct ChartCanvas: View {
             case .active(let location):
                 updateHover(at: location, size: lastSize)
             case .ended:
-                hoverIndex = nil
+                hover = nil
             }
         }
         .background(GeometryReader { proxy in
@@ -66,12 +82,17 @@ struct ChartCanvas: View {
     private struct Layout {
         var visible: [Reading]
         var plot: CGRect       // in flipped chart space: minY = bottom, maxY = top
+        var lane: CGRect?      // the insulin lane under the plot, same space
         var size: CGSize       // the whole canvas, for converting back to screen space
         var start: Date
         var end: Date
         var lo: Double
         var hi: Double
         var units: AppSettings.Units
+        // The window's treatments, for the layers that are switched on.
+        var boluses: [Treatment]
+        var notes: [Treatment]
+        var steps: [ChartMath.DeliveryStep]
 
         func x(_ date: Date) -> CGFloat {
             plot.minX + CGFloat(date.timeIntervalSince(start) / end.timeIntervalSince(start)) * plot.width
@@ -103,16 +124,26 @@ struct ChartCanvas: View {
         // can't squeeze a narrow chart out of existence.
         let rightInset = min(max(0.5, settings.dotRadius, settings.dotHaloRadius), size.width / 4)
         let topInset: CGFloat = 10, bottomInset: CGFloat = 16
+        let laneSpace = Self.laneSpace(for: treatments, settings: settings)
         let plot = CGRect(
-            x: leftInset, y: bottomInset,
+            x: leftInset, y: bottomInset + laneSpace,
             width: size.width - leftInset - rightInset,
-            height: size.height - topInset - bottomInset
+            height: size.height - topInset - bottomInset - laneSpace
         )
+        let lane = laneSpace > 0
+            ? CGRect(x: plot.minX, y: bottomInset, width: plot.width, height: laneSpace)
+            : nil
 
         let now = windowEnd ?? Date()
         let start = now.addingTimeInterval(-Double(rangeHours) * 3600)
         let visible = readings.filter { $0.date >= start }
         guard visible.count >= 2 else { return nil }
+
+        let inWindow = treatments.filter { $0.date >= start && $0.date <= now }
+        let boluses = settings.chartShowsBoluses ? inWindow.filter { $0.bolusUnits != nil } : []
+        let notes = settings.chartShowsAnnouncements ? inWindow.filter { $0.noteText != nil } : []
+        let steps = settings.chartShowsDeliveryRate
+            ? ChartMath.deliverySteps(treatments, from: start, to: now) : []
 
         let units = settings.units
         let mgdl = units == .mgdl
@@ -128,8 +159,23 @@ struct ChartCanvas: View {
         hi = min(clampHigh, hi.rounded(.up))
         if hi - lo < minSpan { hi = lo + minSpan }
 
-        return Layout(visible: visible, plot: plot, size: size,
-                      start: start, end: now, lo: lo, hi: hi, units: units)
+        return Layout(visible: visible, plot: plot, lane: lane, size: size,
+                      start: start, end: now, lo: lo, hi: hi, units: units,
+                      boluses: boluses, notes: notes, steps: steps)
+    }
+
+    static let laneHeight: CGFloat = 22
+
+    /// What the insulin lane adds to the canvas, or 0 when there's none: it's
+    /// there while boluses or the delivery rate are switched on and the site
+    /// reported any. Static because the dropdown has to size the canvas by the
+    /// same answer. The canvas grows by this rather than the lane squeezing
+    /// the plot. Decided on the cached treatments rather than the window's, so
+    /// dragging the range slider can't make the chart jump in height.
+    static func laneSpace(for treatments: [Treatment], settings: AppSettings) -> CGFloat {
+        let bars = settings.chartShowsBoluses && treatments.contains { $0.bolusUnits != nil }
+        let rate = settings.chartShowsDeliveryRate && treatments.contains(where: \.isTempBasal)
+        return bars || rate ? laneHeight : 0
     }
 
     // MARK: - Draw
@@ -147,7 +193,9 @@ struct ChartCanvas: View {
         chart.translateBy(x: 0, y: size.height)
         chart.scaleBy(x: 1, y: -1)
 
-        let clipPath = Path(roundedRect: l.plot, cornerRadius: 10)
+        // One frame around the plot and the insulin lane, so the lane reads as
+        // part of the chart rather than as a control of its own.
+        let clipPath = Path(roundedRect: l.lane.map { l.plot.union($0) } ?? l.plot, cornerRadius: 10)
 
         if settings.chartBackgroundEnabled {
             chart.fill(clipPath, with: .color(settings.chartBackgroundColor))
@@ -156,15 +204,79 @@ struct ChartCanvas: View {
         // Drawn before the clip, so the stroke itself isn't clipped.
         chart.stroke(clipPath, with: .color(Color(nsColor: .separatorColor).opacity(0.4)), lineWidth: 1)
 
-        var inner = chart
-        inner.clip(to: clipPath)
+        var framed = chart
+        framed.clip(to: clipPath)
+        // The glucose layers stop where the lane begins. Without a lane the
+        // frame is the plot already.
+        var inner = framed
+        if l.lane != nil { inner.clip(to: Path(l.plot)) }
 
         drawGridlines(inner, text: ctx0, layout: l)
         drawTargetBand(inner, layout: l)
+        drawAnnouncements(inner, layout: l)
         drawLine(inner, chart: &chart, layout: l)
+        drawLane(framed, layout: l)
         drawTimeAxis(ctx0, layout: l)
         drawHover(ctx0, chart: &chart, layout: l)
     }
+
+    /// Small marks hanging from the plot's top edge, one per announcement. The
+    /// text is long, often a whole alarm message, so it's left to the hover.
+    private func drawAnnouncements(_ ctx: GraphicsContext, layout l: Layout) {
+        for note in l.notes {
+            let x = l.x(note.date), top = l.plot.maxY
+            var mark = Path()
+            mark.move(to: CGPoint(x: x - 3.5, y: top))
+            mark.addLine(to: CGPoint(x: x + 3.5, y: top))
+            mark.addLine(to: CGPoint(x: x, y: top - 5))
+            mark.closeSubpath()
+            ctx.fill(mark, with: .color(Self.ink.opacity(0.45)))
+        }
+    }
+
+    /// The insulin lane, inside the chart's frame under a hairline: the
+    /// delivery rate as a step area, boluses as bars on top of it. Each scales
+    /// on its own, since units and units per hour share no axis, and neither to
+    /// less than a floor, so a quiet stretch doesn't look like full tilt and a
+    /// lone 1 U bolus doesn't stand as tall as an 8 U one would: rates to the
+    /// window's highest but at least 1 U/h, boluses to the largest but 2 U.
+    private func drawLane(_ inner: GraphicsContext, layout l: Layout) {
+        guard let lane = l.lane else { return }
+        var rule = Path()
+        rule.move(to: CGPoint(x: lane.minX, y: lane.maxY))
+        rule.addLine(to: CGPoint(x: lane.maxX, y: lane.maxY))
+        inner.stroke(rule, with: .color(Color(nsColor: .separatorColor).opacity(0.6)), lineWidth: 0.5)
+        // Headroom so the tallest bar and step stay clear of the hairline.
+        let usable = lane.height - 4
+
+        let topRate = max(l.steps.map(\.rate).max() ?? 0, 1)
+        for run in ChartMath.contiguousRuns(l.steps) {
+            var edge = Path()
+            for (i, step) in run.enumerated() {
+                let y = lane.minY + usable * CGFloat(step.rate / topRate)
+                let from = CGPoint(x: l.x(step.start), y: y)
+                if i == 0 { edge.move(to: from) } else { edge.addLine(to: from) }
+                edge.addLine(to: CGPoint(x: l.x(step.end), y: y))
+            }
+            var area = edge
+            area.addLine(to: CGPoint(x: l.x(run.last!.end), y: lane.minY))
+            area.addLine(to: CGPoint(x: l.x(run.first!.start), y: lane.minY))
+            area.closeSubpath()
+            inner.fill(area, with: .color(Self.ink.opacity(0.12)))
+            inner.stroke(edge, with: .color(Self.ink.opacity(0.4)), lineWidth: 1)
+        }
+
+        let largest = max(l.boluses.compactMap(\.bolusUnits).max() ?? 0, 2)
+        for bolus in l.boluses {
+            guard let units = bolus.bolusUnits else { continue }
+            let height = max(3, usable * CGFloat(min(units / largest, 1)))
+            let bar = CGRect(x: l.x(bolus.date) - 1.25, y: lane.minY, width: 2.5, height: height)
+            inner.fill(Path(roundedRect: bar, cornerRadius: 1.25), with: .color(Self.ink.opacity(0.6)))
+        }
+    }
+
+    /// The adaptive label color everything without a color setting is drawn in.
+    private static let ink = Color(nsColor: .labelColor)
 
     /// Horizontal gridlines with value labels, at round intervals.
     private func drawGridlines(_ ctx: GraphicsContext, text ctx0: GraphicsContext, layout l: Layout) {
@@ -311,28 +423,47 @@ struct ChartCanvas: View {
             style: Self.lineStroke)
     }
 
-    /// Crosshair + value/time pill at the hovered reading.
+    /// Crosshair plus a pill at the hovered reading, listing a bolus, the rate
+    /// in effect and an announcement under it when those layers are on and
+    /// one is close by. Over a gap in the readings (where a lost-signal alert
+    /// tends to be) the crosshair goes to the event itself instead.
     private func drawHover(_ ctx0: GraphicsContext, chart: inout GraphicsContext, layout l: Layout) {
-        guard let i = hoverIndex, l.visible.indices.contains(i) else { return }
+        guard let hover else { return }
         let plot = l.plot
-        let r = l.visible[i]
-        let px = l.x(r.date), py = l.y(of: r)
+        let reading = hover.reading.flatMap { l.visible.indices.contains($0) ? l.visible[$0] : nil }
+        let bolus = hover.bolus.flatMap { id in l.boluses.first { $0.id == id } }
+        let note = hover.note.flatMap { id in l.notes.first { $0.id == id } }
+        guard let anchor = reading?.date ?? bolus?.date ?? note?.date else { return }
+        let px = l.x(anchor)
 
         var vline = Path()
-        vline.move(to: CGPoint(x: px, y: plot.minY))
+        vline.move(to: CGPoint(x: px, y: l.lane?.minY ?? plot.minY))
         vline.addLine(to: CGPoint(x: px, y: plot.maxY))
-        chart.stroke(vline, with: .color(Color(nsColor: .labelColor).opacity(0.25)), lineWidth: 1)
+        chart.stroke(vline, with: .color(Self.ink.opacity(0.25)), lineWidth: 1)
 
-        // Keeps a radius floor, so the crosshair still has a visible point when
-        // the latest-reading dot is sized away.
-        dot(chart, at: CGPoint(x: px, y: py),
-            radius: max(3, settings.dotRadius), color: dotColor(for: r, zones: zones()))
+        if let r = reading {
+            // Keeps a radius floor, so the crosshair still has a visible point
+            // when the latest-reading dot is sized away.
+            dot(chart, at: CGPoint(x: px, y: l.y(of: r)),
+                radius: max(3, settings.dotRadius), color: dotColor(for: r, zones: zones()))
+        }
 
-        let label = "\(r.text(in: l.units)) · \(Self.timeLabel(r.date, span: l.span))"
-        // Resolve once so measurement and drawing share the same layout.
-        let resolved = ctx0.resolve(Text(label).font(.system(size: 10)).foregroundStyle(Color(nsColor: .labelColor)))
-        let size = resolved.measure(in: plot.size)
+        let time = Self.timeLabel(anchor, span: l.span)
+        var text = Text(reading.map { "\($0.text(in: l.units)) · \(time)" } ?? time)
+            .foregroundStyle(Self.ink)
+        let insulin = [bolus?.bolusUnits.map { "Bolus " + PumpFormat.bolus($0) },
+                       ChartMath.rate(at: anchor, in: l.steps).map(PumpFormat.rate)].compactMap { $0 }
+        if !insulin.isEmpty {
+            text = Text("\(text)\n\(Text(insulin.joined(separator: " · ")).foregroundStyle(.secondary))")
+        }
+        if let message = note?.noteText {
+            text = Text("\(text)\n\(Text(Self.clipped(message)).foregroundStyle(.secondary))")
+        }
+        // Resolve once so measurement and drawing share the same layout. The
+        // width cap makes a long announcement wrap instead of running off.
+        let resolved = ctx0.resolve(text.font(.system(size: 10)))
         let pad: CGFloat = 5
+        let size = resolved.measure(in: CGSize(width: plot.width - pad * 2 - 8, height: plot.height))
         var bx = px - (size.width + pad * 2) / 2
         bx = max(plot.minX, min(bx, plot.maxX - size.width - pad * 2))
         let box = CGRect(x: bx, y: plot.maxY - size.height - pad * 2 - 2,
@@ -340,7 +471,14 @@ struct ChartCanvas: View {
         let bg = Path(roundedRect: box, cornerRadius: 5)
         chart.fill(bg, with: .color(Color(nsColor: .controlBackgroundColor).opacity(0.95)))
         chart.stroke(bg, with: .color(Color(nsColor: .separatorColor)), lineWidth: 1)
-        ctx0.draw(resolved, at: CGPoint(x: box.minX + pad, y: l.screenY(box.minY + pad / 2)), anchor: .bottomLeading)
+        let textTop = l.screenY(box.minY + pad / 2 + size.height)
+        ctx0.draw(resolved, in: CGRect(x: box.minX + pad, y: textTop,
+                                       width: size.width.rounded(.up) + 1, height: size.height))
+    }
+
+    /// Announcements can run to a paragraph; the pill shows the gist.
+    static func clipped(_ message: String, limit: Int = 160) -> String {
+        message.count <= limit ? message : String(message.prefix(limit - 1)) + "…"
     }
 
     private func dotColor(for r: Reading, zones: ChartMath.Zones) -> Color {
@@ -355,6 +493,14 @@ struct ChartCanvas: View {
 
     private func updateHover(at location: CGPoint, size: CGSize) {
         guard let l = layout(size: size) else { return }
-        hoverIndex = ChartMath.nearestIndex(to: location.x, x: l.x, in: l.visible, maxDistance: 24)
+        // Events are narrow marks, so they want the pointer much closer than
+        // a reading does.
+        func nearest(_ events: [Treatment]) -> String? {
+            ChartMath.nearestIndex(to: location.x, x: l.x, dates: events.map(\.date), maxDistance: 6)
+                .map { events[$0].id }
+        }
+        let target = Hover(reading: ChartMath.nearestIndex(to: location.x, x: l.x, in: l.visible, maxDistance: 24),
+                           bolus: nearest(l.boluses), note: nearest(l.notes))
+        hover = target == Hover() ? nil : target
     }
 }
