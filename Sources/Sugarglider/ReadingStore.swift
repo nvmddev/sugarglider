@@ -1,7 +1,8 @@
 import Foundation
 
-/// Live reading state: the latest and previous reading, the chart history, and
-/// any error. Nothing here is persisted; a single request rebuilds it all.
+/// Live reading state: the latest and previous reading, the chart history, any
+/// error, and the pump data the dropdown shows. Nothing here is persisted; a
+/// handful of requests rebuilds it all.
 ///
 /// `init` is deliberately inert (no timer, no network) so tests can construct a
 /// store without side effects. `start()` is the explicit trigger the app calls
@@ -16,8 +17,21 @@ final class ReadingStore {
     var lastError: String?
     var readings: [Reading] = []      // history for the chart
 
+    // What a pump uploader reports besides glucose. Fetched like the history,
+    // only while the dropdown is open, and only the parts a switch in Settings
+    // asks for: see `refreshDetails(force:)`.
+    var pumpStatus: PumpStatus?
+    var treatments: [Treatment] = []  // the chart's window, oldest first
+    var reservoirChanged: Date?
+    var batteryChanged: Date?
+
     // Bookkeeping nothing observes, hence out of Observation's change tracking.
     @ObservationIgnored private var historyFetchedAt: Date?
+    @ObservationIgnored private var pumpStatusFetchedAt: Date?
+    @ObservationIgnored private var treatmentsFetchedAt: Date?
+    @ObservationIgnored private var changesFetchedAt: Date?
+    /// Like `historyWindowStart`, for `treatments`.
+    @ObservationIgnored private(set) var treatmentsWindowStart: Date?
     @ObservationIgnored private(set) var timer: Timer?
     /// Bumped by `reconnect()`. In-flight fetches capture it at launch and drop
     /// their response if it changed, so a slow answer from the previous site
@@ -149,15 +163,136 @@ final class ReadingStore {
     /// that was never fetched. Debounced because dragging the slider walks
     /// through every step on the way, and it bypasses the once-a-minute
     /// throttle: this is a visible gap in the chart, not a routine refresh.
+    /// The chart's treatments follow the same window, so they're topped up
+    /// alongside, once they've been fetched at all.
     func ensureHistoryCoverage() {
         guard settings.isConfigured else { return }
         let windowStart = Date().addingTimeInterval(-Double(settings.rangeHours) * 3600)
-        guard !coversHistory(from: windowStart) else { return }
+        let needsHistory = !coversHistory(from: windowStart)
+        let needsTreatments = settings.needsTreatments && treatmentsFetchedAt != nil
+            && !Self.historyCovers(requested: treatmentsWindowStart, from: windowStart)
+        guard needsHistory || needsTreatments else { return }
         coverageDebounce?.cancel()
         coverageDebounce = Task {
             do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
-            refreshHistory(force: true)
+            if needsHistory { refreshHistory(force: true) }
+            if needsTreatments { refreshTreatments(force: true) }
         }
+    }
+
+    // MARK: - Pump details
+
+    /// Everything the dropdown shows besides glucose: the device status, the
+    /// chart's treatments, and when the reservoir and battery were last
+    /// changed. Called when the dropdown opens, with the same once-a-minute
+    /// throttle as the history, kept per part so one switched on in Settings
+    /// is fetched on the next open rather than a minute later.
+    func refreshDetails(force: Bool) {
+        refreshPumpStatus(force: force)
+        refreshTreatments(force: force)
+        refreshChangeDates(force: force)
+    }
+
+    private func refreshPumpStatus(force: Bool) {
+        guard settings.isConfigured, settings.needsPumpStatus,
+              force || !Self.fetchedRecently(pumpStatusFetchedAt) else { return }
+        let gen = generation
+        Task {
+            // Nil is an answer (the site reports no pump). A failed fetch keeps
+            // what's there instead: the dropdown dates it, and blanking it on
+            // one network hiccup would only make it flicker.
+            do {
+                let status = try await Nightscout.fetchPumpStatus(baseURL: settings.baseURL,
+                                                                  token: settings.token)
+                guard gen == generation else { return }
+                pumpStatusFetchedAt = Date()
+                pumpStatus = status
+            } catch {}
+        }
+    }
+
+    /// How far before the window the chart's treatments are fetched from, so a
+    /// temp basal already running at the left edge is drawn from there on.
+    /// Loop and the CamAPS FX uploader write them for 30 minutes.
+    static let tempBasalLookback: TimeInterval = 30 * 60
+
+    /// How far a top-up reaches back past the newest cached treatment. Unlike
+    /// a glucose entry, a treatment can land after newer ones: a bolus is
+    /// dated when it was given and uploaded minutes later, a temp basal when
+    /// the pump last answered.
+    static let treatmentOverlap: TimeInterval = 60 * 60
+
+    /// Where a treatments fetch starts: the whole window (plus the lookback)
+    /// until it's covered, then only an overlap past the newest cached one.
+    static func treatmentsSince(windowStart: Date, covered: Bool, newestCached: Date?) -> Date {
+        if covered, let newestCached {
+            return max(newestCached.addingTimeInterval(-treatmentOverlap),
+                       windowStart.addingTimeInterval(-tempBasalLookback))
+        }
+        return windowStart.addingTimeInterval(-tempBasalLookback)
+    }
+
+    func refreshTreatments(force: Bool) {
+        guard settings.isConfigured, settings.needsTreatments,
+              force || !Self.fetchedRecently(treatmentsFetchedAt) else { return }
+        let windowStart = Date().addingTimeInterval(-Double(settings.rangeHours) * 3600)
+        let covered = Self.historyCovers(requested: treatmentsWindowStart, from: windowStart)
+        let since = Self.treatmentsSince(windowStart: windowStart, covered: covered,
+                                         newestCached: treatments.last?.date)
+        let count = Self.historyCount(forRangeHours: settings.rangeHours)
+        let gen = generation
+        Task {
+            guard let fetched = try? await Nightscout.fetchTreatments(
+                    since: since, count: count, baseURL: settings.baseURL, token: settings.token),
+                  gen == generation else { return }
+            treatmentsFetchedAt = Date()
+            if !covered { treatmentsWindowStart = windowStart }
+            treatments = Self.merged(treatments, with: fetched)
+        }
+    }
+
+    /// `fetched` folded into `cached` by id, so a record a top-up delivers again
+    /// replaces its cached copy. Trimmed to the widest selectable window.
+    static func merged(_ cached: [Treatment], with fetched: [Treatment], now: Date = Date()) -> [Treatment] {
+        var byID = Dictionary(cached.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
+        for t in fetched { byID[t.id] = t }
+        let cutoff = now.addingTimeInterval(
+            -Double(AppSettings.rangeHoursLimits.upperBound) * 3600 - tempBasalLookback)
+        return byID.values.filter { $0.date >= cutoff }.sorted { $0.date < $1.date }
+    }
+
+    /// How far back a reservoir or battery change is looked for. Older than
+    /// this, the age isn't worth showing.
+    static let changeLookback: TimeInterval = 60 * 86_400
+
+    private func refreshChangeDates(force: Bool) {
+        guard settings.isConfigured, settings.needsChangeDates,
+              force || !Self.fetchedRecently(changesFetchedAt) else { return }
+        let since = Date().addingTimeInterval(-Self.changeLookback)
+        let (url, token) = (settings.baseURL, settings.token)
+        let (reservoir, battery) = (settings.showReservoir, settings.showPumpBattery)
+        let gen = generation
+        Task {
+            // Nightscout's names for the two, the ones its age pills read.
+            func latest(_ eventType: String) async throws -> Date? {
+                try await Nightscout.fetchLatestEvent(eventType, since: since, baseURL: url, token: token)
+            }
+            // Nil is an answer here (no change on record), so only a thrown
+            // error keeps the old dates.
+            do {
+                let reservoirDate: Date? = if reservoir { try await latest("Insulin Change") } else { nil }
+                let batteryDate: Date? = if battery { try await latest("Pump Battery Change") } else { nil }
+                guard gen == generation else { return }
+                changesFetchedAt = Date()
+                reservoirChanged = reservoirDate
+                batteryChanged = batteryDate
+            } catch {}
+        }
+    }
+
+    private static func fetchedRecently(_ at: Date?) -> Bool {
+        guard let at else { return false }
+        return Date().timeIntervalSince(at) < 60
     }
 
     /// Folds `fetched` into the cache, keyed by timestamp so a re-delivered
@@ -190,6 +325,14 @@ final class ReadingStore {
         readings = []
         historyFetchedAt = nil
         historyWindowStart = nil
+        pumpStatus = nil
+        treatments = []
+        reservoirChanged = nil
+        batteryChanged = nil
+        pumpStatusFetchedAt = nil
+        treatmentsFetchedAt = nil
+        treatmentsWindowStart = nil
+        changesFetchedAt = nil
         coverageDebounce?.cancel()
         reconnectDebounce?.cancel()
         reconnectDebounce = Task {

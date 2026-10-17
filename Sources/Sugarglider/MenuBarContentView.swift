@@ -17,8 +17,10 @@ struct MenuBarContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ChartCanvas(readings: store.readings, rangeHours: settings.rangeHours, settings: settings)
-                .frame(width: contentWidth, height: 160)
+            ChartCanvas(readings: store.readings, rangeHours: settings.rangeHours, settings: settings,
+                        treatments: store.treatments)
+                .frame(width: contentWidth,
+                       height: 160 + ChartCanvas.laneSpace(for: store.treatments, settings: settings))
 
             HStack(spacing: 6) {
                 // Not SwiftUI's Slider: its track ignores every tint mechanism
@@ -38,12 +40,18 @@ struct MenuBarContentView: View {
                 Text(ageText).font(.system(size: 11)).foregroundStyle(.secondary)
             }
 
+            // Renders nothing at all without pump data, so a CGM-only dropdown
+            // keeps its layout: no frame of its own out here for the stack to
+            // space around.
+            PumpDetailsView(settings: settings, store: store, width: contentWidth)
+
             Divider().frame(width: contentWidth)
 
             HStack(spacing: 8) {
                 iconButton("arrow.clockwise", label: "Refresh", shortcut: "r") {
                     store.refresh()
                     store.refreshHistory(force: true)
+                    store.refreshDetails(force: true)
                 }
                 iconButton("gearshape", label: "Settings…", shortcut: ",") { showSettings() }
                 Spacer()
@@ -54,7 +62,10 @@ struct MenuBarContentView: View {
         }
         .padding(18)
         .background(defocusBackdrop)
-        .onAppear { store.refreshHistory(force: false) }
+        .onAppear {
+            store.refreshHistory(force: false)
+            store.refreshDetails(force: false)
+        }
         .windowTheme(settings.theme)
     }
 

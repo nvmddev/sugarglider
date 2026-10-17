@@ -82,6 +82,10 @@ straight away whether the connection works.
   light and dark mode.
 - mmol/L or mg/dL, switchable any time. Your target range and the very
   low/high bounds are yours to set.
+- Pump data, if your site has it: active insulin, reservoir and pump battery
+  under the reading, boluses and the delivery rate under the chart. Every item
+  has its own switch in **Settings → Pump**. A site with just a CGM looks the
+  same as before.
 - No notifications, ever. Sugarglider only sees your Nightscout site, so it
   can't tell a sensor gap from a flat uploader, and it won't pretend otherwise.
 
@@ -106,8 +110,8 @@ can't read it. Coming from an older version, it moves there the first time you
 run this one.
 
 It polls your site once a minute by default, which you can change, and only
-pulls chart history when you open the dropdown. After the first fetch it just
-tops up what's new, so most opens need no request at all.
+pulls chart history and pump data when you open the dropdown. After the first
+fetch it just tops up what's new, so most opens need no request at all.
 
 ## Requirements
 
