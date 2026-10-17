@@ -1,0 +1,8 @@
+# actionlint checks runs-on against the GitHub-hosted labels it knows, and no
+# release knows the xcode-27 preview image yet (checked up to 1.7.12). Listing
+# it here is the documented escape hatch; the key says self-hosted, but it only
+# tells actionlint which extra labels are valid. Drop the entry once a pinned
+# actionlint knows the label.
+self-hosted-runner:
+  labels:
+    - xcode-27
