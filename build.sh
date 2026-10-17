@@ -1,48 +1,53 @@
 #!/bin/bash
-# Build Sugarglider and assemble a menu-bar .app bundle.
+# Builds Sugarglider and assembles a signed menu-bar .app bundle.
 #
-# All of these are optional; a bare `./build.sh` does the right thing locally.
-#
-#   VERSION        CFBundleShortVersionString. Default: newest git tag without
-#                  its leading "v", or 0.0.0-dev outside a tagged checkout.
-#   BUILD_NUMBER   CFBundleVersion. Default: commit count on HEAD, which grows
-#                  monotonically, as macOS compares this across updates.
-#   SIGN_IDENTITY  codesign identity. Default "-" = ad-hoc. A real Developer ID
-#                  also enables hardened runtime and a secure timestamp, both of
-#                  which notarization rejects the app without.
-#   TEAM_ID        Apple Developer Team ID. With a provisioning profile it adds
-#                  the keychain-access-groups entitlement, see the signing block
-#                  below and docs/signing.md.
-#   PROVISION_PROFILE  Path to that profile. Default
-#                  Resources/embedded.provisionprofile (gitignored, optional).
+# Optional environment:
+#   VERSION            CFBundleShortVersionString. Default: newest tag without
+#                      its "v", or 0.0.0-dev outside a tagged checkout.
+#   BUILD_NUMBER       CFBundleVersion. Default: the commit count, which only
+#                      grows, as macOS expects across updates.
+#   SIGN_IDENTITY      codesign identity. Default "-", ad-hoc. A Developer ID
+#                      also enables the hardened runtime and a secure timestamp,
+#                      both required for notarization.
+#   TEAM_ID            Adds the keychain-access-groups entitlement when a
+#                      provisioning profile is present, see docs/signing.md.
+#   PROVISION_PROFILE  That profile. Default: Resources/embedded.provisionprofile.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 APP="Sugarglider.app"
 BIN="Sugarglider"
 BUNDLE_ID="dev.nevermind.sugarglider"
+MIN_MACOS="26.0"
 
 VERSION="${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)}"
 VERSION="${VERSION:-0.0.0-dev}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+SDK_VERSION="$(xcrun --show-sdk-version)"
 
-# Apple silicon only, Intel Macs aren't supported. The triple is explicit rather
-# than the host's, so a build on an Intel machine can't ship an x86_64 app.
-TRIPLE="arm64-apple-macosx14.0"
-echo "==> Compiling (release, ${VERSION} build ${BUILD_NUMBER})"
-swift build -c release --triple "${TRIPLE}"
-BIN_PATH="$(swift build -c release --triple "${TRIPLE}" --show-bin-path)/${BIN}"
+# The triple is explicit so an Intel host can't produce an x86_64 build. The
+# linker flag records the real SDK version, which SwiftPM 6.4 replaces with the
+# deployment target, and macOS gives an app its current design (Liquid Glass)
+# only when the binary says it was linked against a current SDK.
+SWIFT_BUILD=(swift build -c release --triple "arm64-apple-macosx${MIN_MACOS}"
+    -Xlinker -platform_version -Xlinker macos -Xlinker "${MIN_MACOS}" -Xlinker "${SDK_VERSION}")
+
+echo "==> Compiling (release, ${VERSION} build ${BUILD_NUMBER}, macOS SDK ${SDK_VERSION})"
+"${SWIFT_BUILD[@]}"
+BIN_PATH="$("${SWIFT_BUILD[@]}" --show-bin-path)/${BIN}"
+
+RECORDED_SDK="$(vtool -show-build "${BIN_PATH}" | awk '$1 == "sdk" { print $2 }')"
+if [[ "${RECORDED_SDK}" != "${SDK_VERSION}" ]]; then
+    echo "error: ${BIN} records macOS SDK ${RECORDED_SDK:-none} instead of ${SDK_VERSION}" >&2
+    exit 1
+fi
 
 echo "==> Assembling ${APP}"
 rm -rf "${APP}"
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 cp "${BIN_PATH}" "${APP}/Contents/MacOS/${BIN}"
-# Three icon artifacts, three consumers, see scripts/make-icon.sh: Assets.car
-# holds the appearance-aware stack macOS renders the app icon from, AppIcon.icns
-# is the single-appearance fallback, and the two PNGs are there because the
-# catalog's variants are reachable only through the system icon services, so the
-# About tab has to pick its artwork by hand.
+# Why there are three icon artifacts: see scripts/make-icon.sh.
 cp "Resources/Assets.car" "Resources/AppIcon.icns" \
     "Resources/AppIcon-Light.png" "Resources/AppIcon-Dark.png" \
     "${APP}/Contents/Resources/"
@@ -74,7 +79,7 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.healthcare-fitness</string>
     <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
+    <string>${MIN_MACOS}</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
@@ -91,9 +96,8 @@ if [[ "${SIGN_IDENTITY}" == "-" ]]; then
     echo "==> Ad-hoc signing"
     codesign --force --sign - "${APP}" >/dev/null 2>&1 || echo "    (codesign skipped)"
 else
-    # keychain-access-groups moves the token to the data-protection Keychain,
-    # which never prompts. It is a restricted entitlement, so AMFI kills the app
-    # at launch unless an embedded profile grants it. See docs/signing.md.
+    # keychain-access-groups is a restricted entitlement: without an embedded
+    # profile granting it, AMFI kills the app at launch.
     SIGN_ARGS=(--force --options runtime --timestamp)
     PROFILE="${PROVISION_PROFILE:-Resources/embedded.provisionprofile}"
     if [[ -n "${TEAM_ID:-}" && -f "${PROFILE}" ]]; then
