@@ -41,8 +41,8 @@ brew install --cask nvmddev/tap/sugarglider
 ```
 
 Or grab the `.dmg` from the [latest release](https://github.com/nvmddev/sugarglider/releases/latest)
-and drag **Sugarglider.app** into `/Applications`. Universal binary, signed and
-notarized, so it opens without a Gatekeeper detour.
+and drag **Sugarglider.app** into `/Applications`. Signed and notarized, so it
+opens without a Gatekeeper detour.
 
 Want it running after a restart? **System Settings → General → Login Items**,
 then add Sugarglider.
@@ -115,8 +115,8 @@ fetch it just tops up what's new, so most opens need no request at all.
 
 ## Requirements
 
-macOS 14 (Sonoma) or newer. Universal binary, so Apple silicon and Intel both
-run natively.
+A Mac with Apple silicon and macOS 14 (Sonoma) or newer. Intel Macs aren't
+supported.
 
 ## Build
 

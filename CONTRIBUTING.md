@@ -18,7 +18,8 @@ swift test               # test suite (Swift Testing)
 open Sugarglider.app
 ```
 
-Requirements: **macOS 14+** and **Xcode 16 or newer**. The Command Line Tools
+Requirements: a Mac with **Apple silicon** (the app ships for arm64 only),
+**macOS 14+** and **Xcode 16 or newer**. The Command Line Tools
 alone are enough to compile the app, but *not* to run `swift test` — the
 `Testing` module ships with Xcode, so a CLT-only machine fails with
 `no such module 'Testing'`. Either install Xcode or let CI run the tests for you.
@@ -89,8 +90,9 @@ still one merge click.
   `docs/`. They are rendered from the app's own views, with invented
   readings, so they can't drift from what ships.
 
-CI runs the same checks on macOS, plus a universal (arm64 + x86_64) release
-build, so a PR that builds only on your architecture will be caught.
+CI runs the same checks on macOS, plus a release build of the app bundle. It
+builds and tests with both ends of the supported range, Xcode 16 and the newest
+release, because the two compilers don't accept the same code.
 
 ## A note on health data
 

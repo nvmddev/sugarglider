@@ -16,7 +16,7 @@ gh workflow run release.yml -f bump=auto -f dry_run=true
 git tag v1.2.0 && git push origin v1.2.0
 ```
 
-The workflow runs the tests, builds a universal signed bundle, packages a `.zip`,
+The workflow runs the tests, builds a signed bundle, packages a `.zip`,
 a `.dmg` and `checksums.txt`, generates the release notes from the commit log,
 publishes the GitHub release, and opens a `docs/changelog-vX.Y.Z` pull request
 with the updated `CHANGELOG.md` — `main` is protected, so it can't push there
@@ -37,7 +37,7 @@ release should never be a black box:
 scripts/version.sh next auto            # what would the next version be?
 scripts/version.sh app-changed          # …and would the app actually differ?
 scripts/release-notes.sh 1.2.0          # what would the notes say?
-VERSION=1.2.0 UNIVERSAL=1 ./build.sh    # the exact bundle CI produces
+VERSION=1.2.0 ./build.sh                # the exact bundle CI produces
 VERSION=1.2.0 scripts/make-dmg.sh
 ```
 

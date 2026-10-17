@@ -13,6 +13,9 @@ cask "sugarglider" do
   # A bare symbol already means "this version or newer"; the ">= :sonoma"
   # string form is deprecated in Homebrew.
   depends_on macos: :sonoma
+  # The app ships an arm64 slice only, so brew refuses on Intel instead of
+  # installing an app that won't launch.
+  depends_on arch: :arm64
 
   app "Sugarglider.app"
 

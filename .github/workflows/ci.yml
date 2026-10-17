@@ -41,17 +41,15 @@ jobs:
       - name: Test
         run: swift test
 
-      - name: Assemble app bundle (universal)
-        env:
-          UNIVERSAL: "1"
+      - name: Assemble app bundle
         run: ./build.sh
 
+      # Apple silicon only: exactly one slice, and it's arm64.
       - name: Verify bundle
         run: |
           set -euo pipefail
           lipo -info Sugarglider.app/Contents/MacOS/Sugarglider
-          lipo -info Sugarglider.app/Contents/MacOS/Sugarglider | grep -q 'arm64'
-          lipo -info Sugarglider.app/Contents/MacOS/Sugarglider | grep -q 'x86_64'
+          [[ "$(lipo -archs Sugarglider.app/Contents/MacOS/Sugarglider)" == "arm64" ]]
           codesign --verify --strict --verbose=2 Sugarglider.app
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Sugarglider.app/Contents/Info.plist
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Sugarglider.app/Contents/Info.plist

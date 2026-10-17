@@ -149,12 +149,11 @@ jobs:
             | plutil -extract Entitlements.keychain-access-groups xml1 -o - - > /dev/null
           echo "Provisioning profile installed"
 
-      - name: Build universal app bundle
+      - name: Build app bundle
         env:
           VERSION: ${{ steps.version.outputs.version }}
           SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          UNIVERSAL: "1"
         run: ./build.sh
 
       - name: Package ZIP

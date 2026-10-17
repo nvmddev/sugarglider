@@ -22,8 +22,8 @@ cat <<EOF
 ## Install
 
 Download \`Sugarglider-${VERSION}.dmg\` (or the \`.zip\`) below, drag
-**Sugarglider.app** into \`/Applications\`, and launch it. Universal binary
-(Apple silicon + Intel), macOS 14 (Sonoma) or newer.
+**Sugarglider.app** into \`/Applications\`, and launch it. Needs a Mac with
+Apple silicon and macOS 14 (Sonoma) or newer. Intel Macs are no longer supported.
 EOF
 
 if [[ "${NOTARIZED}" != "true" ]]; then

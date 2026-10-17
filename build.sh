@@ -10,8 +10,6 @@
 #   SIGN_IDENTITY  codesign identity. Default "-" = ad-hoc. A real Developer ID
 #                  also enables hardened runtime and a secure timestamp, both of
 #                  which notarization rejects the app without.
-#   UNIVERSAL      1 = arm64 + x86_64 fat binary (what releases ship), 0 = host
-#                  arch only, for fast local iteration. Default 0.
 #   TEAM_ID        Apple Developer Team ID. With a provisioning profile it adds
 #                  the keychain-access-groups entitlement, see the signing block
 #                  below and docs/signing.md.
@@ -28,27 +26,13 @@ VERSION="${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' 
 VERSION="${VERSION:-0.0.0-dev}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
-UNIVERSAL="${UNIVERSAL:-0}"
 
-if [[ "${UNIVERSAL}" == "1" ]]; then
-    # Two per-arch builds merged with lipo, not `swift build --arch a --arch b`:
-    # that form routes through xcbuild and needs a full Xcode, while --triple
-    # works on a Command Line Tools-only machine too.
-    ARCHS=(arm64 x86_64)
-    SLICES=()
-    for arch in "${ARCHS[@]}"; do
-        echo "==> Compiling ${arch} (release, ${VERSION} build ${BUILD_NUMBER})"
-        swift build -c release --triple "${arch}-apple-macosx14.0"
-        SLICES+=("$(swift build -c release --triple "${arch}-apple-macosx14.0" --show-bin-path)/${BIN}")
-    done
-    BIN_PATH=".build/${BIN}-universal"
-    echo "==> Merging slices into a universal binary"
-    lipo -create -output "${BIN_PATH}" "${SLICES[@]}"
-else
-    echo "==> Compiling (release, ${VERSION} build ${BUILD_NUMBER})"
-    swift build -c release
-    BIN_PATH="$(swift build -c release --show-bin-path)/${BIN}"
-fi
+# Apple silicon only, Intel Macs aren't supported. The triple is explicit rather
+# than the host's, so a build on an Intel machine can't ship an x86_64 app.
+TRIPLE="arm64-apple-macosx14.0"
+echo "==> Compiling (release, ${VERSION} build ${BUILD_NUMBER})"
+swift build -c release --triple "${TRIPLE}"
+BIN_PATH="$(swift build -c release --triple "${TRIPLE}" --show-bin-path)/${BIN}"
 
 echo "==> Assembling ${APP}"
 rm -rf "${APP}"
