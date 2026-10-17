@@ -517,7 +517,9 @@ extension SugargliderTests {
         #expect(PumpFormat.bolus(1) == "1.0 U")
         #expect(PumpFormat.bolus(0.05) == "0.05 U")
         let now = Date()
-        let ages = [5.0, 60, 5 * 60, 24 * 60, 49 * 60].map { PumpFormat.age(since: now.addingTimeInterval(-$0 * 60), now: now) }
+        // Typed explicitly: Swift 6.0 can't infer a literal that mixes 5.0 and 5 * 60.
+        let minutesAgo: [TimeInterval] = [5, 60, 5 * 60, 24 * 60, 49 * 60]
+        let ages = minutesAgo.map { PumpFormat.age(since: now.addingTimeInterval(-$0 * 60), now: now) }
         #expect(ages == ["5m", "1h", "5h", "1d", "2d 1h"])
         #expect(PumpFormat.age(since: now.addingTimeInterval(60), now: now) == "0m")   // clock skew
     }
