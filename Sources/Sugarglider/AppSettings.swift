@@ -324,6 +324,40 @@ final class AppSettings {
         }
     }
 
+    // MARK: - Pump details
+
+    // What the dropdown shows besides the reading, each on its own switch.
+    // Nothing appears unless the site reports it, so for a CGM-only setup none
+    // of these change anything. On by default are the values that matter at a
+    // glance; the totals and the busier chart layers are opt-in, so the
+    // dropdown doesn't fill up just because a site has a lot to say.
+    var showActiveInsulin: Bool = true { didSet { defaults.set(showActiveInsulin, forKey: "showActiveInsulin") } }
+    var showPumpMode: Bool = true { didSet { defaults.set(showPumpMode, forKey: "showPumpMode") } }
+    var showDeliveryRate: Bool = true { didSet { defaults.set(showDeliveryRate, forKey: "showDeliveryRate") } }
+    var showReservoir: Bool = true { didSet { defaults.set(showReservoir, forKey: "showReservoir") } }
+    var showPumpBattery: Bool = true { didSet { defaults.set(showPumpBattery, forKey: "showPumpBattery") } }
+    /// Time since the last reservoir or battery change, next to those values.
+    var showChangeAge: Bool = false { didSet { defaults.set(showChangeAge, forKey: "showChangeAge") } }
+    var showDailyInsulin: Bool = false { didSet { defaults.set(showDailyInsulin, forKey: "showDailyInsulin") } }
+    var showAverageGlucose: Bool = false { didSet { defaults.set(showAverageGlucose, forKey: "showAverageGlucose") } }
+
+    var chartShowsBoluses: Bool = true { didSet { defaults.set(chartShowsBoluses, forKey: "chartShowsBoluses") } }
+    var chartShowsDeliveryRate: Bool = false {
+        didSet { defaults.set(chartShowsDeliveryRate, forKey: "chartShowsDeliveryRate") }
+    }
+    var chartShowsAnnouncements: Bool = false {
+        didSet { defaults.set(chartShowsAnnouncements, forKey: "chartShowsAnnouncements") }
+    }
+
+    // What `ReadingStore` has to fetch for the switches above. Each part is
+    // skipped while nothing that needs it is on.
+    var needsPumpStatus: Bool {
+        showActiveInsulin || showPumpMode || showDeliveryRate || showReservoir || showPumpBattery
+            || showDailyInsulin || showAverageGlucose
+    }
+    var needsTreatments: Bool { chartShowsBoluses || chartShowsDeliveryRate || chartShowsAnnouncements }
+    var needsChangeDates: Bool { showChangeAge && (showReservoir || showPumpBattery) }
+
     var isConfigured: Bool { !baseURL.trimmingCharacters(in: .whitespaces).isEmpty }
 
     /// A recognizable but unreadable form of a token, e.g. "re***ef". Tokens
@@ -422,6 +456,18 @@ final class AppSettings {
         if let v = defaults.object(forKey: "deltaDisplay") as? Int, let d = DeltaDisplay(rawValue: v) { deltaDisplay = d }
         if let v = defaults.object(forKey: "pollIntervalSeconds") as? Int { pollIntervalSeconds = v }
         if let v = defaults.object(forKey: "staleAfterMinutes") as? Int { staleAfterMinutes = v }
+        // Same `object(forKey:)` rule as above for the ones that default to true.
+        if let v = defaults.object(forKey: "showActiveInsulin") as? Bool { showActiveInsulin = v }
+        if let v = defaults.object(forKey: "showPumpMode") as? Bool { showPumpMode = v }
+        if let v = defaults.object(forKey: "showDeliveryRate") as? Bool { showDeliveryRate = v }
+        if let v = defaults.object(forKey: "showReservoir") as? Bool { showReservoir = v }
+        if let v = defaults.object(forKey: "showPumpBattery") as? Bool { showPumpBattery = v }
+        showChangeAge = defaults.bool(forKey: "showChangeAge")
+        showDailyInsulin = defaults.bool(forKey: "showDailyInsulin")
+        showAverageGlucose = defaults.bool(forKey: "showAverageGlucose")
+        if let v = defaults.object(forKey: "chartShowsBoluses") as? Bool { chartShowsBoluses = v }
+        chartShowsDeliveryRate = defaults.bool(forKey: "chartShowsDeliveryRate")
+        chartShowsAnnouncements = defaults.bool(forKey: "chartShowsAnnouncements")
     }
 
     /// One-time migration: earlier versions stored thresholds in mmol/L. Any

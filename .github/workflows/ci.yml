@@ -70,6 +70,38 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  # The job above pins the oldest toolchain the package supports (Xcode 16,
+  # Swift 6.0); this one runs the newest, which is what development happens
+  # on. They disagree in both directions: Swift 6.4 infers array literals 6.0
+  # rejects, and the macOS 27 SDK turns SwiftUI's @State into a macro. A
+  # separate job rather than a matrix, because the ruleset requires
+  # "Build & test" by that exact name and a matrix would rename it. Not a
+  # required check itself while the image is a preview: no SLA, and its
+  # queue can stall.
+  test-newest:
+    name: Build & test (newest Xcode)
+    runs-on: xcode-27
+    env:
+      # The image's default Xcode lags the newest release, so select it
+      # explicitly. Bump together with the runner label, deliberately.
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Build (debug)
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+      - name: Assemble app bundle
+        run: ./build.sh
+
   lint:
     name: Lint shell scripts & workflows
     runs-on: ubuntu-latest
