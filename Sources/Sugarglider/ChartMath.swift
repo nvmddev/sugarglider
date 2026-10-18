@@ -1,11 +1,8 @@
 import SwiftUI
 
-/// Chart math with no SwiftUI view state, so it's directly unit-testable.
 enum ChartMath {
-    /// How far apart two readings may be and still count as one continuous run.
-    /// The chart breaks its line on a wider gap rather than interpolating across
-    /// it, and `ReadingStore` merges polled entries into the history only within
-    /// it, so the two can't drift apart.
+    /// Also where `ReadingStore` stops merging polled entries into the history, so the chart's
+    /// line breaks and the cache's seams can't drift apart.
     static let dropoutThreshold: TimeInterval = 15 * 60
 
     struct Zones {
@@ -20,81 +17,70 @@ enum ChartMath {
         var extremeHighColor: Color
     }
 
-    /// Compared in mg/dL, the unit the thresholds are stored in, independent of
-    /// what the user is shown.
+    /// `sgv` and the thresholds are both mg/dL, whatever unit is displayed.
     static func color(for sgv: Int, zones: Zones) -> Color {
-        let v = Double(sgv)
-        if v < zones.extremeLow { return zones.extremeLowColor }
-        if v < zones.targetLow { return zones.belowColor }
-        if v > zones.extremeHigh { return zones.extremeHighColor }
-        if v > zones.targetHigh { return zones.aboveColor }
+        let value = Double(sgv)
+        if value < zones.extremeLow { return zones.extremeLowColor }
+        if value < zones.targetLow { return zones.belowColor }
+        if value > zones.extremeHigh { return zones.extremeHighColor }
+        if value > zones.targetHigh { return zones.aboveColor }
         return zones.inRangeColor
     }
 
-    /// Splits readings into contiguous runs, breaking where a gap exceeds `gap`.
     static func segments(of readings: [Reading], gapThreshold gap: TimeInterval) -> [[Reading]] {
-        var result: [[Reading]] = []
-        var current: [Reading] = []
-        for r in readings {
-            if let prev = current.last, r.date.timeIntervalSince(prev.date) > gap {
-                result.append(current); current = []
+        var runs: [[Reading]] = []
+        for reading in readings {
+            if let previous = runs.last?.last, reading.date.timeIntervalSince(previous.date) <= gap {
+                runs[runs.count - 1].append(reading)
+            } else {
+                runs.append([reading])
             }
-            current.append(r)
         }
-        if !current.isEmpty { result.append(current) }
-        return result
+        return runs
     }
 
-    /// Catmull-Rom smoothing into a flowing bezier through the points.
-    static func smooth(_ pts: [CGPoint]) -> Path {
+    /// A Catmull-Rom spline through the points.
+    static func smooth(_ points: [CGPoint]) -> Path {
         var path = Path()
-        guard let first = pts.first else { return path }
+        guard let first = points.first else { return path }
         path.move(to: first)
-        if pts.count < 3 {
-            pts.dropFirst().forEach { path.addLine(to: $0) }
+        guard points.count >= 3 else {
+            points.dropFirst().forEach { path.addLine(to: $0) }
             return path
         }
-        for i in 0..<(pts.count - 1) {
-            let p0 = pts[max(i - 1, 0)]
-            let p1 = pts[i]
-            let p2 = pts[i + 1]
-            let p3 = pts[min(i + 2, pts.count - 1)]
-            let c1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6)
-            let c2 = CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6)
-            path.addCurve(to: p2, control1: c1, control2: c2)
+        for i in 0..<(points.count - 1) {
+            let p0 = points[max(i - 1, 0)], p1 = points[i], p2 = points[i + 1]
+            let p3 = points[min(i + 2, points.count - 1)]
+            path.addCurve(to: p2,
+                          control1: CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6),
+                          control2: CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6))
         }
         return path
     }
 
-    /// The reading nearest `targetX` by horizontal distance, or nil if none is
-    /// within `maxDistance`. The hover hit-test, factored out of the view.
-    static func nearestIndex(to targetX: CGFloat, x: (Date) -> CGFloat, in readings: [Reading], maxDistance: CGFloat) -> Int? {
+    static func nearestIndex(to targetX: CGFloat, x: (Date) -> CGFloat, in readings: [Reading],
+                             maxDistance: CGFloat) -> Int? {
         nearestIndex(to: targetX, x: x, dates: readings.map(\.date), maxDistance: maxDistance)
     }
 
-    /// The same hit-test over bare dates, for the chart's treatments.
-    static func nearestIndex(to targetX: CGFloat, x: (Date) -> CGFloat, dates: [Date], maxDistance: CGFloat) -> Int? {
-        var best = 0, bestDist = CGFloat.greatestFiniteMagnitude
+    static func nearestIndex(to targetX: CGFloat, x: (Date) -> CGFloat, dates: [Date],
+                             maxDistance: CGFloat) -> Int? {
+        var best = 0, bestDistance = CGFloat.greatestFiniteMagnitude
         for (i, date) in dates.enumerated() {
-            let d = abs(x(date) - targetX)
-            if d < bestDist { bestDist = d; best = i }
+            let distance = abs(x(date) - targetX)
+            if distance < bestDistance { bestDistance = distance; best = i }
         }
-        return bestDist < maxDistance ? best : nil
+        return bestDistance < maxDistance ? best : nil
     }
 
-    /// A rate that held from `start` to `end`, one block of the delivery lane.
     struct DeliveryStep: Equatable {
         var start: Date
         var end: Date
         var rate: Double
     }
 
-    /// Temp basals as the steps the pump ran: each until its duration is up or
-    /// the next one starts, whichever comes first, clipped to `from...to`. Time
-    /// no temp basal covers stays a gap rather than being bridged with a guess,
-    /// since the profile basal that would apply there isn't read. An uploader
-    /// that reports a closed loop's delivery as temp basals renews each one
-    /// before it runs out, so while data flows there are no gaps.
+    /// Each temp basal runs until its duration is up or the next one starts, clipped to
+    /// `from...to`. Uncovered time stays a gap: the profile basal that would fill it isn't read.
     static func deliverySteps(_ treatments: [Treatment], from: Date, to: Date) -> [DeliveryStep] {
         let temps: [(date: Date, rate: Double, minutes: Double)] = treatments.compactMap {
             guard case .tempBasal(let rate, let minutes) = $0.kind else { return nil }
@@ -112,8 +98,6 @@ enum ChartMath {
         return steps
     }
 
-    /// `steps` split wherever one doesn't start where the previous one ended,
-    /// so each run can be drawn as one shape and a gap shows as a gap.
     static func contiguousRuns(_ steps: [DeliveryStep]) -> [[DeliveryStep]] {
         var runs: [[DeliveryStep]] = []
         for step in steps {
@@ -126,20 +110,12 @@ enum ChartMath {
         return runs
     }
 
-    /// The rate in effect at `date`, or nil where no step covers it.
     static func rate(at date: Date, in steps: [DeliveryStep]) -> Double? {
         steps.last { $0.start <= date && date < $0.end }?.rate
     }
 
-    /// Synthetic readings for the Settings color preview: a curve sweeping all
-    /// five zones relative to the given thresholds, so every configurable color
-    /// is visible wherever the user has set their ranges. Never real data.
-    ///
-    /// `cycles` repeats the shape, which begins and ends in range with zero
-    /// slope so the repeats join smoothly. The preview scales it with its window
-    /// instead of stretching one sweep across it, because a stretched curve
-    /// looks identical at every width and only the axis labels move, which makes
-    /// the range slider look broken.
+    /// A curve sweeping all five zones, for the Settings preview. `cycles` repeats the sweep
+    /// rather than stretching it, which would look the same at every window width.
     static func sampleReadings(extremeLow: Double, targetLow: Double,
                                targetHigh: Double, extremeHigh: Double,
                                endingAt end: Date, count: Int = 35,
@@ -153,12 +129,8 @@ enum ChartMath {
             (0.00, mid), (0.12, below), (0.25, veryLow), (0.45, mid),
             (0.60, above), (0.75, veryHigh), (1.00, mid),
         ]
-        // Cosine-eased between keyframes; the chart's Catmull-Rom smoothing
-        // then rounds off the sampled points.
         func value(at t: Double) -> Double {
-            guard let i = keyframes.lastIndex(where: { $0.t <= t }), i < keyframes.count - 1 else {
-                return keyframes.last!.v
-            }
+            guard let i = keyframes.lastIndex(where: { $0.t <= t }), i + 1 < keyframes.count else { return mid }
             let (t0, v0) = keyframes[i], (t1, v1) = keyframes[i + 1]
             let eased = (1 - cos((t - t0) / (t1 - t0) * .pi)) / 2
             return v0 + (v1 - v0) * eased
@@ -166,27 +138,22 @@ enum ChartMath {
         let interval: TimeInterval = 5 * 60
         let cycles = max(cycles, 1)
         return (0..<count).map { i in
-            // Position within the current repeat. The last point of a whole
-            // cycle lands on 0, which holds the same value as 1 (in range).
-            let progress = Double(i) / Double(count - 1) * cycles
-            return Reading(sgv: Int(value(at: progress.truncatingRemainder(dividingBy: 1)).rounded()),
-                    direction: "",
-                    date: end.addingTimeInterval(-Double(count - 1 - i) * interval))
+            // A whole cycle's last point wraps to 0, which is fine: the sweep starts and ends at `mid`.
+            let progress = (Double(i) / Double(count - 1) * cycles).truncatingRemainder(dividingBy: 1)
+            return Reading(sgv: Int(value(at: progress).rounded()), direction: "",
+                           date: end.addingTimeInterval(-Double(count - 1 - i) * interval))
         }
     }
 
-    /// Whether time labels need the weekday as well as the clock time. A window
-    /// of a day or more can put the same clock time at both ends of the axis,
-    /// which reads as a chart spanning nothing at all.
+    /// From a day on, both ends of the axis can show the same clock time.
     static func labelsNeedDay(span: TimeInterval) -> Bool { span >= 24 * 3600 }
 
-    /// A round gridline step (1/2/5 × 10ⁿ) giving roughly five lines across the
-    /// span, for mmol/L and mg/dL ranges alike.
+    /// A round step (1, 2 or 5 × 10ⁿ) giving about five gridlines, in either unit.
     static func niceStep(_ span: Double) -> Double {
         let rough = max(span / 4, 0.0001)
-        let mag = pow(10, floor(log10(rough)))
-        let norm = rough / mag
-        let nice: Double = norm < 1.5 ? 1 : (norm < 3 ? 2 : (norm < 7 ? 5 : 10))
-        return nice * mag
+        let magnitude = pow(10, floor(log10(rough)))
+        let normalized = rough / magnitude
+        let nice: Double = normalized < 1.5 ? 1 : (normalized < 3 ? 2 : (normalized < 7 ? 5 : 10))
+        return nice * magnitude
     }
 }
