@@ -1,65 +1,45 @@
 import SwiftUI
 
-/// The dropdown behind the status-bar item: chart, range slider, the current
-/// reading, and the action buttons.
 struct MenuBarContentView: View {
     var settings: AppSettings
     var store: ReadingStore
     @Environment(\.openSettings) private var openSettings
-    /// Tracked so the hours field can be unfocused deliberately, see
-    /// `defocusBackdrop`.
     @FocusState private var rangeFieldFocused: Bool
-    /// Whether the hours cell currently hosts a live `TextField`, see
-    /// `rangeField`.
     @State private var rangeFieldEditing = false
 
     private let contentWidth: CGFloat = 280
+    private static let rangeSliderBounds =
+        Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ChartCanvas(readings: store.readings, rangeHours: settings.rangeHours, settings: settings,
                         treatments: store.treatments)
-                .frame(width: contentWidth,
-                       height: 160 + ChartCanvas.laneSpace(for: store.treatments, settings: settings))
+                .frame(height: 160 + ChartCanvas.laneSpace(for: store.treatments, settings: settings))
 
             HStack(spacing: 6) {
-                // Not SwiftUI's Slider: its track ignores every tint mechanism
-                // macOS offers. See TintedSlider.
-                TintedSlider(value: rangeBinding, range: rangeSliderBounds, step: 2,
+                TintedSlider(value: rangeBinding, range: Self.rangeSliderBounds, step: 2,
                              tint: settings.sliderColor,
                              accessibilityValueText: "\(settings.rangeHours) hours")
                     .accessibilityLabel("Chart range")
                 rangeField
             }
-            .frame(width: contentWidth)
 
-            Divider().frame(width: contentWidth)
+            Divider()
 
             VStack(alignment: .leading, spacing: 2) {
-                readingRow
+                readingLine
                 Text(ageText).font(.system(size: 11)).foregroundStyle(.secondary)
             }
 
-            // Renders nothing at all without pump data, so a CGM-only dropdown
-            // keeps its layout: no frame of its own out here for the stack to
-            // space around.
+            // No modifiers: without pump data this renders nothing, but a wrapper would still take a gap.
             PumpDetailsView(settings: settings, store: store, width: contentWidth)
 
-            Divider().frame(width: contentWidth)
+            Divider()
 
-            HStack(spacing: 8) {
-                iconButton("arrow.clockwise", label: "Refresh", shortcut: "r") {
-                    store.refresh()
-                    store.refreshHistory(force: true)
-                    store.refreshDetails(force: true)
-                }
-                iconButton("gearshape", label: "Settings…", shortcut: ",") { showSettings() }
-                Spacer()
-                iconButton("power", label: "Quit", shortcut: "q") { NSApp.terminate(nil) }
-            }
-            .controlSize(.small)
-            .frame(width: contentWidth)
+            actionButtons
         }
+        .frame(width: contentWidth)
         .padding(18)
         .background(defocusBackdrop)
         .onAppear {
@@ -69,78 +49,74 @@ struct MenuBarContentView: View {
         .windowTheme(settings.theme)
     }
 
-    /// A click-catching layer behind the content that drops the hours field's
-    /// focus. The dropdown holds exactly one focusable control, so without this
-    /// the field keeps first responder for as long as the panel is open: there
-    /// is nothing else to focus by clicking elsewhere. It has to be a
-    /// `background` rather than an overlay or a gesture on the `VStack`, or it
-    /// competes with the slider's drag and the buttons.
+    // The panel has nothing else focusable, so clicking anywhere must release the hours field. A background,
+    // because an overlay or a gesture on the stack competes with the slider drag and the buttons.
     private var defocusBackdrop: some View {
         Color.clear
             .contentShape(Rectangle())
             .onTapGesture { endRangeEditing() }
     }
 
-    /// Symbol only, so the label survives as the tooltip and the accessibility
-    /// name.
-    private func iconButton(_ symbol: String, label: String, shortcut: KeyEquivalent,
-                            action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .frame(width: 16, height: 16)
+    private var actionButtons: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                actionButton("Refresh", systemImage: "arrow.clockwise", shortcut: "r") {
+                    store.refresh()
+                    store.refreshHistory(force: true)
+                    store.refreshDetails(force: true)
+                }
+                actionButton("Settings…", systemImage: "gearshape", shortcut: ",") { showSettings() }
+                Spacer()
+                actionButton("Quit", systemImage: "power", shortcut: "q") { NSApp.terminate(nil) }
+            }
         }
-        .keyboardShortcut(shortcut)
-        .help(label)
-        .accessibilityLabel(label)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
     }
 
-    /// The chart range as a typed number, so any whole hour is reachable; the
-    /// slider next to it steps by 2. Value-based rather than text-based so it
-    /// commits on Return or focus loss instead of reformatting mid-typing.
-    /// Out-of-range input needs no validation, `rangeHours` clamps it.
-    ///
-    /// This is a click-to-edit cell rather than a live `TextField` because
-    /// `MenuBarExtra`'s panel hands its initial focus to the first focusable
-    /// control it finds, and a real field here lit up the moment the dropdown
-    /// opened. Swapping the field in only once it's clicked leaves that focus
-    /// pass nothing to land on. Both states share one hand-drawn frame and
-    /// bezel so nothing jumps; the accent border stands in for the focus ring
-    /// `.plain` doesn't draw.
+    private func actionButton(_ title: String, systemImage: String, shortcut: KeyEquivalent,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            // A glass circle sizes to its label, so only equal squares give equal circles.
+            Label(title, systemImage: systemImage)
+                .labelStyle(.iconOnly)
+                .frame(width: 18, height: 18)
+        }
+        .keyboardShortcut(shortcut)
+        .help(title)
+    }
+
+    // A click-to-edit cell, not a live TextField: the MenuBarExtra panel focuses the first focusable control
+    // as it opens, which lit the field up every time. Both states share one bezel so nothing jumps.
     private var rangeField: some View {
         HStack(spacing: 3) {
             ZStack {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(nsColor: .textBackgroundColor))
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(rangeFieldEditing ? Color.accentColor : Color(nsColor: .separatorColor),
-                                  lineWidth: rangeFieldEditing ? 1.5 : 1)
+                let bezel = RoundedRectangle(cornerRadius: 5, style: .continuous)
+                bezel.fill(Color(nsColor: .textBackgroundColor))
+                bezel.strokeBorder(rangeFieldEditing ? Color.accentColor : Color(nsColor: .separatorColor),
+                                   lineWidth: rangeFieldEditing ? 1.5 : 1)
                 if rangeFieldEditing {
-                    TextField("Chart range", value: hoursBinding, format: AppSettings.wholeNumberFormat)
+                    TextField("Chart range", value: Bindable(settings).rangeHours,
+                              format: AppSettings.wholeNumberFormat)
                         .textFieldStyle(.plain)
                         .labelsHidden()
                         .multilineTextAlignment(.trailing)
                         .font(rangeFont)
-                        .padding(.trailing, 4)
+                        .padding(.trailing, 5)
                         .accessibilityLabel("Chart range in hours")
                         .focused($rangeFieldFocused)
-                        // Only in the tree while editing, so it can take the
-                        // focus itself.
                         .onAppear { rangeFieldFocused = true }
-                        // So the keyboard alone can get back out of the field.
                         .onSubmit { endRangeEditing() }
                         .onExitCommand { endRangeEditing() }
-                        // Covers a focus loss this view didn't initiate.
                         .onChange(of: rangeFieldFocused) { _, focused in
                             if !focused { rangeFieldEditing = false }
                         }
                 } else {
-                    // The tap goes on the inert Text, never on the ZStack: it
-                    // would otherwise compete with the live field's own click
-                    // handling and stop the caret being placed.
+                    // Tap on the inert Text, not the ZStack, where it would steal the live field's clicks.
                     Text("\(settings.rangeHours)")
                         .font(rangeFont)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                        .padding(.trailing, 4)
+                        .padding(.trailing, 5)
                         .contentShape(Rectangle())
                         .onTapGesture { rangeFieldEditing = true }
                         .accessibilityElement()
@@ -151,7 +127,7 @@ struct MenuBarContentView: View {
                         .accessibilityAction { rangeFieldEditing = true }
                 }
             }
-            .frame(width: 30, height: 18)
+            .frame(width: 32, height: 20)
             Text("h")
                 .font(rangeFont)
                 .foregroundStyle(.secondary)
@@ -160,17 +136,13 @@ struct MenuBarContentView: View {
 
     private var rangeFont: Font { .system(size: 11, design: .monospaced) }
 
-    /// Leaves the editing state without relying on the focus transition: if the
-    /// field never took focus, no `onChange` fires and the cell would stay stuck
-    /// looking editable.
+    // Not left to the focus change: if the field never took focus, none fires and the cell stays editable.
     private func endRangeEditing() {
         rangeFieldFocused = false
         rangeFieldEditing = false
     }
 
-    /// Moving the slider also ends editing: a focused `TextField(value:)` keeps
-    /// its own buffer and would go on showing the half-typed number while the
-    /// slider moved the real value underneath it.
+    // Ends editing first: a focused TextField(value:) would go on showing its own half-typed buffer.
     private var rangeBinding: Binding<Double> {
         Binding(
             get: { Double(settings.rangeHours) },
@@ -181,22 +153,12 @@ struct MenuBarContentView: View {
         )
     }
 
-    private var hoursBinding: Binding<Int> {
-        Binding(get: { settings.rangeHours }, set: { settings.rangeHours = $0 })
-    }
-
-    private var rangeSliderBounds: ClosedRange<Double> {
-        Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
-    }
-
-    /// Opens Settings in front *and key*. An accessory (LSUIElement) app is
-    /// normally inactive, and a window merely ordered front without key status
-    /// silently ignores all typing: mouse-driven controls work, text fields
-    /// never take focus. The window is created asynchronously, hence the poll.
+    // An accessory app's window that is only ordered front ignores typing, so Settings has to become key.
+    // SwiftUI creates the window asynchronously, hence the poll.
     private func showSettings() {
         NSApp.activate()
         openSettings()
-        Task { @MainActor in
+        Task {
             for _ in 0..<20 {
                 if let window = NSApp.windows.first(where: {
                     $0.identifier?.rawValue.hasPrefix("com_apple_SwiftUI_Settings") == true
@@ -209,42 +171,38 @@ struct MenuBarContentView: View {
         }
     }
 
-    @ViewBuilder private var readingRow: some View {
+    @ViewBuilder private var readingLine: some View {
         if !settings.isConfigured {
-            Text("Not configured").font(.system(size: 13)).foregroundStyle(.secondary)
-        } else if let r = store.lastReading {
-            (valueText(r) + arrowText(r) + deltaText)
-        } else if store.lastError != nil {
-            Text("No reading yet").font(.system(size: 13)).foregroundStyle(.secondary)
+            statusText("Not configured")
+        } else if let reading = store.lastReading {
+            readingText(reading)
         } else {
-            Text("Loading…").font(.system(size: 13)).foregroundStyle(.secondary)
+            statusText(store.lastError == nil ? "Loading…" : "No reading yet")
         }
     }
 
-    private func valueText(_ r: Reading) -> Text {
-        Text("\(r.text(in: settings.units)) \(settings.units.label)")
-            .font(.system(size: 15, weight: .medium)).foregroundStyle(.primary)
+    private func statusText(_ text: String) -> Text {
+        Text(text).font(.system(size: 13)).foregroundStyle(.secondary)
     }
 
-    private func arrowText(_ r: Reading) -> Text {
-        guard !r.trendArrow.isEmpty else { return Text("") }
-        return Text(" \(r.trendArrow)").font(.system(size: 17, weight: .semibold)).foregroundStyle(.primary)
-    }
-
-    private var deltaText: Text {
-        guard let delta = store.deltaText() else { return Text("") }
-        return Text("  (\(delta))").font(.system(size: 13)).foregroundStyle(.secondary)
+    private func readingText(_ reading: Reading) -> Text {
+        let value = Text("\(reading.text(in: settings.units)) \(settings.units.label)")
+            .font(.system(size: 15, weight: .medium))
+        let arrow = reading.trendArrow.isEmpty
+            ? Text("")
+            : Text(" \(reading.trendArrow)").font(.system(size: 17, weight: .semibold))
+        let delta = store.deltaText().map {
+            Text("  (\($0))").font(.system(size: 13)).foregroundStyle(.secondary)
+        }
+        return Text("\(value)\(arrow)\(delta ?? Text(""))")
     }
 
     private var ageText: String {
         guard settings.isConfigured else { return "Open Settings to add your Nightscout URL" }
-        if let r = store.lastReading {
-            var age = "Reading \(ReadingStore.relative(r.date))" + (store.isStale ? " (stale)" : "")
-            if let err = store.lastError { age += " — \(err)" }
-            return age
-        } else if let err = store.lastError {
-            return err
-        }
-        return ""
+        guard let reading = store.lastReading else { return store.lastError ?? "" }
+        var text = "Reading \(ReadingStore.relative(reading.date))"
+        if store.isStale { text += " (stale)" }
+        if let error = store.lastError { text += " — \(error)" }
+        return text
     }
 }

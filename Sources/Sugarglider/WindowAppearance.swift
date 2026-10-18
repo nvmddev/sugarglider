@@ -2,36 +2,16 @@ import SwiftUI
 import AppKit
 
 extension View {
-    /// Applies the theme override to the hosting `NSWindow.appearance`, nil
-    /// meaning follow the system. This is the mechanism the
-    /// `MenuBarExtra(.window)` dropdown needs, and only that one:
-    ///
-    /// - The borderless panel `MenuBarExtra(.window)` creates ignores
-    ///   `preferredColorScheme` entirely.
-    /// - The window appearance retints everything consistently, including the
-    ///   AppKit dynamic colors (`.labelColor`, `.separatorColor`) the chart
-    ///   draws with. An environment-only override leaves those resolving
-    ///   against the system appearance.
-    /// - `NSApp.appearance` is deliberately not set: it would also retint the
-    ///   status-bar item, which has to follow the menu bar to stay legible.
-    ///
-    /// It does not work for the `Settings` window. SwiftUI manages that one's
-    /// appearance itself and resets a manual override milliseconds after it's
-    /// applied (verified via KVO on macOS 26), so Settings goes through
-    /// `preferredColorScheme` and lets SwiftUI set the appearance.
+    /// Applies the theme to the hosting `NSWindow`, which retints AppKit dynamic colors too. Only for
+    /// the dropdown: its panel ignores `preferredColorScheme`, while SwiftUI resets a manual appearance
+    /// on the Settings window. `NSApp.appearance` would also retint the status item, which has to
+    /// follow the menu bar.
     func windowTheme(_ theme: AppSettings.Theme) -> some View {
-        // The zero frame matters: ImageRenderer rasterises an
-        // NSViewRepresentable as a yellow "prohibited" placeholder rather than
-        // as nothing, and a full-bleed one sat behind every off-screen render
-        // (scripts/ReadmeArt.swift, the ChartCanvas smoke tests). The applier
-        // only has to be in the tree to find its window.
+        // Zero-sized because ImageRenderer draws an NSViewRepresentable as a yellow placeholder.
         background(WindowThemeApplier(appearance: theme.nsAppearance).frame(width: 0, height: 0))
     }
 }
 
-/// Forwards the desired appearance to whatever window it ends up in. Re-applied
-/// on window attach, since the dropdown's content view is recreated every time
-/// it opens, and on every theme change.
 private struct WindowThemeApplier: NSViewRepresentable {
     var appearance: NSAppearance?
 
