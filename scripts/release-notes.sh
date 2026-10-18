@@ -29,9 +29,9 @@ if [[ "${NOTARIZED}" != "true" ]]; then
     cat <<'EOF'
 
 > [!IMPORTANT]
-> This build is **ad-hoc signed and not notarized** by Apple, so macOS puts it in
-> quarantine on first launch. Either right-click the app → **Open** → **Open**, or
-> clear the flag yourself:
+> This build is **not notarized** by Apple, so macOS blocks it on first launch.
+> Either allow it under **System Settings → Privacy & Security → Open Anyway**, or
+> clear the quarantine flag yourself:
 >
 > ```sh
 > xattr -dr com.apple.quarantine /Applications/Sugarglider.app
