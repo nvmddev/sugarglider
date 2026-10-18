@@ -1,47 +1,33 @@
 import SwiftUI
 import AppKit
 
-/// The `Settings` scene (⌘,). Non-modal, like System Settings itself: every
-/// edit applies and persists immediately, there is no Save/Cancel. Each tab is
-/// a `.grouped` form, which unlike a plain one scrolls when the content
-/// outgrows the fixed window frame instead of silently clipping.
 struct SettingsView: View {
-    var settings: AppSettings
+    let settings: AppSettings
 
     var body: some View {
         TabView {
-            GeneralTab(settings: settings)
-                .tabItem { Label("General", systemImage: "gearshape") }
-            ColorsTab(settings: settings)
-                .tabItem { Label("Colors", systemImage: "paintpalette") }
-            GlucoseTab(settings: settings)
-                .tabItem { Label("Glucose", systemImage: "drop") }
-            PumpTab(settings: settings)
-                .tabItem { Label("Pump", systemImage: "syringe") }
-            AboutTab(settings: settings)
-                .tabItem { Label("About", systemImage: "info.circle") }
+            Tab("General", systemImage: "gearshape") { GeneralTab(settings: settings) }
+            Tab("Colors", systemImage: "paintpalette") { ColorsTab(settings: settings) }
+            Tab("Glucose", systemImage: "drop") { GlucoseTab(settings: settings) }
+            Tab("Pump", systemImage: "syringe") { PumpTab(settings: settings) }
+            Tab("About", systemImage: "info.circle") { AboutTab(settings: settings) }
         }
+        // Every tab is a .grouped Form: unlike a plain one, it scrolls instead of clipping at this size.
         .frame(width: 500, height: 480)
-        // Not `.windowTheme(_:)`: SwiftUI manages this window's appearance and
-        // resets a manual override milliseconds after it's applied.
-        // `preferredColorScheme` feeds the same machinery, so SwiftUI sets the
-        // appearance itself and the preview chart's AppKit colors follow. The
-        // dropdown is the opposite case, see WindowAppearance.swift.
+        // Not .windowTheme(_:): SwiftUI resets a manual NSWindow.appearance on this window within milliseconds.
         .preferredColorScheme(settings.theme.colorScheme)
     }
 }
 
-/// Connection (URL, token, live status probe) plus the basic display options.
 private struct GeneralTab: View {
     @Bindable var settings: AppSettings
     @FocusState private var tokenFieldFocused: Bool
-    @State private var status: ConnectionStatus = .unconfigured
+    @State private var status = ConnectionStatus.unconfigured
 
-    private enum ConnectionStatus: Equatable {
+    private enum ConnectionStatus {
         case unconfigured
         case checking
-        case connected
-        case failed(String)
+        case probed(Nightscout.ProbeResult)
     }
 
     var body: some View {
@@ -49,8 +35,7 @@ private struct GeneralTab: View {
             Section {
                 TextField("Nightscout URL", text: $settings.baseURL,
                           prompt: Text("https://your-site.nightscout.app"))
-                TextField("Access token", text: tokenText,
-                          prompt: Text("e.g. monitor-1a2b3c4d"))
+                TextField("Access token", text: tokenText, prompt: Text("e.g. monitor-1a2b3c4d"))
                     .focused($tokenFieldFocused)
                 LabeledContent("Status") { statusView }
             } footer: {
@@ -98,13 +83,9 @@ private struct GeneralTab: View {
         }
         .formStyle(.grouped)
         .autocorrectionDisabled()
-        // Restarting on every edit cancels the previous probe, so only the
-        // latest values ever report a result.
-        .task(id: settings.baseURL + "\n" + settings.token) { await checkConnection() }
+        .task(id: [settings.baseURL, settings.token]) { await checkConnection() }
     }
 
-    /// A "<prefix> [n] <unit>" row. The tooltip carries the accepted range;
-    /// typing outside it snaps back, since both settings clamp on write.
     private func intervalField(_ prefix: String, value: Binding<Int>,
                                unit: String, limits: ClosedRange<Int>) -> some View {
         HStack(spacing: 4) {
@@ -127,32 +108,27 @@ private struct GeneralTab: View {
                 ProgressView().controlSize(.small)
                 Text("Checking…").foregroundStyle(.secondary)
             }
-        case .connected:
+        case .probed(.connected):
             Label("Connected", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
-        case .failed(let message):
+        case .probed(.failed(let message)):
             Label(message, systemImage: "xmark.circle.fill")
                 .foregroundStyle(.red)
         }
     }
 
-    /// A successful read proves the URL is valid and the token authenticates.
-    /// Debounced so probes fire between keystrokes, not on each one.
+    // Debounced: .task(id:) restarts on every keystroke, which cancels the sleep.
     private func checkConnection() async {
         guard settings.isConfigured else { status = .unconfigured; return }
         status = .checking
         try? await Task.sleep(for: .milliseconds(600))
         guard !Task.isCancelled else { return }
         let result = await Nightscout.probe(baseURL: settings.baseURL, token: settings.token)
-        guard !Task.isCancelled else { return }   // superseded by a newer probe
-        switch result {
-        case .connected: status = .connected
-        case .failed(let message): status = .failed(message)
-        }
+        guard !Task.isCancelled else { return }
+        status = .probed(result)
     }
 
-    /// Masked ("mo***4d") until the field is focused. The setter ignores the
-    /// mask itself, so a stray commit can't overwrite the stored token with it.
+    // Masked until focused. The setter drops the mask, so a commit while unfocused can't store it.
     private var tokenText: Binding<String> {
         Binding(
             get: { tokenFieldFocused ? settings.token : AppSettings.maskedToken(settings.token) },
@@ -164,27 +140,14 @@ private struct GeneralTab: View {
     }
 }
 
-/// Every configurable chart color, plus the presets that snapshot them. The
-/// live preview above the form reads `AppSettings` directly, so every picker
-/// edit redraws it. Its data is synthetic, a curve spanning all five zones
-/// relative to the current thresholds, never the user's real readings.
 private struct ColorsTab: View {
     @Bindable var settings: AppSettings
     @State private var showingSavePreset = false
     @State private var newPresetName = ""
-    /// The preview's own window, driven by the slider below it. Deliberately
-    /// not `settings.rangeHours`: everything in that box is a demo, and editing
-    /// the dropdown's window from the Colors tab would be a surprise. It starts
-    /// at `rangeHours`' default rather than mirroring the current setting,
-    /// because an odd hour count wouldn't survive the first drag on the 2h grid,
-    /// and a slider opening on the real value invites exactly the "why didn't my
-    /// chart change?" reading this is meant to avoid.
+    // Deliberately not settings.rangeHours: the preview is a demo and must not move the dropdown's window.
     @State private var previewHours = 6.0
-    /// The sample curve's end, and with it the chart's window end (see
-    /// `ChartCanvas.windowEnd`), so the preview stays in frame however long ago
-    /// the body last ran. Refreshed on appear only to keep the time axis near
-    /// the current clock; nothing depends on it being current.
-    @State private var sampleEnd = Date()
+    // Pins the chart's window to the samples, which only regenerate when the body runs.
+    @State private var sampleEnd = Date.now
 
     var body: some View {
         VStack(spacing: 0) {
@@ -194,51 +157,45 @@ private struct ColorsTab: View {
     }
 
     private var preview: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ChartCanvas(readings: sampleReadings, rangeHours: Int(previewHours),
-                        settings: settings, windowEnd: sampleEnd)
-                .frame(height: 120)
-            // The dropdown's range slider, bounds and 2h step included, applied
-            // to the sample curve, so it demonstrates the slider color and still
-            // does something when dragged. It used to drive nothing at all,
-            // which just read as a broken control.
-            HStack(spacing: 8) {
-                TintedSlider(value: $previewHours, range: Self.previewHoursBounds, step: 2,
-                             tint: settings.sliderColor,
-                             accessibilityValueText: "\(Int(previewHours)) hours, preview only")
-                    .accessibilityLabel("Preview chart range")
-                Text("\(Int(previewHours)) h")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 30, alignment: .trailing)
+        VStack(alignment: .leading, spacing: 6) {
+            GroupBox {
+                VStack(spacing: 8) {
+                    ChartCanvas(readings: sampleReadings, rangeHours: Int(previewHours),
+                                settings: settings, windowEnd: sampleEnd)
+                        .frame(height: 120)
+                    HStack(spacing: 8) {
+                        TintedSlider(value: $previewHours, range: Self.previewHoursBounds, step: 2,
+                                     tint: settings.sliderColor,
+                                     accessibilityValueText: "\(Int(previewHours)) hours, preview only")
+                            .accessibilityLabel("Preview chart range")
+                        Text("\(Int(previewHours)) h")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 30, alignment: .trailing)
+                    }
+                }
+                .padding(5)
             }
-            .padding(.top, 2)
             Text("Preview — sample data, not your readings")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
         }
-        .padding(EdgeInsets(top: 16, leading: 20, bottom: 8, trailing: 20))
-        .onAppear { sampleEnd = Date() }
+        .padding([.horizontal, .top], 20)
+        .onAppear { sampleEnd = .now }
     }
 
     private static let previewHoursBounds =
         Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
 
-    /// Hours per sweep through the zones at the narrow end of the range. The
-    /// curve is built from repeats of that shape, so a wider window reads as
-    /// more history rather than as one curve stretched wider. The count grows
-    /// with the square root of the window: one sweep per 3 h straight up would
-    /// pack 24 of them into a 72 h window, a comb. This keeps it at about five.
+    // Zone sweeps grow with the square root of the window: 72 h shows about five, not a comb of 24.
     private static let previewHoursPerCycle = 3.0
 
     private var previewCycles: Double {
         max(1, (previewHours / Self.previewHoursPerCycle).squareRoot())
     }
 
-    /// Sized to fill whatever window the preview slider selects. The 5-minute
-    /// spacing is fixed, since a wider one would exceed
-    /// `ChartMath.dropoutThreshold` and shatter the line, so it's the point
-    /// count that follows the window: 25 points at 2 h, 865 at 72 h.
+    // 5-minute spacing; anything wider exceeds ChartMath.dropoutThreshold and breaks the line.
     private var sampleReadings: [Reading] {
         ChartMath.sampleReadings(
             extremeLow: settings.extremeLow, targetLow: settings.targetLow,
@@ -299,17 +256,13 @@ private struct ColorsTab: View {
             Button("Reset Colors to Default") { settings.resetColors() }
         }
         .formStyle(.grouped)
-        // A sheet, not an `.alert`: macOS alerts render only TextFields and
-        // Buttons, so the list of presets to overwrite can't live in one.
+        // A sheet, not an .alert: macOS alerts render only text fields and buttons.
         .sheet(isPresented: $showingSavePreset) {
             SavePresetSheet(settings: settings, name: $newPresetName)
         }
     }
 
-    /// A point-size row. The stock `Slider` is fine here, nothing needs tinting
-    /// inside Settings. It's continuous with a rounding binding rather than
-    /// `step:`, because a stepped macOS slider draws one tick mark per step and
-    /// half-point granularity turns the row into a wall of dots.
+    // Continuous plus rounding rather than step:, which on macOS draws a tick mark per half point.
     private func sizeRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         let halfPoints = Binding(
             get: { value.wrappedValue },
@@ -326,8 +279,6 @@ private struct ColorsTab: View {
         }
     }
 
-    /// The picker's selection is whichever saved preset matches the live colors,
-    /// so there's no separate "selected" state to keep in sync.
     private var presetSelection: Binding<String?> {
         Binding(
             get: { settings.matchingPreset()?.name },
@@ -339,49 +290,35 @@ private struct ColorsTab: View {
     }
 }
 
-/// Type a new name, or click an existing preset to overwrite it. The click
-/// fills the name field, and the button relabels itself on a collision.
 private struct SavePresetSheet: View {
-    var settings: AppSettings
+    let settings: AppSettings
     @Binding var name: String
     @Environment(\.dismiss) private var dismiss
 
-    private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
-    private var overwrites: Bool { settings.colorPresets.contains { $0.name == trimmed } }
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+    private var overwrites: Bool { settings.colorPresets.contains { $0.name == trimmedName } }
+
+    private var overwrittenPreset: Binding<String?> {
+        Binding(
+            get: { overwrites ? trimmedName : nil },
+            set: { if let picked = $0 { name = picked } }
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Save color preset").font(.headline)
             TextField("Name", text: $name)
             if !settings.colorPresets.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Or overwrite an existing preset:")
-                        .font(.caption).foregroundStyle(.secondary)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 2) {
-                            ForEach(settings.colorPresets, id: \.name) { preset in
-                                Button { name = preset.name } label: {
-                                    HStack {
-                                        Text(preset.name)
-                                        Spacer()
-                                        if preset.name == trimmed {
-                                            Image(systemName: "checkmark")
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    .contentShape(Rectangle())
-                                    .padding(.vertical, 3)
-                                    .padding(.horizontal, 6)
-                                    .background(
-                                        preset.name == trimmed ? Color.accentColor.opacity(0.15) : .clear,
-                                        in: RoundedRectangle(cornerRadius: 4)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    List(settings.colorPresets, id: \.name, selection: overwrittenPreset) { preset in
+                        Text(preset.name)
                     }
-                    .frame(maxHeight: 120)
+                    .listStyle(.bordered)
+                    .frame(height: 120)
                 }
             }
             HStack {
@@ -389,11 +326,11 @@ private struct SavePresetSheet: View {
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button(overwrites ? "Overwrite" : "Save") {
-                    settings.saveColorPreset(settings.currentPreset(name: trimmed))
+                    settings.saveColorPreset(settings.currentPreset(name: trimmedName))
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(trimmed.isEmpty)
+                .disabled(trimmedName.isEmpty)
             }
         }
         .padding(20)
@@ -401,8 +338,6 @@ private struct SavePresetSheet: View {
     }
 }
 
-/// The optimal range plus the very-low/very-high thresholds. Edited in the
-/// chosen display unit, stored as mg/dL.
 private struct GlucoseTab: View {
     @Bindable var settings: AppSettings
 
@@ -416,7 +351,6 @@ private struct GlucoseTab: View {
                 thresholdField("Very low", \.extremeLow)
                 thresholdField("Very high", \.extremeHigh)
             }
-            // Shown rather than enforced, see `AppSettings.thresholdOrderWarning`.
             if let warning = settings.thresholdOrderWarning {
                 Section {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
@@ -431,9 +365,7 @@ private struct GlucoseTab: View {
         .formStyle(.grouped)
     }
 
-    /// The value-based field commits on Return or focus loss and rejects
-    /// non-numeric input on its own. A text-based binding would reformat on
-    /// every keystroke and fight the typing, decimals included.
+    // Value-based: a text binding reformats on every keystroke, which makes decimals impossible to type.
     private func thresholdField(_ label: String, _ keyPath: ReferenceWritableKeyPath<AppSettings, Double>) -> some View {
         LabeledContent(label) {
             HStack(spacing: 4) {
@@ -446,7 +378,6 @@ private struct GlucoseTab: View {
         }
     }
 
-    /// An mg/dL-stored threshold exposed in the current display unit.
     private func displayValue(_ keyPath: ReferenceWritableKeyPath<AppSettings, Double>) -> Binding<Double> {
         Binding(
             get: { settings.units.display(settings[keyPath: keyPath]) },
@@ -455,9 +386,6 @@ private struct GlucoseTab: View {
     }
 }
 
-/// What the dropdown shows besides glucose, one switch per item. Everything
-/// here depends on a pump uploader reporting it, which the footers say, since
-/// a switch that's on but shows nothing would otherwise look broken.
 private struct PumpTab: View {
     @Bindable var settings: AppSettings
 
@@ -498,8 +426,6 @@ private struct PumpTab: View {
         .formStyle(.grouped)
     }
 
-    /// A toggle with a second, quieter line, for the items whose name alone
-    /// doesn't say what they show.
     private func toggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
             Text(title)
@@ -508,38 +434,13 @@ private struct PumpTab: View {
     }
 }
 
-/// Which version is running, where to report a problem, and the one caveat that
-/// matters. It's a Settings tab because an `LSUIElement` app has no app menu, so
-/// the usual "About Sugarglider" item isn't reachable and can't be added.
+// A tab because an LSUIElement app has no app menu to hold the standard About item.
 private struct AboutTab: View {
-    var settings: AppSettings
+    let settings: AppSettings
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Form {
-            Section {
-                HStack(spacing: 14) {
-                    // Theme first, environment second, so an explicit
-                    // Light/Dark override wins over the system appearance.
-                    if let icon = AppInfo.appIcon(for: settings.theme.colorScheme ?? colorScheme) {
-                        Image(nsImage: icon)
-                            .resizable()
-                            .frame(width: 64, height: 64)
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Sugarglider").font(.title2.weight(.semibold))
-                        Text(AppInfo.versionText)
-                            .foregroundStyle(.secondary)
-                            // The one string anyone is asked to repeat back.
-                            .textSelection(.enabled)
-                        Text(AppInfo.copyright)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding(.vertical, 4)
-            }
             Section {
                 LabeledContent("Project") {
                     Link(AppInfo.repositoryLabel, destination: AppInfo.repositoryURL)
@@ -550,6 +451,8 @@ private struct AboutTab: View {
                 LabeledContent("License") {
                     Link("MIT", destination: AppInfo.licenseURL)
                 }
+            } header: {
+                header
             }
             Section {
                 Label {
@@ -564,30 +467,44 @@ private struct AboutTab: View {
         }
         .formStyle(.grouped)
     }
+
+    private var header: some View {
+        VStack(spacing: 2) {
+            // Theme first, so a Light/Dark override wins over the system appearance.
+            if let icon = AppInfo.appIcon(for: settings.theme.colorScheme ?? colorScheme) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 80, height: 80)
+                    .padding(.bottom, 4)
+            }
+            Text("Sugarglider")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(AppInfo.versionText)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            Text(AppInfo.copyright)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 12)
+    }
 }
 
-/// Bundle metadata for the About tab, in one place so what Settings shows can
-/// only come from the Info.plist `build.sh` writes.
 enum AppInfo {
     static let repositoryLabel = "nvmddev/sugarglider"
     static let repositoryURL = URL(string: "https://github.com/nvmddev/sugarglider")!
     static let issuesURL = repositoryURL.appending(path: "issues")
     static let licenseURL = repositoryURL.appending(path: "blob/main/LICENSE")
 
-    /// `Assets.car` does carry a light and a dark variant, but that stack is
-    /// reachable only through the system icon services: asked by name, AppKit
-    /// hands out the light rendition whatever appearance is in effect (probed
-    /// both ways round). Hence the same two artworks as plain PNGs, picked by
-    /// hand. Falls back to the bundle icon for a bare `swift build` binary,
-    /// which has no Resources at all.
+    // Asked by name, AppKit returns the light rendition from Assets.car in either appearance, hence the PNGs.
     static func appIcon(for scheme: ColorScheme) -> NSImage? {
         NSImage(named: scheme == .dark ? "AppIcon-Dark" : "AppIcon-Light")
             ?? NSImage(named: NSImage.applicationIconName)
     }
 
-    /// "Version 0.2.0 (73)" from the bundle. A bare `swift build` binary has no
-    /// Info.plist, so the keys are missing rather than wrong there: say so
-    /// instead of printing a made-up number.
     static var versionText: String {
         versionText(short: bundleString("CFBundleShortVersionString"),
                     build: bundleString("CFBundleVersion"))
