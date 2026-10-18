@@ -1,40 +1,34 @@
 #!/bin/bash
-# Semantic version helper driven by git tags + Conventional Commits.
+# Version helper driven by git tags and Conventional Commits.
 #
-#   scripts/version.sh latest              → newest release tag ("v1.2.0"), empty if none
-#   scripts/version.sh previous <tag>      → the tag released before <tag>, empty if none
+#   scripts/version.sh latest             newest release tag ("v1.2.0"), empty if none
+#   scripts/version.sh previous <tag>     the tag released before <tag>, empty if none
 #   scripts/version.sh next [auto|patch|minor|major]
-#                                          → next version *without* the "v" prefix
-#   scripts/version.sh app-changed [tag]   → exit 0 if the built app would differ
-#                                            from <tag> (default: newest), else 1
+#                                         next version, without the "v"
+#   scripts/version.sh app-changed [tag]  exit 0 if the app would differ from <tag>
+#                                         (default: the newest), else 1
 #
-# "auto" derives the bump from the commits since the newest tag:
-#   a `!` marker or a BREAKING CHANGE trailer → major
-#   any feat:                                 → minor
-#   otherwise                                 → patch
-#
-# `next` always answers with a number. Whether a release is warranted at all is
-# `app-changed`'s job, so the two can be used separately.
+# auto bumps major for a "!" or a BREAKING CHANGE trailer, minor for any feat,
+# patch otherwise.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Tags newest-first. Avoids a pipe so `set -o pipefail` can't trip over SIGPIPE.
 all_tags() {
     git tag --list 'v[0-9]*' --sort=-v:refname
 }
 
+# No `| head -n1`: under pipefail, git dying of SIGPIPE would fail the script.
 latest_tag() {
     local tags
     tags="$(all_tags)"
     printf '%s' "${tags%%$'\n'*}"
 }
 
+# The nearest tag reachable from <exclude>'s parent, so a higher version tagged
+# on a side branch doesn't win. On the workflow_dispatch path <exclude> isn't a
+# commit yet, hence the fallback to the newest other tag.
 previous_tag() {
     local exclude="$1" tag prev
-    # The release <exclude> actually follows: the nearest tag reachable from its
-    # parent, so a higher version tagged on a side branch doesn't win. Fails when
-    # <exclude> isn't a commit yet, which is the workflow_dispatch path computing
-    # the previous tag before creating the new one, hence the fallback below.
     if prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${exclude}^" 2>/dev/null)"; then
         printf '%s' "${prev}"
         return 0
@@ -46,14 +40,12 @@ previous_tag() {
     done <<< "$(all_tags)"
 }
 
-# Highest bump level implied by the commits in <range>.
 detect_bump() {
     local range="$1" bump="patch" record subject body
     while IFS= read -r -d $'\x1e' record; do
         record="${record#$'\n'}"
         subject="${record%%$'\x1f'*}"
         body="${record#*$'\x1f'}"
-        # `feat!:` / `fix(scope)!:` and the BREAKING CHANGE trailer both mean major.
         if [[ "${subject}" =~ ^[a-zA-Z]+(\([^\)]*\))?! ]] || [[ "${body}" == *"BREAKING CHANGE"* ]]; then
             printf 'major'
             return 0
@@ -63,8 +55,7 @@ detect_bump() {
     printf '%s' "${bump}"
 }
 
-# Paths whose contents end up in the shipped bundle. Everything else (CI,
-# scripts, docs) can change without altering a single byte of the app.
+# Everything the shipped bundle is built from.
 APP_PATHS=(Sources Resources Package.swift)
 
 case "${1:-}" in
@@ -74,7 +65,6 @@ app-changed)
         echo "changed (no release tag yet)"
         exit 0
     fi
-    # git diff --quiet exits 1 when there are differences, hence the inversion.
     if git diff --quiet "${tag}" HEAD -- "${APP_PATHS[@]}"; then
         echo "unchanged since ${tag}"
         exit 1
@@ -94,8 +84,6 @@ previous)
 next)
     bump="${2:-auto}"
     tag="$(latest_tag)"
-
-    # No tag yet: the first release is 0.1.0 regardless of the requested bump.
     if [[ -z "${tag}" ]]; then
         echo "0.1.0"
         exit 0

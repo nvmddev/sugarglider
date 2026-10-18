@@ -1,31 +1,19 @@
 #!/bin/bash
-# Compile Resources/AppIcon.icon (an Icon Composer document) into the four
-# artifacts the app bundle ships, all committed next to it:
+# Compiles Resources/AppIcon.icon (an Icon Composer document) into the icon
+# artifacts committed next to it:
 #
-#   Resources/Assets.car        the real icon: an image stack carrying separate
-#                               Aqua / DarkAqua / tintable renditions, which is
-#                               what makes macOS swap the icon with the system
-#                               appearance. Referenced by CFBundleIconName.
-#   Resources/AppIcon.icns      single-appearance fallback for anything that
-#                               predates the catalog. Referenced by CFBundleIconFile.
-#   Resources/AppIcon-Light.png the same artwork as flat images, for the About
-#   Resources/AppIcon-Dark.png  tab, since the catalog's variants are reachable
-#                               only through the system icon services, never
-#                               through NSImage(named:).
+#   Assets.car                the icon macOS shows, with Aqua, DarkAqua and
+#                             tintable renditions (CFBundleIconName)
+#   AppIcon.icns              single-appearance fallback (CFBundleIconFile)
+#   AppIcon-{Light,Dark}.png  for the About tab: NSImage(named:) only ever
+#                             returns the catalog's light rendition
 #
-# Run this only when the artwork changes; build.sh just copies the results.
-# actool ships only with a full Xcode (26+ for .icon documents), while build.sh
-# has to work on a Command Line Tools-only machine, and CI's pinned macos-15
-# runners have neither. Committing what actool produced keeps every build
-# reproducible without that dependency.
+#   make-icon.sh [compile]   recompile and record the source hash (Xcode 26+)
+#   make-icon.sh verify      check the recorded hash, no Xcode needed
 #
-# Usage:
-#   make-icon.sh [compile]   recompile the artifacts and record the source hash
-#   make-icon.sh verify      check that hash without needing Xcode at all
-#
-# `verify` closes the loop on committing generated files: edit the artwork,
-# forget to recompile, and the build would otherwise ship the old icon with
-# every check green. CI runs it.
+# The artifacts are committed because actool ships only with a full Xcode, while
+# build.sh has to work with the Command Line Tools alone. CI runs verify, which
+# catches artwork edited without a recompile.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -35,11 +23,8 @@ MODE="${1:-compile}"
 
 [[ -d "${ICON}" ]] || { echo "error: ${ICON} not found" >&2; exit 1; }
 
-# Hashes every file in the document, contents and paths both, so a renamed or
-# swapped asset registers as well as an edited one. LC_ALL pins the sort order,
-# and .DS_Store is skipped: Finder drops one into the package as soon as it's
-# opened, it's gitignored, and including it would make the same source hash
-# differently on a laptop than in CI.
+# Covers paths as well as contents. .DS_Store is skipped: Finder adds one as soon
+# as the package is opened, and it's gitignored, so CI would hash differently.
 icon_checksum() {
     find "${ICON}" -type f ! -name .DS_Store -print0 \
         | LC_ALL=C sort -z \
@@ -74,8 +59,7 @@ verify)
     ;;
 esac
 
-# xcrun resolves actool only when a full Xcode is selected, but merely having
-# one installed is enough for us, so fall back to looking for it directly.
+# xcrun finds actool only when a full Xcode is selected; an installed one is enough.
 ACTOOL="$(xcrun --find actool 2>/dev/null || true)"
 if [[ -z "${ACTOOL}" ]]; then
     for candidate in /Applications/Xcode*.app; do
@@ -94,21 +78,20 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 
-# $1 = .icon document, $2 = output directory
 compile_icon() {
-    mkdir -p "$2"   # actool writes into the directory but won't create it
-    # ...and it fails with "no such file" on a relative .icon path, however
-    # valid, so hand it an absolute one.
-    local document="$1"
+    local document="$1" output="$2"
+    # actool won't create the output directory, and it fails with "no such file"
+    # on a relative .icon path, however valid.
+    mkdir -p "${output}"
     [[ "${document}" == /* ]] || document="${PWD}/${document}"
     "${ACTOOL}" "${document}" \
-        --compile "$2" \
+        --compile "${output}" \
         --app-icon AppIcon \
         --platform macosx \
         --minimum-deployment-target 14.0 \
-        --output-partial-info-plist "$2/partial.plist" \
+        --output-partial-info-plist "${output}/partial.plist" \
         --errors --warnings >/dev/null
-    [[ -f "$2/Assets.car" && -f "$2/AppIcon.icns" ]] \
+    [[ -f "${output}/Assets.car" && -f "${output}/AppIcon.icns" ]] \
         || { echo "error: actool produced no usable output for $1" >&2; exit 1; }
 }
 
@@ -116,12 +99,10 @@ echo "==> Compiling ${ICON} with ${ACTOOL}"
 compile_icon "${ICON}" "${TMP}/light"
 cp "${TMP}/light/Assets.car" "${TMP}/light/AppIcon.icns" Resources/
 
-# The About tab's two PNGs come out of actool as well, not out of Icon
-# Composer's export panel: that panel emits iOS/watchOS artwork only, flat and
-# full-bleed, because on macOS the squircle, padding and shadow are applied when
-# the icon is rendered rather than when it's drawn. There's no flag for "render
-# the dark appearance", so the dark pass goes through a copy of the document
-# with its dark specializations promoted to defaults.
+# The PNGs come out of actool too: Icon Composer's export panel emits flat,
+# full-bleed iOS artwork, since macOS adds the squircle, padding and shadow at
+# render time. actool has no flag for the dark appearance, so the dark pass
+# compiles a copy with its dark specializations promoted to defaults.
 echo "==> Compiling a dark-appearance pass"
 cp -R "${ICON}" "${TMP}/AppIcon.icon"
 python3 - "${TMP}/AppIcon.icon/icon.json" <<'PY'
@@ -150,16 +131,14 @@ json.dump(document, open(path, "w"), indent=2)
 PY
 compile_icon "${TMP}/AppIcon.icon" "${TMP}/dark"
 
-# 128@2x = 256px, twice what the About tab's 64pt view needs on a Retina display
-# and the largest size actool puts in the fallback .icns.
+# 128@2x (256 px) is the largest size actool puts in the fallback .icns.
 for pass in light dark; do
     iconutil -c iconset "${TMP}/${pass}/AppIcon.icns" -o "${TMP}/${pass}.iconset"
     variant="$(tr '[:lower:]' '[:upper:]' <<<"${pass:0:1}")${pass:1}"
     cp "${TMP}/${pass}.iconset/icon_128x128@2x.png" "Resources/AppIcon-${variant}.png"
 done
 
-# Last, so a run that died halfway leaves the recorded hash pointing at the
-# source the *committed* artifacts were actually built from.
+# Last, so a run that dies halfway doesn't record the new source as compiled.
 icon_checksum > "${CHECKSUM_FILE}"
 
 for artifact in Assets.car AppIcon.icns AppIcon-Light.png AppIcon-Dark.png; do

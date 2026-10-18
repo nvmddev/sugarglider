@@ -1,16 +1,15 @@
 #!/bin/bash
-# Assert that a release's artifacts really are notarized and carry a stapled
-# ticket, before anything is published.
+# Asserts that a release's artifacts are notarized and stapled, before anything
+# is published.
 #
 #   scripts/verify-notarization.sh <zip> <dmg>
 #
-# Signing degrades on purpose (no certificate -> ad-hoc, no Apple ID -> signed
-# but unnotarized), so every green release run proves nothing about Gatekeeper
-# on its own. This is the step that does: run it only on the notarizing path.
+# Run it on the notarizing path only. Signing degrades silently (no certificate
+# means ad-hoc, no Apple ID means unnotarized), so a green release run proves
+# nothing about Gatekeeper by itself.
 #
-# The zip is checked by unpacking it rather than by trusting the app in the
-# working tree: it is what Homebrew installs, and it is rebuilt after the staple,
-# so a wrong order there is exactly the mistake worth catching.
+# The zip is unpacked instead of trusting the app in the working tree: it is what
+# Homebrew installs, and it is rebuilt after stapling, which is easy to get wrong.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -27,8 +26,8 @@ fail() { echo "::error::$*"; exit 1; }
 echo "==> Verifying ${APP}"
 xcrun stapler validate "${APP}" || fail "${APP} carries no stapled notarization ticket."
 
-# spctl is the only check that speaks for Gatekeeper itself; the wording is
-# stable and distinguishes notarized from merely Developer ID-signed.
+# spctl speaks for Gatekeeper itself, and its source= line tells notarized apart
+# from merely Developer ID-signed.
 assessment="$(spctl -a -vvv -t exec "${APP}" 2>&1)" || fail "Gatekeeper rejected ${APP}: ${assessment}"
 grep -q "source=Notarized Developer ID" <<<"${assessment}" \
     || fail "Gatekeeper accepted ${APP}, but not as notarized: ${assessment}"

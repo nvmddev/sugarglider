@@ -6,7 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A newer push to the same branch makes the in-flight run pointless.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -17,8 +16,8 @@ permissions:
 jobs:
   test:
     name: Build & test
-    # The oldest toolchain the package supports. Image and Xcode are pinned so a
-    # rollover can't turn a green branch red overnight; bump them deliberately.
+    # The oldest supported toolchain. Image and Xcode are pinned so a runner
+    # update can't turn a green branch red overnight; bump them deliberately.
     runs-on: macos-26
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
@@ -30,8 +29,6 @@ jobs:
           swift --version
           xcodebuild -version
 
-      # The icon artifacts are committed rather than compiled here (see
-      # scripts/make-icon.sh), so this catches artwork edited without a recompile.
       - name: Check icon artifacts are current
         run: ./scripts/make-icon.sh verify
 
@@ -70,16 +67,15 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  # The newest toolchain, which development happens on. It and the floor above
-  # reject different code, in both directions. A separate job rather than a
-  # matrix, because the ruleset requires "Build & test" by that exact name. Not
-  # required itself while the image is a preview without an SLA.
+  # The two toolchains reject different code, in both directions. A separate job
+  # rather than a matrix, because the ruleset requires "Build & test" by that
+  # exact name. Not required itself while the image is a preview without an SLA.
   test-newest:
     name: Build & test (newest Xcode)
     runs-on: xcode-27
     env:
-      # The image's default Xcode lags the newest release, so select it
-      # explicitly. Bump together with the runner label, deliberately.
+      # The image's default Xcode lags the newest release. Bump together with
+      # the runner label.
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     steps:
       - uses: actions/checkout@v7
@@ -104,7 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # shellcheck ships with the Ubuntu runner image; actionlint does not.
+      # Preinstalled on the runner image, unlike actionlint.
       - name: shellcheck
         run: shellcheck build.sh scripts/*.sh
 
@@ -122,6 +118,7 @@ jobs:
           tar xzf "${tarball}" actionlint
           ./actionlint -color
 
+  # A broken version or changelog script should fail here, not mid-release.
   release-scripts:
     name: Smoke-test release scripts
     runs-on: ubuntu-latest
@@ -130,15 +127,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The version/changelog logic decides what a release is *called* and what
-      # it *says*, so a broken script must fail here rather than mid-release.
       - name: Exercise version + changelog generation
         run: |
           set -euo pipefail
           echo "latest tag:   $(scripts/version.sh latest)"
           echo "next (auto):  $(scripts/version.sh next auto)"
           echo "next (major): $(scripts/version.sh next major)"
-          # Informational here — the release workflow is where this gates.
+          # Informational; release.yml is where this gates.
           echo "app:          $(scripts/version.sh app-changed || true)"
           echo "--- release notes preview ---"
           scripts/release-notes.sh "$(scripts/version.sh next auto)" | tee -a "$GITHUB_STEP_SUMMARY"

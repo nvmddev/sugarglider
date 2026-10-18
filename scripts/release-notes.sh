@@ -1,10 +1,9 @@
 #!/bin/bash
-# Compose the body of a GitHub release: generated changelog + install section.
+# Composes a GitHub release body: the generated changelog plus install notes.
 #
 #   scripts/release-notes.sh <version> [from-ref] [to-ref]
 #
-# NOTARIZED=true drops the Gatekeeper workaround, which only applies to
-# ad-hoc-signed builds.
+# NOTARIZED=true leaves out the Gatekeeper workaround.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -23,7 +22,7 @@ cat <<EOF
 
 Download \`Sugarglider-${VERSION}.dmg\` (or the \`.zip\`) below, drag
 **Sugarglider.app** into \`/Applications\`, and launch it. Needs a Mac with
-Apple silicon and macOS 14 (Sonoma) or newer. Intel Macs are no longer supported.
+Apple silicon and macOS 26 (Tahoe) or newer. Intel Macs are no longer supported.
 EOF
 
 if [[ "${NOTARIZED}" != "true" ]]; then
