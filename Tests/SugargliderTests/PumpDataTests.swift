@@ -3,15 +3,16 @@ import Foundation
 import SwiftUI
 @testable import Sugarglider
 
-/// A `devicestatus` or `treatments` record as `JSONSerialization` hands it
-/// over, numbers as `NSNumber` included, which is what the parsers really see.
-func record(_ json: String) -> [String: Any] {
-    try! JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
+/// Parsed through `JSONSerialization` so numbers arrive as `NSNumber`, as they do from a server.
+private func record(_ json: String) -> [String: Any] {
+    guard let record = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else {
+        Issue.record("Not a JSON object: \(json)")
+        return [:]
+    }
+    return record
 }
 
-/// A full CamAPS FX device status, shaped like what that uploader sends. The
-/// values and times are invented, like every fixture in this file.
-let camapsRecord = """
+private let camapsRecord = """
     {"created_at":"2030-01-01T12:00:00.250Z","device":"camaps",
      "camaps":{"auto_mode":true,"boost":false,"ease_off":false,"delivery_rate":1.15,
                "glucose_mean_today_mmol":6.9,"glucose_mean_yesterday_mmol":8.1,
@@ -34,13 +35,11 @@ extension SugargliderTests {
         #expect(status.deliveryRate == 1.15)
         #expect(status.insulinToday == 21.5)
         #expect(status.insulinYesterday == 47.3)
-        // Stored in mg/dL like every other glucose value, from the mmol/L sent.
-        #expect(abs(try #require(status.averageToday) - 124.2) < 0.001)
-        #expect(abs(try #require(status.averageYesterday) - 145.8) < 0.001)
+        #expect(abs(try #require(status.averageToday) - 6.9 * 18) < 0.001)
+        #expect(abs(try #require(status.averageYesterday) - 8.1 * 18) < 0.001)
     }
 
-    /// `NSNumber` casts to `Bool` whenever it holds 0 or 1, so a guard against
-    /// JSON booleans in the number reader would silently drop these.
+    /// `NSNumber` casts to `Bool` when it holds 0 or 1, so an `is Bool` guard would drop these.
     @Test func pumpStatusKeepsZeroAndOne() throws {
         let status = try #require(PumpStatus(record: record("""
             {"created_at":"2030-01-01T12:00:00Z","pump":{"iob":{"iob":0},"reservoir":1,"battery":{"percent":0}}}
@@ -50,9 +49,6 @@ extension SugargliderTests {
         #expect(status.batteryPercent == 0)
     }
 
-    /// Loop and the OpenAPS family don't put insulin on board in the pump
-    /// block, and OpenAPS sends either an object or an array of forecast
-    /// points, the first being now.
     @Test func pumpStatusFindsInsulinOnBoardWhereLoopsPutIt() throws {
         let loop = try #require(PumpStatus(record: record(
             #"{"created_at":"2030-01-01T12:00:00Z","loop":{"iob":{"iob":2.5}}}"#)))
@@ -65,15 +61,12 @@ extension SugargliderTests {
         #expect(array.insulinOnBoard == 0.5)
     }
 
-    @Test func pumpStatusNeedsADate() {
+    @Test func pumpStatusIsDatedByCreatedAtOrMills() {
         #expect(PumpStatus(record: record(#"{"pump":{"reservoir":120}}"#)) == nil)
         #expect(PumpStatus(record: record(#"{"created_at":"yesterday","pump":{"reservoir":120}}"#)) == nil)
-        // Epoch milliseconds stand in for a missing `created_at`.
         #expect(PumpStatus(record: record(#"{"mills":1893499200250,"pump":{"reservoir":120}}"#))?.reservoir == 120)
     }
 
-    /// Flags win over the status text, which still supplies the end of a Boost
-    /// or Ease-off. Without flags the text is the mode; without either, nil.
     @Test func modeFromFlagsAndStatusText() {
         func mode(_ auto: Bool?, _ boost: Bool?, _ easeOff: Bool?, _ text: String?) -> PumpStatus.Mode? {
             PumpStatus.mode(autoMode: auto, boost: boost, easeOff: easeOff, statusText: text)
@@ -86,38 +79,33 @@ extension SugargliderTests {
         #expect(mode(nil, nil, nil, " normal ") == .other("normal"))
         #expect(mode(nil, nil, nil, "") == nil)
         #expect(mode(nil, nil, nil, nil) == nil)
-
-        #expect(PumpStatus.Mode.boost(until: "15:04").label == "Boost until 15:04")
-        #expect(PumpStatus.Mode.easeOff(until: nil).label == "Ease-off")
-        #expect(PumpStatus.Mode.off.label == "Auto mode off")
     }
 
-    /// Each field comes from the newest record that has it, but only within
-    /// `mergeSpan`: a value from an uploader that went quiet hours ago must not
-    /// sit next to fresh ones as if it were current.
+    @Test(arguments: [
+        (PumpStatus.Mode.auto, "Auto mode"), (.off, "Auto mode off"),
+        (.boost(until: "15:04"), "Boost until 15:04"), (.easeOff(until: nil), "Ease-off"),
+        (.other("normal"), "normal"),
+    ])
+    func modeLabel(mode: PumpStatus.Mode, label: String) {
+        #expect(mode.label == label)
+    }
+
     @Test func mergedFillsFieldsFromRecentRecordsOnly() throws {
-        let now = Date()
-        var newest = PumpStatus(date: now)
-        newest.reservoir = 90
-        var recent = PumpStatus(date: now.addingTimeInterval(-5 * 60))
-        recent.reservoir = 91
-        recent.insulinOnBoard = 1.5
-        var old = PumpStatus(date: now.addingTimeInterval(-PumpStatus.mergeSpan - 60))
-        old.batteryPercent = 50
+        let now = Date.now
+        let newest = PumpStatus(date: now, reservoir: 90)
+        let recent = PumpStatus(date: now.addingTimeInterval(-5 * 60), insulinOnBoard: 1.5, reservoir: 91)
+        let old = PumpStatus(date: now.addingTimeInterval(-PumpStatus.mergeSpan - 60), batteryPercent: 50)
 
         let merged = try #require(PumpStatus.merged([old, recent, newest]))
         #expect(merged.date == now)
-        #expect(merged.reservoir == 90)         // newest wins
-        #expect(merged.insulinOnBoard == 1.5)   // filled in from a recent record
-        #expect(merged.batteryPercent == nil)   // too old to fill anything in
+        #expect(merged.reservoir == 90)
+        #expect(merged.insulinOnBoard == 1.5)
+        #expect(merged.batteryPercent == nil)
     }
 
-    /// A record with nothing the dropdown shows (an uploader reporting only its
-    /// phone battery, say) neither counts as the newest nor dates the result.
     @Test func mergedSkipsRecordsWithoutPumpData() throws {
-        let now = Date()
-        var pump = PumpStatus(date: now.addingTimeInterval(-60))
-        pump.reservoir = 120
+        let now = Date.now
+        let pump = PumpStatus(date: now.addingTimeInterval(-60), reservoir: 120)
         let merged = try #require(PumpStatus.merged([PumpStatus(date: now), pump]))
         #expect(merged.date == pump.date)
         #expect(PumpStatus.merged([PumpStatus(date: now)]) == nil)
@@ -139,7 +127,7 @@ extension SugargliderTests {
         let bolus = try #require(Treatment(record: record(
             #"{"_id":"b","eventType":"Correction Bolus","created_at":"2030-01-01T11:40:00Z","insulin":2}"#)))
         #expect(bolus.bolusUnits == 2)
-        // Any treatment carrying insulin is a bolus, whatever the uploader calls it.
+        // Any treatment carrying insulin is a bolus, whatever its event type.
         let meal = try #require(Treatment(record: record(
             #"{"eventType":"Meal Bolus","created_at":"2030-01-01T11:40:00Z","insulin":4,"carbs":40}"#)))
         #expect(meal.bolusUnits == 4)
@@ -151,21 +139,17 @@ extension SugargliderTests {
         #expect(note.noteText == "CamAPS: Warnmeldung: Insulin im Reservoir niedrig")
     }
 
-    @Test func treatmentsTheChartCantDrawAreDropped() {
-        // Read separately, for the age next to the reservoir.
-        #expect(Treatment(record: record(
-            #"{"eventType":"Insulin Change","created_at":"2030-01-01T08:00:00Z","notes":"Reservoir 0 → 150 IE"}"#)) == nil)
-        // Relative to a profile that isn't read.
-        #expect(Treatment(record: record(
-            #"{"eventType":"Temp Basal","created_at":"2030-01-01T08:00:00Z","percent":-50,"duration":30}"#)) == nil)
-        #expect(Treatment(record: record(
-            #"{"eventType":"Announcement","created_at":"2030-01-01T08:00:00Z","notes":"  "}"#)) == nil)
-        #expect(Treatment(record: record(#"{"eventType":"Correction Bolus","insulin":1}"#)) == nil)   // no date
-        #expect(Treatment(record: record(
-            #"{"eventType":"Correction Bolus","created_at":"2030-01-01T08:00:00Z","insulin":0}"#)) == nil)
+    @Test(arguments: [
+        #"{"eventType":"Insulin Change","created_at":"2030-01-01T08:00:00Z","notes":"Reservoir 0 → 150 IE"}"#,
+        #"{"eventType":"Temp Basal","created_at":"2030-01-01T08:00:00Z","percent":-50,"duration":30}"#,
+        #"{"eventType":"Announcement","created_at":"2030-01-01T08:00:00Z","notes":"  "}"#,
+        #"{"eventType":"Correction Bolus","insulin":1}"#,
+        #"{"eventType":"Correction Bolus","created_at":"2030-01-01T08:00:00Z","insulin":0}"#,
+    ])
+    func treatmentsTheChartCantDrawAreDropped(json: String) {
+        #expect(Treatment(record: record(json)) == nil)
     }
 
-    /// How some loops cancel a temp basal: no rate, no duration left.
     @Test func zeroDurationTempBasalIsACancel() throws {
         let cancel = try #require(Treatment(record: record(
             #"{"eventType":"Temp Basal","created_at":"2030-01-01T08:00:00Z","duration":0}"#)))
@@ -181,9 +165,12 @@ extension SugargliderTests {
         #expect(NightscoutTime.date(NSNumber(value: 1_893_499_200_000)) == expected)
         #expect(NightscoutTime.date("garbage") == nil)
         #expect(NightscoutTime.date(nil) == nil)
-        // Written the way Nightscout stores `created_at`, so its string
-        // comparison in a `find[created_at]` filter lines up.
+    }
+
+    @Test func nightscoutTimeWritesTheFormCreatedAtIsStoredIn() throws {
+        let withMillis = try #require(NightscoutTime.date("2030-01-01T12:00:00.161Z"))
         #expect(NightscoutTime.string(withMillis) == "2030-01-01T12:00:00.161Z")
+        #expect(NightscoutTime.string(Date(timeIntervalSince1970: 1_893_499_200)) == "2030-01-01T12:00:00.000Z")
     }
 }
 
@@ -205,7 +192,6 @@ extension SugargliderTests {
         #expect(line.contains("token=t"))
     }
 
-    /// Most sites have only a CGM uploading, so no status is an answer, not an error.
     @Test func fetchPumpStatusOfASiteWithoutOneIsNil() async throws {
         let server = try LocalHTTPServer(json: #"[{"created_at":"2030-01-01T11:55:00Z","uploader":{"battery":80}}]"#)
         defer { server.stop() }
@@ -233,7 +219,7 @@ extension SugargliderTests {
         let server = try LocalHTTPServer(json: #"{"status":401}"#)
         defer { server.stop() }
         await #expect(throws: NightscoutError.self) {
-            try await Nightscout.fetchTreatments(since: Date(), count: 10, baseURL: server.baseURL, token: "")
+            try await Nightscout.fetchTreatments(since: .now, count: 10, baseURL: server.baseURL, token: "")
         }
     }
 
@@ -249,7 +235,7 @@ extension SugargliderTests {
 
         let empty = try LocalHTTPServer(json: "[]")
         defer { empty.stop() }
-        #expect(try await Nightscout.fetchLatestEvent("Insulin Change", since: Date(),
+        #expect(try await Nightscout.fetchLatestEvent("Insulin Change", since: .now,
                                                       baseURL: empty.baseURL, token: "") == nil)
     }
 }
@@ -262,22 +248,20 @@ extension SugargliderTests {
                   kind: .tempBasal(rate: rate, minutes: minutes))
     }
 
-    /// Each temp basal runs until the next one starts or its duration is up,
-    /// and an uncovered stretch stays a gap.
     @Test func deliveryStepsEndAtTheNextOneOrTheirDuration() {
         let base = Date(timeIntervalSince1970: 1_800_000_000)
         let temps = [temp(1, minutes: 30, at: 0, from: base),
-                     temp(2, minutes: 30, at: 10, from: base),     // cuts the first short
-                     temp(3, minutes: 30, at: 60, from: base)]     // after a 20 minute gap
+                     temp(2, minutes: 30, at: 10, from: base),
+                     temp(3, minutes: 30, at: 60, from: base)]
         let steps = ChartMath.deliverySteps(temps, from: base, to: base.addingTimeInterval(80 * 60))
         #expect(steps.map(\.rate) == [1, 2, 3])
         #expect(steps.map { $0.start.timeIntervalSince(base) / 60 } == [0, 10, 60])
-        #expect(steps.map { $0.end.timeIntervalSince(base) / 60 } == [10, 40, 80])   // the last one clipped
+        #expect(steps.map { $0.end.timeIntervalSince(base) / 60 } == [10, 40, 80])
 
         let runs = ChartMath.contiguousRuns(steps)
         #expect(runs.map(\.count) == [2, 1])
         #expect(ChartMath.rate(at: base.addingTimeInterval(15 * 60), in: steps) == 2)
-        #expect(ChartMath.rate(at: base.addingTimeInterval(50 * 60), in: steps) == nil)   // the gap
+        #expect(ChartMath.rate(at: base.addingTimeInterval(50 * 60), in: steps) == nil)
     }
 
     @Test func deliveryStepsStartAtTheWindow() {
@@ -297,7 +281,7 @@ extension SugargliderTests {
     }
 
     @Test func nearestIndexWorksOnBareDates() {
-        let base = Date()
+        let base = Date.now
         let dates = [0.0, 300.0].map { base.addingTimeInterval($0) }
         func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(base)) }
         #expect(ChartMath.nearestIndex(to: 290, x: x, dates: dates, maxDistance: 24) == 1)
@@ -309,11 +293,14 @@ extension SugargliderTests {
 // MARK: - Store
 
 extension SugargliderTests {
-    /// The first fetch covers the window plus the lookback for a temp basal
-    /// already running at its left edge; later ones reach back an overlap past
-    /// the newest cached treatment, because treatments arrive out of order.
+    private static var pumpSwitches: [ReferenceWritableKeyPath<AppSettings, Bool>] {
+        [\.showActiveInsulin, \.showPumpMode, \.showDeliveryRate, \.showReservoir, \.showPumpBattery,
+         \.showChangeAge, \.showDailyInsulin, \.showAverageGlucose,
+         \.chartShowsBoluses, \.chartShowsDeliveryRate, \.chartShowsAnnouncements]
+    }
+
     @Test func treatmentsAreFetchedForTheWindowThenWithAnOverlap() {
-        let now = Date()
+        let now = Date.now
         let windowStart = now.addingTimeInterval(-6 * 3600)
         let full = ReadingStore.treatmentsSince(windowStart: windowStart, covered: false, newestCached: nil)
         #expect(full == windowStart.addingTimeInterval(-ReadingStore.tempBasalLookback))
@@ -322,12 +309,12 @@ extension SugargliderTests {
         let topUp = ReadingStore.treatmentsSince(windowStart: windowStart, covered: true, newestCached: newest)
         #expect(topUp == newest.addingTimeInterval(-ReadingStore.treatmentOverlap))
 
-        // Covered but nothing cached: the window again, never an unfiltered request.
+        // Covered but empty: the window again, never an unfiltered request.
         #expect(ReadingStore.treatmentsSince(windowStart: windowStart, covered: true, newestCached: nil) == full)
     }
 
     @Test func mergedTreatmentsReplaceByIDAndDropTheVeryOld() {
-        let now = Date()
+        let now = Date.now
         let old = Treatment(id: "old", date: now.addingTimeInterval(-80 * 3600), kind: .bolus(units: 1))
         let first = Treatment(id: "a", date: now.addingTimeInterval(-600), kind: .bolus(units: 1))
         let edited = Treatment(id: "a", date: now.addingTimeInterval(-600), kind: .bolus(units: 1.5))
@@ -339,10 +326,10 @@ extension SugargliderTests {
 
     @Test func reconnectClearsPumpData() {
         let store = ReadingStore(settings: Self.makeSettings())
-        store.pumpStatus = PumpStatus(date: Date())
-        store.treatments = [Treatment(id: "a", date: Date(), kind: .bolus(units: 1))]
-        store.reservoirChanged = Date()
-        store.batteryChanged = Date()
+        store.pumpStatus = PumpStatus(date: .now)
+        store.treatments = [Treatment(id: "a", date: .now, kind: .bolus(units: 1))]
+        store.reservoirChanged = .now
+        store.batteryChanged = .now
         store.reconnect()
         #expect(store.pumpStatus == nil)
         #expect(store.treatments.isEmpty)
@@ -351,19 +338,12 @@ extension SugargliderTests {
         #expect(store.treatmentsWindowStart == nil)
     }
 
-    /// Each part is fetched only while something that shows it is switched
-    /// on, so a CGM-only setup that turned it all off pays nothing for it.
     @Test func nothingIsFetchedForSwitchesThatAreOff() async throws {
         let server = try LocalHTTPServer(json: "[]")
         defer { server.stop() }
         let settings = Self.makeSettings()
         settings.baseURL = server.baseURL
-        let flags: [ReferenceWritableKeyPath<AppSettings, Bool>] = [
-            \.showActiveInsulin, \.showPumpMode, \.showDeliveryRate, \.showReservoir, \.showPumpBattery,
-            \.showChangeAge, \.showDailyInsulin, \.showAverageGlucose,
-            \.chartShowsBoluses, \.chartShowsDeliveryRate, \.chartShowsAnnouncements,
-        ]
-        for flag in flags { settings[keyPath: flag] = false }
+        for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
         ReadingStore(settings: settings).refreshDetails(force: true)
         try await Task.sleep(for: .milliseconds(300))
         #expect(server.requestLines.isEmpty)
@@ -381,8 +361,8 @@ extension SugargliderTests {
         #expect(server.requestLines.contains { $0.contains("/api/v1/devicestatus.json") })
     }
 
-    @Test func refreshTreatmentsCoversTheWindowAndMerges() async throws {
-        let created = NightscoutTime.string(Date().addingTimeInterval(-600))
+    @Test func refreshTreatmentsFetchesTheWindowThenTopsUp() async throws {
+        let created = NightscoutTime.string(Date.now.addingTimeInterval(-600))
         let server = try LocalHTTPServer(json: """
             [{"_id":"b1","eventType":"Correction Bolus","created_at":"\(created)","insulin":2.5}]
             """)
@@ -398,9 +378,6 @@ extension SugargliderTests {
         let since = NightscoutTime.string(windowStart.addingTimeInterval(-ReadingStore.tempBasalLookback))
         #expect(server.requestLines[0].contains("$gte%5D=\(since)"))
 
-        // Covered now, so the top-up reaches back only an overlap past the
-        // newest cached treatment. (Its response is the same record again; the
-        // dedupe is `mergedTreatmentsReplaceByIDAndDropTheVeryOld`'s to check.)
         store.refreshTreatments(force: true)
         try await waitUntil("the top-up") { server.requestLines.count == 2 }
         let newest = try #require(store.treatments.last?.date)
@@ -413,22 +390,12 @@ extension SugargliderTests {
 
 extension SugargliderTests {
     private func fullStatus() -> PumpStatus {
-        var s = PumpStatus(date: Date())
-        s.insulinOnBoard = 1.35
-        s.reservoir = 120
-        s.batteryPercent = 65
-        s.mode = .auto
-        s.deliveryRate = 1.15
-        s.insulinToday = 21.5
-        s.insulinYesterday = 47.3
-        s.averageToday = 124.2
-        s.averageYesterday = 145.8
-        return s
+        PumpStatus(date: .now, insulinOnBoard: 1.35, reservoir: 120, batteryPercent: 65, mode: .auto,
+                   deliveryRate: 1.15, insulinToday: 21.5, insulinYesterday: 47.3,
+                   averageToday: 124.2, averageYesterday: 145.8)
     }
 
-    /// The mode labels the rate when both are on, which saves a row that
-    /// would mostly just say "Auto mode".
-    @Test func detailRowsByDefault() {
+    @Test func defaultDetailRowsLabelTheRateWithTheMode() {
         let rows = PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
                                         settings: Self.makeSettings())
         #expect(rows.map(\.label) == ["Active insulin", "Auto mode", "Reservoir", "Pump battery"])
@@ -447,8 +414,6 @@ extension SugargliderTests {
                                      settings: settings).contains(.init(label: "Delivery rate", value: "1.15 U/h")))
     }
 
-    /// An uploader's own status text can say anything, so it never becomes the
-    /// label of the rate.
     @Test func statusTextModeKeepsItsOwnRow() {
         var status = fullStatus()
         status.mode = .other("normal")
@@ -459,8 +424,7 @@ extension SugargliderTests {
     }
 
     @Test func detailRowsShowOnlyWhatTheSiteReports() {
-        var status = PumpStatus(date: Date())
-        status.reservoir = 8.4
+        let status = PumpStatus(date: .now, reservoir: 8.4)
         let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
                                         settings: Self.makeSettings())
         #expect(rows == [.init(label: "Reservoir", value: "8.4 U")])
@@ -470,14 +434,14 @@ extension SugargliderTests {
     }
 
     @Test func changeAgesFollowTheirSwitch() {
-        let now = Date()
+        let now = Date.now
         let settings = Self.makeSettings()
         let changed = now.addingTimeInterval(-25 * 3600)
         func reservoirRow() -> PumpDetailsView.Row? {
             PumpDetailsView.rows(status: fullStatus(), reservoirChanged: changed, batteryChanged: nil,
                                  settings: settings, now: now).first { $0.label == "Reservoir" }
         }
-        #expect(reservoirRow()?.note == nil)        // off by default
+        #expect(reservoirRow()?.note == nil)
         settings.showChangeAge = true
         #expect(reservoirRow()?.note == "1d 1h")
         #expect(reservoirRow()?.help == "Reservoir changed 1d 1h ago")
@@ -497,11 +461,9 @@ extension SugargliderTests {
                 == .init(label: "Average glucose", today: "124", yesterday: "146"))
     }
 
-    /// The uploader can stop sending device statuses while glucose still flows,
-    /// and nothing else would show it.
     @Test func staleNoteOnlyPastTheStaleDelay() {
         let settings = Self.makeSettings()
-        let now = Date()
+        let now = Date.now
         #expect(PumpDetailsView.staleNote(status: PumpStatus(date: now.addingTimeInterval(-5 * 60)),
                                           settings: settings, now: now) == nil)
         #expect(PumpDetailsView.staleNote(status: PumpStatus(date: now.addingTimeInterval(-40 * 60)),
@@ -516,20 +478,18 @@ extension SugargliderTests {
         #expect(PumpFormat.dailyInsulin(47.3) == "47.3 U")
         #expect(PumpFormat.bolus(1) == "1.0 U")
         #expect(PumpFormat.bolus(0.05) == "0.05 U")
-        let now = Date()
-        // Typed explicitly: Swift 6.0 can't infer a literal that mixes 5.0 and 5 * 60.
-        let minutesAgo: [TimeInterval] = [5, 60, 5 * 60, 24 * 60, 49 * 60]
-        let ages = minutesAgo.map { PumpFormat.age(since: now.addingTimeInterval(-$0 * 60), now: now) }
-        #expect(ages == ["5m", "1h", "5h", "1d", "2d 1h"])
-        #expect(PumpFormat.age(since: now.addingTimeInterval(60), now: now) == "0m")   // clock skew
+    }
+
+    @Test(arguments: [(5, "5m"), (60, "1h"), (5 * 60, "5h"), (24 * 60, "1d"), (49 * 60, "2d 1h"), (-1, "0m")])
+    func pumpAgeIsCompact(minutesAgo: Int, expected: String) {
+        let now = Date.now
+        #expect(PumpFormat.age(since: now.addingTimeInterval(TimeInterval(-minutesAgo * 60)), now: now) == expected)
     }
 }
 
 // MARK: - Settings
 
 extension SugargliderTests {
-    /// The at-a-glance values and boluses are on out of the box; totals and the
-    /// busier chart layers are opt-in.
     @Test func pumpSwitchDefaults() {
         let s = Self.makeSettings()
         #expect(s.showActiveInsulin && s.showPumpMode && s.showDeliveryRate && s.showReservoir && s.showPumpBattery)
@@ -538,19 +498,13 @@ extension SugargliderTests {
         #expect(!s.chartShowsDeliveryRate && !s.chartShowsAnnouncements)
     }
 
-    /// Several of these default to true, which is exactly the case
-    /// `bool(forKey:)` gets wrong on reload.
+    /// Most default to true, the case `bool(forKey:)` gets wrong on reload.
     @Test func pumpSwitchesRoundTrip() {
         let defaults = Self.makeDefaults()
         let s = Self.makeSettings(defaults: defaults)
-        let flags: [ReferenceWritableKeyPath<AppSettings, Bool>] = [
-            \.showActiveInsulin, \.showPumpMode, \.showDeliveryRate, \.showReservoir, \.showPumpBattery,
-            \.showChangeAge, \.showDailyInsulin, \.showAverageGlucose,
-            \.chartShowsBoluses, \.chartShowsDeliveryRate, \.chartShowsAnnouncements,
-        ]
-        for flag in flags { s[keyPath: flag].toggle() }
+        for flag in Self.pumpSwitches { s[keyPath: flag].toggle() }
         let reloaded = Self.makeSettings(defaults: defaults)
-        for flag in flags { #expect(reloaded[keyPath: flag] == s[keyPath: flag]) }
+        for flag in Self.pumpSwitches { #expect(reloaded[keyPath: flag] == s[keyPath: flag]) }
     }
 
     @Test func fetchNeedsFollowTheSwitches() {
@@ -574,15 +528,14 @@ extension SugargliderTests {
 // MARK: - Chart layers
 
 extension SugargliderTests {
-    /// The lane is there only with something switched on to draw in it, and
-    /// is decided on the whole cache so a range drag can't make the chart jump.
     @Test func insulinLaneNeedsSomethingToDraw() {
         let s = Self.makeSettings()
-        let bolus = Treatment(id: "b", date: Date().addingTimeInterval(-50 * 3600), kind: .bolus(units: 1))
-        let tempBasal = Treatment(id: "t", date: Date(), kind: .tempBasal(rate: 1, minutes: 30))
+        let bolus = Treatment(id: "b", date: Date.now.addingTimeInterval(-50 * 3600), kind: .bolus(units: 1))
+        let tempBasal = Treatment(id: "t", date: .now, kind: .tempBasal(rate: 1, minutes: 30))
         #expect(ChartCanvas.laneSpace(for: [], settings: s) == 0)
-        #expect(ChartCanvas.laneSpace(for: [bolus], settings: s) == ChartCanvas.laneHeight)   // outside 6h, still counts
-        #expect(ChartCanvas.laneSpace(for: [tempBasal], settings: s) == 0)                    // rate layer is off
+        // Decided on the whole cache, so a range drag can't make the chart jump.
+        #expect(ChartCanvas.laneSpace(for: [bolus], settings: s) == ChartCanvas.laneHeight)
+        #expect(ChartCanvas.laneSpace(for: [tempBasal], settings: s) == 0)
         s.chartShowsDeliveryRate = true
         #expect(ChartCanvas.laneSpace(for: [tempBasal], settings: s) == ChartCanvas.laneHeight)
         s.chartShowsBoluses = false
@@ -601,7 +554,7 @@ extension SugargliderTests {
         s.chartShowsDeliveryRate = true
         s.chartShowsAnnouncements = true
         s.chartBackgroundEnabled = true
-        let now = Date()
+        let now = Date.now
         let readings = (0..<60).map { reading(100 + $0, minutesAgo: Double(59 - $0) * 5, from: now) }
         let treatments = [
             Treatment(id: "t1", date: now.addingTimeInterval(-4 * 3600), kind: .tempBasal(rate: 0.5, minutes: 30)),

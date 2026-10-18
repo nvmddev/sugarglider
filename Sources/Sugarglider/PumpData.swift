@@ -1,13 +1,9 @@
 import Foundation
 
-/// The pump and the system driving it, as the newest device statuses on the
-/// site describe them. Every field is optional: which ones exist depends on the
-/// uploader, and a CGM-only site has none at all.
-///
-/// Insulin is in units, rates in U/h, glucose in mg/dL like everywhere else.
+/// The pump as the newest device statuses describe it. Insulin in U, rates in U/h, glucose in
+/// mg/dL; a field is nil when the uploader doesn't report it.
 struct PumpStatus: Equatable {
-    /// When the newest record that contributed was created. It dates the data,
-    /// not the fetch, so it's what the dropdown's staleness note goes by.
+    /// Creation time of the newest contributing record, so it dates the data, not the fetch.
     var date: Date
     var insulinOnBoard: Double?
     var reservoir: Double?
@@ -22,237 +18,209 @@ struct PumpStatus: Equatable {
     enum Mode: Equatable {
         case auto
         case off
-        /// CamAPS FX's temporary modes. `until` is the end as the clock time the
-        /// uploader's status text gives, when it gives one.
+        /// CamAPS FX's temporary modes. `until` is the end time the status text gives, if any.
         case boost(until: String?)
         case easeOff(until: String?)
-        /// An uploader's own status text, shown as it comes.
+        /// An uploader's own status text, shown verbatim.
         case other(String)
 
         var label: String {
             switch self {
-            case .auto: return "Auto mode"
-            case .off: return "Auto mode off"
-            case .boost(let until): return "Boost" + (until.map { " until \($0)" } ?? "")
-            case .easeOff(let until): return "Ease-off" + (until.map { " until \($0)" } ?? "")
-            case .other(let text): return text
+            case .auto: "Auto mode"
+            case .off: "Auto mode off"
+            case .boost(let until): until.map { "Boost until \($0)" } ?? "Boost"
+            case .easeOff(let until): until.map { "Ease-off until \($0)" } ?? "Ease-off"
+            case .other(let text): text
             }
         }
 
         var isStatusText: Bool {
-            if case .other = self { return true }
-            return false
+            if case .other = self { true } else { false }
         }
     }
 
-    var hasData: Bool {
-        insulinOnBoard != nil || reservoir != nil || batteryPercent != nil || mode != nil
-            || deliveryRate != nil || insulinToday != nil || insulinYesterday != nil
-            || averageToday != nil || averageYesterday != nil
-    }
+    var hasData: Bool { self != PumpStatus(date: date) }
 
-    /// One `devicestatus` record. Read from `JSONSerialization` output rather
-    /// than through `Decodable`: the record nests several levels deep, its shape
-    /// differs by uploader, and any one field may be missing or typed
-    /// differently, which a strict decode would answer by dropping the record.
-    ///
-    /// `pump` is Nightscout's common pump block. `camaps` is a block an
-    /// uploader for CamAPS FX adds, since Nightscout has no place for that
-    /// system's mode and daily totals. Loop and OpenAPS-style uploaders
-    /// (AndroidAPS, Trio) report the insulin on board under their own key
-    /// instead of `pump`.
-    init?(record: [String: Any]) {
-        guard let date = NightscoutTime.date(record["created_at"]) ?? NightscoutTime.date(record["mills"])
-        else { return nil }
-        self.date = date
-        let pump = record["pump"] as? [String: Any]
-        let camaps = record["camaps"] as? [String: Any]
-
-        let pumpIOB = pump?["iob"] as? [String: Any]
-        let loopIOB = (record["loop"] as? [String: Any])?["iob"] as? [String: Any]
-        // OpenAPS sends an array of forecast points here, the first being now.
-        let openapsIOB = (record["openaps"] as? [String: Any])?["iob"]
-        let openapsNow = (openapsIOB as? [String: Any]) ?? (openapsIOB as? [[String: Any]])?.first
-        insulinOnBoard = Self.number(pumpIOB?["iob"]) ?? Self.number(pumpIOB?["bolusiob"])
-            ?? Self.number(loopIOB?["iob"]) ?? Self.number(openapsNow?["iob"])
-
-        reservoir = Self.number(pump?["reservoir"])
-        batteryPercent = Self.number((pump?["battery"] as? [String: Any])?["percent"])
-        mode = Self.mode(autoMode: camaps?["auto_mode"] as? Bool,
-                         boost: camaps?["boost"] as? Bool,
-                         easeOff: camaps?["ease_off"] as? Bool,
-                         statusText: (pump?["status"] as? [String: Any])?["status"] as? String)
-        deliveryRate = Self.number(camaps?["delivery_rate"])
-        insulinToday = Self.number(camaps?["insulin_today"])
-        insulinYesterday = Self.number(camaps?["insulin_yesterday"])
-        averageToday = Self.number(camaps?["glucose_mean_today_mmol"]).map { $0 * 18 }
-        averageYesterday = Self.number(camaps?["glucose_mean_yesterday_mmol"]).map { $0 * 18 }
-    }
-
-    init(date: Date) { self.date = date }
-
-    /// How far back from the newest record a field may still be filled in. An
-    /// uploader can split its data over several records, and two uploaders can
-    /// share a site, but a value from an uploader that stopped hours ago must
-    /// not pass for current next to fresh ones.
+    /// How much older than the newest record another may be and still fill in its fields: a
+    /// stopped uploader's values must not pass for current.
     static let mergeSpan: TimeInterval = 15 * 60
 
-    /// Records combined field by field, each value taken from the newest record
-    /// within `mergeSpan` that has it. Nil when no record says anything.
+    /// Each field from the newest record within `mergeSpan` that has it; nil when no record has data.
     static func merged(_ records: [PumpStatus]) -> PumpStatus? {
         let newestFirst = records.filter(\.hasData).sorted { $0.date > $1.date }
-        guard var merged = newestFirst.first else { return nil }
-        for r in newestFirst.dropFirst() where merged.date.timeIntervalSince(r.date) <= mergeSpan {
-            merged.insulinOnBoard = merged.insulinOnBoard ?? r.insulinOnBoard
-            merged.reservoir = merged.reservoir ?? r.reservoir
-            merged.batteryPercent = merged.batteryPercent ?? r.batteryPercent
-            merged.mode = merged.mode ?? r.mode
-            merged.deliveryRate = merged.deliveryRate ?? r.deliveryRate
-            merged.insulinToday = merged.insulinToday ?? r.insulinToday
-            merged.insulinYesterday = merged.insulinYesterday ?? r.insulinYesterday
-            merged.averageToday = merged.averageToday ?? r.averageToday
-            merged.averageYesterday = merged.averageYesterday ?? r.averageYesterday
+        guard let newest = newestFirst.first else { return nil }
+        let recent = newestFirst.filter { newest.date.timeIntervalSince($0.date) <= mergeSpan }
+        func latest<Value>(_ field: KeyPath<PumpStatus, Value?>) -> Value? {
+            recent.lazy.compactMap { $0[keyPath: field] }.first
         }
-        return merged
+        return PumpStatus(date: newest.date,
+                          insulinOnBoard: latest(\.insulinOnBoard),
+                          reservoir: latest(\.reservoir),
+                          batteryPercent: latest(\.batteryPercent),
+                          mode: latest(\.mode),
+                          deliveryRate: latest(\.deliveryRate),
+                          insulinToday: latest(\.insulinToday),
+                          insulinYesterday: latest(\.insulinYesterday),
+                          averageToday: latest(\.averageToday),
+                          averageYesterday: latest(\.averageYesterday))
     }
 
-    /// CamAPS FX reports its mode as flags. The status text is still read for
-    /// those, because it's the only place a Boost's end time appears ("Boost
-    /// bis 15:04"). Without the flags the text itself is the mode.
+    /// CamAPS FX's flags win, but the status text is still searched: it's the only place a
+    /// Boost's end time appears ("Boost bis 15:04"). Without flags, the text is the mode.
     static func mode(autoMode: Bool?, boost: Bool?, easeOff: Bool?, statusText: String?) -> Mode? {
         let text = statusText?.trimmingCharacters(in: .whitespaces) ?? ""
-        let until = text.firstMatch(of: #/\b([01]?\d|2[0-3]):[0-5]\d\b/#).map { String($0.output.0) }
+        let until = text.firstMatch(of: #/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/#).map { String($0.output) }
         if boost == true { return .boost(until: until) }
         if easeOff == true { return .easeOff(until: until) }
         if let autoMode { return autoMode ? .auto : .off }
         return text.isEmpty ? nil : .other(text)
     }
+}
 
-    /// A JSON number, or a string holding one, which some uploaders send. No
-    /// `is Bool` guard: `JSONSerialization` hands numbers out as `NSNumber`,
-    /// which casts to `Bool` whenever it holds 0 or 1, so such a guard would
-    /// drop every insulin on board of exactly 0.
-    static func number(_ value: Any?) -> Double? {
-        if let n = value as? Double { return n.isFinite ? n : nil }
-        return (value as? String).flatMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+extension PumpStatus {
+    /// One `devicestatus` record. Not `Decodable`: the shape differs by uploader (`camaps` is the
+    /// block a CamAPS FX uploader adds), and a strict decode would drop a record over one odd field.
+    init?(record: [String: Any]) {
+        guard let date = NightscoutTime.date(record["created_at"]) ?? NightscoutTime.date(record["mills"])
+        else { return nil }
+        self.init(date: date)
+        let pump = record.object("pump")
+        let camaps = record.object("camaps")
+
+        let pumpIOB = pump?.object("iob")
+        // OpenAPS sends one object or an array of forecast points, the first being now.
+        let openapsIOB = record.object("openaps")?["iob"]
+        let openapsNow = (openapsIOB as? [String: Any]) ?? (openapsIOB as? [[String: Any]])?.first
+        insulinOnBoard = pumpIOB?.number("iob") ?? pumpIOB?.number("bolusiob")
+            ?? record.object("loop")?.object("iob")?.number("iob") ?? openapsNow?.number("iob")
+
+        reservoir = pump?.number("reservoir")
+        batteryPercent = pump?.object("battery")?.number("percent")
+        mode = Self.mode(autoMode: camaps?.bool("auto_mode"), boost: camaps?.bool("boost"),
+                         easeOff: camaps?.bool("ease_off"), statusText: pump?.object("status")?.string("status"))
+        deliveryRate = camaps?.number("delivery_rate")
+        insulinToday = camaps?.number("insulin_today")
+        insulinYesterday = camaps?.number("insulin_yesterday")
+        averageToday = camaps?.number("glucose_mean_today_mmol").map { $0 * 18 }
+        averageYesterday = camaps?.number("glucose_mean_yesterday_mmol").map { $0 * 18 }
     }
 }
 
 /// A treatment, reduced to the kinds the chart draws.
 struct Treatment: Equatable {
-    var id: String
-    var date: Date
-    var kind: Kind
+    let id: String
+    let date: Date
+    let kind: Kind
 
     enum Kind: Equatable {
         case bolus(units: Double)
-        /// An absolute rate that holds for `minutes` or until the next temp
-        /// basal starts, see `ChartMath.deliverySteps`. A zero duration only
-        /// ends the one before it, which is how some loops cancel a temp basal.
+        /// An absolute rate in U/h, held for `minutes` or until the next temp basal starts. A zero
+        /// duration only ends the previous one, which is how some loops cancel a temp basal.
         case tempBasal(rate: Double, minutes: Double)
-        /// An announcement or note. Uploaders file pump and sensor alarms as
-        /// announcements, so they aren't lost once acknowledged.
+        /// An announcement or note, which is also where uploaders file pump and sensor alarms.
         case note(String)
     }
 
-    init(id: String, date: Date, kind: Kind) {
-        self.id = id
-        self.date = date
-        self.kind = kind
+    var bolusUnits: Double? {
+        if case .bolus(let units) = kind { units } else { nil }
     }
 
-    /// One `treatments` record, or nil for anything the chart doesn't draw (a
-    /// reservoir change, a percent-only temp basal) or can't place in time.
-    /// Same reasoning as `PumpStatus.init(record:)` for not using `Decodable`.
+    var noteText: String? {
+        if case .note(let text) = kind { text } else { nil }
+    }
+
+    var isTempBasal: Bool {
+        if case .tempBasal = kind { true } else { false }
+    }
+}
+
+extension Treatment {
+    /// One `treatments` record, or nil for one the chart doesn't draw (a reservoir change, a
+    /// percent temp basal) or can't place in time.
     init?(record: [String: Any]) {
         guard let date = NightscoutTime.date(record["created_at"])
                 ?? NightscoutTime.date(record["mills"]) ?? NightscoutTime.date(record["date"])
         else { return nil }
-        let eventType = record["eventType"] as? String ?? ""
-
+        let eventType = record.string("eventType") ?? ""
+        let kind: Kind
         if eventType == "Temp Basal" {
-            guard let minutes = PumpStatus.number(record["duration"]), minutes >= 0 else { return nil }
-            let rate = PumpStatus.number(record["absolute"]) ?? PumpStatus.number(record["rate"])
-            // A percent temp basal is relative to the profile, which isn't read.
+            guard let minutes = record.number("duration"), minutes >= 0 else { return nil }
+            // Without an absolute rate it's a cancel (zero duration) or a percent of the profile,
+            // which isn't read.
+            let rate = record.number("absolute") ?? record.number("rate")
             guard let rate = rate ?? (minutes == 0 ? 0 : nil), rate >= 0 else { return nil }
             kind = .tempBasal(rate: rate, minutes: minutes)
-        } else if let units = PumpStatus.number(record["insulin"]), units > 0 {
+        } else if let units = record.number("insulin"), units > 0 {
             kind = .bolus(units: units)
         } else if eventType == "Announcement" || eventType == "Note",
-                  let notes = (record["notes"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  let notes = record.string("notes")?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !notes.isEmpty {
             kind = .note(notes)
         } else {
             return nil
         }
-        self.date = date
-        // Nightscout always sends an `_id`; the fallback only keeps the dedupe
-        // in `ReadingStore` from merging two records that lack one.
-        id = record["_id"] as? String ?? "\(eventType)@\(date.timeIntervalSince1970)"
-    }
-
-    var bolusUnits: Double? {
-        if case .bolus(let units) = kind { return units }
-        return nil
-    }
-
-    var noteText: String? {
-        if case .note(let text) = kind { return text }
-        return nil
-    }
-
-    var isTempBasal: Bool {
-        if case .tempBasal = kind { return true }
-        return false
+        // Nightscout always sends an `_id`; the fallback keeps id-less records apart in the dedupe.
+        self.init(id: record.string("_id") ?? "\(eventType)@\(date.timeIntervalSince1970)", date: date, kind: kind)
     }
 }
 
-/// Nightscout's two ways of writing a time: `created_at` as an ISO 8601 string
-/// (with or without milliseconds, in UTC or with an offset), and `date`/`mills`
-/// as epoch milliseconds.
+/// Nightscout's two time encodings: ISO 8601 strings (`created_at`, with or without fractional
+/// seconds, any UTC offset) and epoch milliseconds (`date`, `mills`).
 enum NightscoutTime {
     static func date(_ value: Any?) -> Date? {
         if let text = value as? String {
             return (try? Date(text, strategy: withFraction)) ?? (try? Date(text, strategy: withoutFraction))
         }
-        guard let ms = PumpStatus.number(value), ms > 0 else { return nil }
-        return Date(timeIntervalSince1970: ms / 1000)
+        guard let milliseconds = jsonNumber(value), milliseconds > 0 else { return nil }
+        return Date(timeIntervalSince1970: milliseconds / 1000)
     }
 
-    /// The form Nightscout stores `created_at` in, so a `find[created_at]`
-    /// filter compares like with like: the server compares those as strings.
+    /// The format Nightscout stores `created_at` in; a `find[created_at]` filter compares as strings.
     static func string(_ date: Date) -> String { date.formatted(withFraction) }
 
     private static let withFraction = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
     private static let withoutFraction = Date.ISO8601FormatStyle()
 }
 
-/// Display text for the pump values, through `String(format:)` like the
-/// readings, so a dot is the decimal separator whatever the system region.
+/// `String(format:)` rather than a `FormatStyle`, so the decimal separator is a dot in every region.
 enum PumpFormat {
     static func insulin(_ units: Double) -> String { String(format: "%.2f U", units) }
     static func dailyInsulin(_ units: Double) -> String { String(format: "%.1f U", units) }
     static func rate(_ unitsPerHour: Double) -> String { String(format: "%.2f U/h", unitsPerHour) }
     static func battery(_ percent: Double) -> String { String(format: "%.0f%%", percent) }
 
-    /// One decimal, or two for the small doses some loops give ("0.05 U").
+    /// Two decimals only for the finer doses some loops give ("0.05 U").
     static func bolus(_ units: Double) -> String {
-        let tenths = (units * 10).rounded()
-        return abs(units * 10 - tenths) < 0.001 ? String(format: "%.1f U", units) : String(format: "%.2f U", units)
+        let tenths = units * 10
+        return String(format: abs(tenths - tenths.rounded()) < 0.001 ? "%.1f U" : "%.2f U", units)
     }
 
-    /// Whole units once there's enough left for a decimal to be noise.
     static func reservoir(_ units: Double) -> String {
-        units >= 10 ? String(format: "%.0f U", units) : String(format: "%.1f U", units)
+        String(format: units >= 10 ? "%.0f U" : "%.1f U", units)
     }
 
-    /// Time since a change, Nightscout's age-pill style: "35m", "5h", "1d 4h".
-    /// Rounds down, like `ReadingStore.compactAge`.
-    static func age(since date: Date, now: Date = Date()) -> String {
+    /// Nightscout's age-pill style, rounded down: "35m", "5h", "1d 4h".
+    static func age(since date: Date, now: Date = .now) -> String {
         let minutes = max(0, Int(now.timeIntervalSince(date)) / 60)
         if minutes < 60 { return "\(minutes)m" }
         let hours = minutes / 60
         if hours < 24 { return "\(hours)h" }
-        return hours % 24 == 0 ? "\(hours / 24)d" : "\(hours / 24)d \(hours % 24)h"
+        let (days, remainder) = hours.quotientAndRemainder(dividingBy: 24)
+        return remainder == 0 ? "\(days)d" : "\(days)d \(remainder)h"
     }
+}
+
+private extension [String: Any] {
+    func object(_ key: String) -> [String: Any]? { self[key] as? [String: Any] }
+    func number(_ key: String) -> Double? { jsonNumber(self[key]) }
+    func string(_ key: String) -> String? { self[key] as? String }
+    func bool(_ key: String) -> Bool? { self[key] as? Bool }
+}
+
+/// A finite JSON number, or a string holding one. No `is Bool` guard: `NSNumber` casts to `Bool`
+/// whenever it holds 0 or 1, so the guard would drop every insulin on board of 0.
+private func jsonNumber(_ value: Any?) -> Double? {
+    let number = (value as? Double) ?? (value as? String).flatMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+    guard let number, number.isFinite else { return nil }
+    return number
 }
