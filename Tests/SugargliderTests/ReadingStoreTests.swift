@@ -117,6 +117,25 @@ extension SugargliderTests {
         #expect(merged.map(\.sgv) == [115, 120])
     }
 
+    @Test(arguments: [(10.0, [100, 110, 120]), (40.0, [100])])
+    func pollAddsToTheHistoryOnlyWithoutADropout(cachedMinutesAgo: Double, history: [Int]) async throws {
+        let nowMs = epochMillis(.now)
+        let server = try LocalHTTPServer(json: """
+            [{"sgv":120,"direction":"Flat","date":\(nowMs)},
+             {"sgv":110,"direction":"Flat","date":\(nowMs - 300_000)}]
+            """)
+        defer { server.stop() }
+        let settings = Self.makeSettings()
+        settings.baseURL = server.baseURL
+        let store = ReadingStore(settings: settings)
+        store.readings = [reading(100, minutesAgo: cachedMinutesAgo)]
+
+        store.refresh()
+        try await waitUntil("the poll") { store.lastReading != nil }
+        #expect(store.lastReading?.sgv == 120)
+        #expect(store.readings.map(\.sgv) == history)
+    }
+
     @Test func historyAsksForTheWindowOnceThenOnlyForWhatIsNewer() async throws {
         let nowMs = epochMillis(.now)
         let server = try LocalHTTPServer(json: """
