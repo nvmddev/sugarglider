@@ -242,6 +242,8 @@ extension SugargliderTests {
         #expect(date == NightscoutTime.date("2030-01-01T08:00:00.128Z"))
         let line = try #require(server.requestLines.first)
         #expect(line.contains("eventType%5D=Insulin%20Change"))
+        // Without a date filter Nightscout searches only the last two days.
+        #expect(line.contains("created_at%5D%5B$gte%5D=1970-01-01T00:00:00.000Z"))
         #expect(line.contains("count=1"))
 
         let empty = try LocalHTTPServer(json: "[]")
