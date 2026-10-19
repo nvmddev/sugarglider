@@ -430,7 +430,7 @@ struct ChartCanvas: View {
             let insulin = [target.bolus?.bolusUnits.map { "Bolus " + PumpFormat.bolus($0) },
                            ChartMath.rate(at: target.date, in: l.steps).map(PumpFormat.rate)].compactMap { $0 }
             PillPlacement(centerX: l.x(target.date), minX: l.plot.minX + 4, maxX: l.plot.maxX - 4,
-                          top: l.screenY(l.plot.maxY) + 6) {
+                          top: l.screenY(l.plot.maxY) + 6, bottom: l.screenY(l.plot.minY) - 4) {
                 HoverPill(title: target.reading.map { "\($0.text(in: l.units)) · \(time)" } ?? time,
                           insulin: insulin.isEmpty ? nil : insulin.joined(separator: " · "),
                           note: target.note?.noteText.map { Self.clipped($0) })
@@ -477,12 +477,13 @@ private struct HoverPill: View {
 }
 
 /// Centers the pill on the crosshair, kept between `minX` and `maxX`, and wraps its text at
-/// that width.
+/// that width. A note too long to end above `bottom` is truncated.
 private struct PillPlacement: SwiftUI.Layout {
     let centerX: CGFloat
     let minX: CGFloat
     let maxX: CGFloat
     let top: CGFloat
+    let bottom: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
         proposal.replacingUnspecifiedDimensions()
@@ -490,7 +491,7 @@ private struct PillPlacement: SwiftUI.Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
         guard let pill = subviews.first else { return }
-        let size = pill.sizeThatFits(ProposedViewSize(width: max(maxX - minX, 0), height: nil))
+        let size = pill.sizeThatFits(ProposedViewSize(width: max(maxX - minX, 0), height: max(bottom - top, 0)))
         let x = max(minX, min(centerX - size.width / 2, maxX - size.width))
         pill.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + top), proposal: ProposedViewSize(size))
     }
