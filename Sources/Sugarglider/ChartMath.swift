@@ -145,6 +145,28 @@ enum ChartMath {
         }
     }
 
+    /// Pump data for the Settings preview, on the sweeps `sampleReadings` draws over the same
+    /// `span` and `cycles`: the rate drops into each low and climbs with each rise, an alert marks
+    /// the low, a meal bolus comes just before the rise and a correction near its peak.
+    static func sampleTreatments(endingAt end: Date, span: TimeInterval, cycles: Double = 1) -> [Treatment] {
+        let cycles = max(cycles, 1)
+        let sweep = span / cycles
+        // The next temp basal ends each one, so lasting a whole sweep is always long enough.
+        func basal(_ rate: Double) -> Treatment.Kind { .tempBasal(rate: rate, minutes: sweep / 60) }
+        let events: [(t: Double, kind: Treatment.Kind)] = [
+            (0.00, basal(0.8)), (0.08, basal(0.45)), (0.17, basal(0.15)), (0.25, .note("Low glucose")),
+            (0.33, basal(0.5)), (0.43, .bolus(units: 5.5)), (0.45, basal(1.0)), (0.55, basal(1.8)),
+            (0.68, basal(2.4)), (0.72, .bolus(units: 1.5)), (0.80, basal(1.4)), (0.90, basal(0.9)),
+        ]
+        let start = end.addingTimeInterval(-span)
+        return (0..<Int(cycles.rounded(.up))).flatMap { cycle in
+            events.enumerated().compactMap { index, event -> Treatment? in
+                let date = start.addingTimeInterval((Double(cycle) + event.t) * sweep)
+                return date <= end ? Treatment(id: "sample-\(cycle)-\(index)", date: date, kind: event.kind) : nil
+            }
+        }
+    }
+
     /// From a day on, both ends of the axis can show the same clock time.
     static func labelsNeedDay(span: TimeInterval) -> Bool { span >= 24 * 3600 }
 

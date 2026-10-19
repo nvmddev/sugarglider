@@ -503,7 +503,7 @@ extension SugargliderTests {
         #expect(AppSettings.colorKeys == [
             "bandColor", "inRangeColor", "belowColor", "aboveColor",
             "extremeLowColor", "extremeHighColor", "lineShadingColor", "dotColor",
-            "sliderColor", "chartBackgroundColor",
+            "sliderColor", "chartBackgroundColor", "bolusColor", "deliveryRateColor", "announcementColor",
         ])
     }
 
@@ -651,6 +651,26 @@ extension SugargliderTests {
         #expect(s.matchingPreset()?.name == "legacy")
         s.apply(legacy)
         #expect(s.appearance == look)
+    }
+
+    /// Likewise for a color added after the preset was saved: without this, every preset
+    /// would turn into "Custom" with the update that adds a color.
+    @Test func presetsWithoutAColorLeaveItAlone() {
+        let s = Self.makeSettings()
+        var legacy = s.currentPreset(name: "legacy")
+        legacy.colors["bolusColor"] = nil
+        s.saveColorPreset(legacy)
+        #expect(s.matchingPreset()?.name == "legacy")
+
+        let bolus = Color(red: 0.2, green: 0.4, blue: 0.9, opacity: 1)
+        s.bolusColor = bolus
+        #expect(s.matchingPreset()?.name == "legacy")
+        s.apply(legacy)
+        #expect(AppSettings.colorsMatch(s.bolusColor, bolus))
+
+        // The colors it does carry still decide.
+        s.inRangeColor = Color(red: 1, green: 0, blue: 0, opacity: 1)
+        #expect(s.matchingPreset() == nil)
     }
 
     @Test func applyPresetSetsColorsAndBackgroundFlag() {

@@ -160,9 +160,11 @@ private struct ColorsTab: View {
         VStack(alignment: .leading, spacing: 6) {
             GroupBox {
                 VStack(spacing: 8) {
+                    let treatments = sampleTreatments
+                    // Grows by the lane like the dropdown's chart, so the lane doesn't squeeze the plot.
                     ChartCanvas(readings: sampleReadings, rangeHours: Int(previewHours),
-                                settings: settings, windowEnd: sampleEnd)
-                        .frame(height: 120)
+                                settings: settings, windowEnd: sampleEnd, treatments: treatments)
+                        .frame(height: 120 + ChartCanvas.laneSpace(for: treatments, settings: settings))
                     HStack(spacing: 8) {
                         TintedSlider(value: $previewHours, range: Self.previewHoursBounds, step: 2,
                                      tint: settings.sliderColor,
@@ -203,6 +205,11 @@ private struct ColorsTab: View {
             endingAt: sampleEnd, count: Int(previewHours) * 12 + 1,
             cycles: previewCycles
         )
+    }
+
+    // Shown or not by the Pump tab's chart switches, like the real chart.
+    private var sampleTreatments: [Treatment] {
+        ChartMath.sampleTreatments(endingAt: sampleEnd, span: previewHours * 3600, cycles: previewCycles)
     }
 
     private var form: some View {
@@ -252,6 +259,19 @@ private struct ColorsTab: View {
                 ColorPicker("Range slider", selection: $settings.sliderColor)
                 Toggle("Graph background", isOn: $settings.chartBackgroundEnabled)
                 ColorPicker("Background color", selection: $settings.chartBackgroundColor)
+            }
+            Section {
+                ColorPicker("Boluses", selection: $settings.bolusColor)
+                    .disabled(!settings.chartShowsBoluses)
+                ColorPicker("Delivery rate", selection: $settings.deliveryRateColor)
+                    .disabled(!settings.chartShowsDeliveryRate)
+                ColorPicker("Announcements", selection: $settings.announcementColor)
+                    .disabled(!settings.chartShowsAnnouncements)
+            } header: {
+                Text("Pump data")
+            } footer: {
+                Text("Switch an item on in the Pump tab to color it.")
+                    .foregroundStyle(.secondary)
             }
             Button("Reset Colors to Default") { settings.resetColors() }
         }

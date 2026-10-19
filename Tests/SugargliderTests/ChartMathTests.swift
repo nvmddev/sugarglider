@@ -92,6 +92,44 @@ extension SugargliderTests {
         #expect(values.allSatisfy { (40...400).contains($0) })
     }
 
+    @Test func sampleTreatmentsFollowTheSampleSweeps() throws {
+        let end = Date.now, span: TimeInterval = 6 * 3600
+        let start = end.addingTimeInterval(-span)
+        let treatments = ChartMath.sampleTreatments(endingAt: end, span: span, cycles: 2)
+
+        #expect(treatments.allSatisfy { (start...end).contains($0.date) })
+        #expect(zip(treatments, treatments.dropFirst()).allSatisfy { $0.date <= $1.date })
+        #expect(Set(treatments.map(\.id)).count == treatments.count)
+        #expect(treatments.filter { $0.bolusUnits != nil }.count == 4)
+
+        // The rate covers the whole window in one run.
+        let steps = ChartMath.deliverySteps(treatments, from: start, to: end)
+        #expect(ChartMath.contiguousRuns(steps).count == 1)
+        #expect(steps.first?.start == start)
+        #expect(steps.last?.end == end)
+
+        // Each alert sits on a low of the sample curve.
+        let readings = ChartMath.sampleReadings(extremeLow: 54, targetLow: 70, targetHigh: 180, extremeHigh: 250,
+                                                endingAt: end, count: 6 * 12 + 1, cycles: 2)
+        let alerts = treatments.filter { $0.noteText != nil }
+        #expect(alerts.count == 2)
+        for alert in alerts {
+            let nearest = try #require(readings.min {
+                abs($0.date.timeIntervalSince(alert.date)) < abs($1.date.timeIntervalSince(alert.date))
+            })
+            #expect(nearest.sgv < 54)
+        }
+    }
+
+    /// Half a sweep keeps its alert and meal bolus but not the correction, which falls past the end.
+    @Test func sampleTreatmentsStopAtTheWindowEnd() {
+        let end = Date.now
+        let treatments = ChartMath.sampleTreatments(endingAt: end, span: 6 * 3600, cycles: 1.5)
+        #expect(treatments.allSatisfy { $0.date <= end })
+        #expect(treatments.compactMap(\.bolusUnits) == [5.5, 1.5, 5.5])
+        #expect(treatments.filter { $0.noteText != nil }.count == 2)
+    }
+
     @Test func nearestIndexFindsClosestByX() {
         let base = Date.now
         let offsets: [TimeInterval] = [0, 300, 600]
@@ -211,5 +249,35 @@ extension SugargliderTests {
         let readings = [300, 100, 95, 90, 0].map { reading(120, minutesAgo: $0, from: base) }
         let chart = ChartCanvas(readings: readings, rangeHours: 6, settings: Self.makeSettings())
         #expect(renderedImage(chart) != nil)
+    }
+
+    /// A color that never reaches the chart is a picker doing nothing, as `sliderColor` once did.
+    @Test func pumpLayersDrawInTheirOwnColors() throws {
+        let s = Self.makeSettings()
+        s.chartShowsDeliveryRate = true
+        s.chartShowsAnnouncements = true
+        let end = Date.now
+        let samples = ChartMath.sampleReadings(
+            extremeLow: s.extremeLow, targetLow: s.targetLow,
+            targetHigh: s.targetHigh, extremeHigh: s.extremeHigh, endingAt: end)
+        let treatments = ChartMath.sampleTreatments(endingAt: end, span: 3 * 3600)
+        func chart() -> Data? {
+            pixels(of: ChartCanvas(readings: samples, rangeHours: 3, settings: s, windowEnd: end,
+                                   treatments: treatments))
+        }
+
+        let stock = try #require(chart())
+        let colors: [ReferenceWritableKeyPath<AppSettings, Color>] = [\.bolusColor, \.deliveryRateColor,
+                                                                       \.announcementColor]
+        for keyPath in colors {
+            let original = s[keyPath: keyPath]
+            s[keyPath: keyPath] = Color(red: 0.9, green: 0.1, blue: 0.2, opacity: 1)
+            let recolored = try #require(chart())
+            // Not just unequal: once a color made from `labelColor` has been archived, as every
+            // assignment does, later renders drift by ±1 in a few pixels anyway.
+            let largest = zip(recolored, stock).map { abs(Int($0) - Int($1)) }.max() ?? 0
+            #expect(largest > 64, "\(keyPath) doesn't reach the chart")
+            s[keyPath: keyPath] = original
+        }
     }
 }

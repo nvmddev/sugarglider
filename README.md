@@ -85,9 +85,9 @@ straight away whether the connection works.
   low/high bounds are yours to set.
 - Pump data, if your site has it: active insulin, reservoir and battery under
   the reading, plus boluses, the delivery rate and pump or sensor alerts on the
-  chart. With CamAPS FX you may also get the pump mode and daily figures. Every
-  item has its own switch in **Settings → Pump**, and a site with only CGM data
-  shows none of it.
+  chart, in colors you pick. With CamAPS FX you may also get the pump mode and
+  daily figures. Every item has its own switch in **Settings → Pump**, and a
+  site with only CGM data shows none of it.
 - No notifications, ever. Sugarglider only sees your Nightscout site, so it
   can't tell a sensor gap from a flat uploader, and it won't pretend otherwise.
 

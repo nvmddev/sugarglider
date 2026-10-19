@@ -285,7 +285,7 @@ struct ChartCanvas: View {
             var mark = Path()
             mark.addLines([CGPoint(x: x - 3.5, y: top), CGPoint(x: x + 3.5, y: top), CGPoint(x: x, y: top - 5)])
             mark.closeSubpath()
-            ctx.fill(mark, with: .color(Self.ink.opacity(0.45)))
+            ctx.fill(mark, with: .color(settings.announcementColor))
         }
     }
 
@@ -363,7 +363,8 @@ struct ChartCanvas: View {
     }
 
     /// Rate and boluses share no axis, so each scales on its own, with a floor (1 U/h, 2 U) so a
-    /// quiet stretch or a lone small bolus doesn't stand full height.
+    /// quiet stretch or a lone small bolus doesn't stand full height. The rate's one color is its
+    /// edge; the area under it takes a light shade of that.
     private func drawLane(_ ctx: GraphicsContext, layout l: Layout) {
         guard let lane = l.lane else { return }
         ctx.stroke(Self.horizontalLine(at: lane.maxY, across: lane),
@@ -385,8 +386,8 @@ struct ChartCanvas: View {
             area.addLine(to: CGPoint(x: l.x(last.end), y: lane.minY))
             area.addLine(to: CGPoint(x: l.x(first.start), y: lane.minY))
             area.closeSubpath()
-            ctx.fill(area, with: .color(Self.ink.opacity(0.12)))
-            ctx.stroke(edge, with: .color(Self.ink.opacity(0.4)), lineWidth: 1)
+            ctx.fill(area, with: .color(settings.deliveryRateColor.opacity(0.3)))
+            ctx.stroke(edge, with: .color(settings.deliveryRateColor), lineWidth: 1)
         }
 
         let largest = max(l.boluses.compactMap(\.bolusUnits).max() ?? 0, 2)
@@ -394,7 +395,7 @@ struct ChartCanvas: View {
             guard let units = bolus.bolusUnits else { continue }
             let height = max(3, usable * CGFloat(min(units / largest, 1)))
             let bar = CGRect(x: l.x(bolus.date) - 1.25, y: lane.minY, width: 2.5, height: height)
-            ctx.fill(Path(roundedRect: bar, cornerRadius: 1.25), with: .color(Self.ink.opacity(0.6)))
+            ctx.fill(Path(roundedRect: bar, cornerRadius: 1.25), with: .color(settings.bolusColor))
         }
     }
 

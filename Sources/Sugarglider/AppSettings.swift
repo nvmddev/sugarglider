@@ -161,6 +161,9 @@ final class AppSettings {
     static let defaultSliderColor = Color(nsColor: .tertiaryLabelColor)
     /// Opaque: with a clear default, the color picker's opacity slider would open at zero.
     static let defaultChartBackgroundColor = Color(nsColor: .controlBackgroundColor)
+    static let defaultBolusColor = Color(nsColor: .labelColor).opacity(0.6)
+    static let defaultDeliveryRateColor = Color(nsColor: .labelColor).opacity(0.4)
+    static let defaultAnnouncementColor = Color(nsColor: .labelColor).opacity(0.45)
 
     var bandColor: Color = defaultBandColor { didSet { persistColor(bandColor, "bandColor") } }
     var inRangeColor: Color = defaultInRangeColor { didSet { persistColor(inRangeColor, "inRangeColor") } }
@@ -177,6 +180,13 @@ final class AppSettings {
     var sliderColor: Color = defaultSliderColor { didSet { persistColor(sliderColor, "sliderColor") } }
     var chartBackgroundColor: Color = defaultChartBackgroundColor {
         didSet { persistColor(chartBackgroundColor, "chartBackgroundColor") }
+    }
+    var bolusColor: Color = defaultBolusColor { didSet { persistColor(bolusColor, "bolusColor") } }
+    var deliveryRateColor: Color = defaultDeliveryRateColor {
+        didSet { persistColor(deliveryRateColor, "deliveryRateColor") }
+    }
+    var announcementColor: Color = defaultAnnouncementColor {
+        didSet { persistColor(announcementColor, "announcementColor") }
     }
 
     var chartBackgroundEnabled: Bool = false {
@@ -267,13 +277,18 @@ final class AppSettings {
         .init(key: "sliderColor", keyPath: \.sliderColor, defaultValue: defaultSliderColor),
         .init(key: "chartBackgroundColor", keyPath: \.chartBackgroundColor,
               defaultValue: defaultChartBackgroundColor),
+        .init(key: "bolusColor", keyPath: \.bolusColor, defaultValue: defaultBolusColor),
+        .init(key: "deliveryRateColor", keyPath: \.deliveryRateColor, defaultValue: defaultDeliveryRateColor),
+        .init(key: "announcementColor", keyPath: \.announcementColor, defaultValue: defaultAnnouncementColor),
     ]
 
     static var colorKeys: [String] { colorSlots.map(\.key) }
 
     struct ColorPreset {
         var name: String
-        var colors: [String: Color]   // keyed by `colorKeys`
+        /// Keyed by `colorKeys`. A preset saved before a color existed lacks its key, and that
+        /// color isn't part of it: `apply` leaves it alone and `matchingPreset()` ignores it.
+        var colors: [String: Color]
         var backgroundEnabled: Bool
         /// Nil for presets saved before appearances existed: they carry colors only.
         var appearance: Appearance? = nil
@@ -295,13 +310,11 @@ final class AppSettings {
     }
 
     func matchingPreset() -> ColorPreset? {
-        let current = currentColors()
-        return colorPresets.first { preset in
+        colorPresets.first { preset in
             preset.backgroundEnabled == chartBackgroundEnabled
                 && (preset.appearance == nil || preset.appearance == appearance)
                 && Self.colorSlots.allSatisfy { slot in
-                    guard let a = preset.colors[slot.key], let b = current[slot.key] else { return false }
-                    return Self.colorsMatch(a, b)
+                    preset.colors[slot.key].map { Self.colorsMatch($0, self[keyPath: slot.keyPath]) } ?? true
                 }
         }
     }
