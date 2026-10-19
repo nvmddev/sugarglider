@@ -136,10 +136,12 @@ struct MenuBarContentView: View {
 
     private var rangeFont: Font { .system(size: 11, design: .monospaced) }
 
-    // Not left to the focus change: if the field never took focus, none fires and the cell stays editable.
+    // The field goes a turn after its focus: dropping both in one update left SwiftUI's focus state stale,
+    // and every other click into the cell went nowhere. Not left to the focus change: if the field never
+    // took focus, none fires and the cell stays editable.
     private func endRangeEditing() {
         rangeFieldFocused = false
-        rangeFieldEditing = false
+        Task { rangeFieldEditing = false }
     }
 
     // Ends editing first: a focused TextField(value:) would go on showing its own half-typed buffer.
