@@ -23,7 +23,7 @@ icon, no window in the way.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/menubar-dark.png">
-  <img src="docs/menubar-light.png" width="303"
+  <img src="docs/menubar-light.png" width="257"
        alt="The menu bar item showing 5.6 with a rising arrow, the same with the change since the last reading, and a stale reading flagged with its age">
 </picture>
 
