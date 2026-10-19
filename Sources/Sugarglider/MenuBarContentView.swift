@@ -48,6 +48,7 @@ struct MenuBarContentView: View {
             store.refreshDetails(force: false)
         }
         .windowTheme(settings.theme)
+        .windowShowsToolTipsWhenInactive()
     }
 
     // The panel has nothing else focusable, so clicking anywhere must release the hours field. A background,

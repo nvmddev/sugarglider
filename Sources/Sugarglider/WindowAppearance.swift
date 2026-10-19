@@ -7,22 +7,35 @@ extension View {
     /// on the Settings window. `NSApp.appearance` would also retint the status item, which has to
     /// follow the menu bar.
     func windowTheme(_ theme: AppSettings.Theme) -> some View {
-        // Zero-sized because ImageRenderer draws an NSViewRepresentable as a yellow placeholder.
-        background(WindowThemeApplier(appearance: theme.nsAppearance).frame(width: 0, height: 0))
+        let appearance = theme.nsAppearance
+        return hostingWindow { window in
+            if window.appearance?.name != appearance?.name { window.appearance = appearance }
+        }
+    }
+
+    /// AppKit shows a window's tooltips only while its app is active, unless the window opts in, and the
+    /// dropdown opens over whichever app is in front.
+    func windowShowsToolTipsWhenInactive() -> some View {
+        hostingWindow { $0.allowsToolTipsWhenApplicationIsInactive = true }
+    }
+
+    // Zero-sized because ImageRenderer draws an NSViewRepresentable as a yellow placeholder.
+    private func hostingWindow(_ configure: @escaping (NSWindow) -> Void) -> some View {
+        background(WindowConfigurator(configure: configure).frame(width: 0, height: 0))
     }
 }
 
-private struct WindowThemeApplier: NSViewRepresentable {
-    var appearance: NSAppearance?
+private struct WindowConfigurator: NSViewRepresentable {
+    var configure: (NSWindow) -> Void
 
-    func makeNSView(context: Context) -> ApplierView { ApplierView() }
+    func makeNSView(context: Context) -> ConfiguratorView { ConfiguratorView() }
 
-    func updateNSView(_ view: ApplierView, context: Context) {
-        view.desired = appearance
+    func updateNSView(_ view: ConfiguratorView, context: Context) {
+        view.configure = configure
     }
 
-    final class ApplierView: NSView {
-        var desired: NSAppearance? {
+    final class ConfiguratorView: NSView {
+        var configure: ((NSWindow) -> Void)? {
             didSet { apply() }
         }
 
@@ -32,8 +45,7 @@ private struct WindowThemeApplier: NSViewRepresentable {
         }
 
         private func apply() {
-            guard let window, window.appearance?.name != desired?.name else { return }
-            window.appearance = desired
+            if let window { configure?(window) }
         }
     }
 }
