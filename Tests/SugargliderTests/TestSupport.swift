@@ -4,7 +4,7 @@ import Darwin
 import Synchronization
 @testable import Sugarglider
 
-@Suite @MainActor
+@Suite(.defaultsCleanup) @MainActor
 struct SugargliderTests {
     static func makeSettings(defaults: UserDefaults? = nil,
                              tokens: any TokenStorage = InMemoryTokenStore()) -> AppSettings {
@@ -12,8 +12,30 @@ struct SugargliderTests {
     }
 
     static func makeDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "SugargliderTests-\(UUID().uuidString)")!
+        UserDefaults(suiteName: DefaultsCleanup.directory.appending(path: UUID().uuidString).path)!
     }
+}
+
+/// A suite named by a path keeps its plist at that path, so the tests' suites live in a temporary directory
+/// that goes once all tests have run. A named suite is a plist in ~/Library/Preferences that no API removes:
+/// dropping the domain leaves an empty file, and cfprefsd rewrites a deleted one seconds later (measured).
+/// Every test run used to leave dozens there.
+struct DefaultsCleanup: SuiteTrait, TestScoping {
+    static let directory: URL = {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SugargliderTests-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }()
+
+    func provideScope(for test: Test, testCase: Test.Case?,
+                      performing function: @concurrent @Sendable () async throws -> Void) async throws {
+        defer { try? FileManager.default.removeItem(at: Self.directory) }
+        try await function()
+    }
+}
+
+extension Trait where Self == DefaultsCleanup {
+    static var defaultsCleanup: Self { Self() }
 }
 
 /// The real Keychain would prompt, because the test binary's signature changes with every build.
