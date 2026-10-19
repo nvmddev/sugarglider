@@ -171,6 +171,9 @@ extension SugargliderTests {
         #expect(s.staleAfterMinutes == AppSettings.staleAfterLimits.upperBound)
         #expect(s.dotRadius == AppSettings.dotRadiusLimits.lowerBound)
         #expect(s.dotHaloRadius == AppSettings.dotHaloRadiusLimits.upperBound)
+        // The clamping setters ran during init, and loading still writes nothing back.
+        #expect(defaults.integer(forKey: "rangeHours") == 100)
+        #expect(defaults.double(forKey: "dotHaloRadius") == 99)
     }
 
     @Test func unreadableStoredValuesKeepTheDefaults() {
