@@ -39,6 +39,17 @@ extension SugargliderTests {
         #expect(abs(try #require(status.averageYesterday) - 8.1 * 18) < 0.001)
     }
 
+    /// A NaN average would trap in the dropdown's `Int(mgdl.rounded())`.
+    @Test func pumpStatusReadsNumbersInStringsButNoNonFiniteOnes() throws {
+        let status = try #require(PumpStatus(record: record("""
+            {"created_at":"2030-01-01T12:00:00Z",
+             "camaps":{"glucose_mean_today_mmol":"nan","delivery_rate":"inf","insulin_today":" 21.5 "}}
+            """)))
+        #expect(status.averageToday == nil)
+        #expect(status.deliveryRate == nil)
+        #expect(status.insulinToday == 21.5)
+    }
+
     /// `NSNumber` casts to `Bool` when it holds 0 or 1, so an `is Bool` guard would drop these.
     @Test func pumpStatusKeepsZeroAndOne() throws {
         let status = try #require(PumpStatus(record: record("""
