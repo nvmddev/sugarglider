@@ -36,8 +36,10 @@ struct KeychainTokenStore: TokenStorage {
         // A build signed differently stores the token in the other Keychain, so a release that
         // starts or stops shipping the profile would otherwise appear to lose it.
         guard let stray = Self.read(dataProtection: !Self.usesDataProtection) else { return "" }
-        _ = Self.write(stray, dataProtection: Self.usesDataProtection)
-        Self.remove(dataProtection: !Self.usesDataProtection)
+        // Only a copy that arrived may replace the stray one, or a refused write loses the token.
+        if Self.write(stray, dataProtection: Self.usesDataProtection) {
+            Self.remove(dataProtection: !Self.usesDataProtection)
+        }
         return stray
     }
 
