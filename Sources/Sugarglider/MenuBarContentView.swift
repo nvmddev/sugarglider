@@ -5,6 +5,7 @@ struct MenuBarContentView: View {
     var store: ReadingStore
     @Environment(\.openSettings) private var openSettings
     @FocusState private var rangeFieldFocused: Bool
+    @FocusState private var rangeCellFocused: Bool
     @State private var rangeFieldEditing = false
 
     private let contentWidth: CGFloat = 280
@@ -112,19 +113,20 @@ struct MenuBarContentView: View {
                             if !focused { rangeFieldEditing = false }
                         }
                 } else {
-                    // Tap on the inert Text, not the ZStack, where it would steal the live field's clicks.
-                    Text("\(settings.rangeHours)")
-                        .font(rangeFont)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                        .padding(.trailing, 5)
-                        .contentShape(Rectangle())
-                        .onTapGesture { rangeFieldEditing = true }
-                        .accessibilityElement()
-                        .accessibilityLabel("Chart range in hours")
-                        .accessibilityValue("\(settings.rangeHours)")
-                        .accessibilityHint("Click to type an exact number of hours")
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction { rangeFieldEditing = true }
+                    // A button so keyboard navigation reaches the cell. On the inert side only, not the ZStack,
+                    // where it would steal the live field's clicks.
+                    Button(action: beginRangeEditing) {
+                        Text("\(settings.rangeHours)")
+                            .font(rangeFont)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                            .padding(.trailing, 5)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .focused($rangeCellFocused)
+                    .accessibilityLabel("Chart range in hours")
+                    .accessibilityValue("\(settings.rangeHours)")
+                    .accessibilityHint("Click to type an exact number of hours")
                 }
             }
             .frame(width: 32, height: 20)
@@ -135,6 +137,13 @@ struct MenuBarContentView: View {
     }
 
     private var rangeFont: Font { .system(size: 11, design: .monospaced) }
+
+    // The cell lets go of the keyboard focus before the field replaces it: a field swapped in under a focused
+    // button lost its focus to the button's cleanup, and with keyboard navigation on, the cell has it on open.
+    private func beginRangeEditing() {
+        rangeCellFocused = false
+        Task { rangeFieldEditing = true }
+    }
 
     // The field goes a turn after its focus: dropping both in one update left SwiftUI's focus state stale,
     // and every other click into the cell went nowhere. Not left to the focus change: if the field never
