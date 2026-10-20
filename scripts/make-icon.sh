@@ -74,6 +74,7 @@ fi
     echo "       full Xcode 26 or newer; the Command Line Tools don't ship it." >&2
     exit 1
 }
+MIN_MACOS="$(swift package describe --type json | plutil -extract platforms.0.version raw -o - -)"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
@@ -88,7 +89,7 @@ compile_icon() {
         --compile "${output}" \
         --app-icon AppIcon \
         --platform macosx \
-        --minimum-deployment-target 14.0 \
+        --minimum-deployment-target "${MIN_MACOS}" \
         --output-partial-info-plist "${output}/partial.plist" \
         --errors --warnings >/dev/null
     [[ -f "${output}/Assets.car" && -f "${output}/AppIcon.icns" ]] \

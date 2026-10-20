@@ -18,7 +18,7 @@ cd "$(dirname "$0")"
 APP="Sugarglider.app"
 BIN="Sugarglider"
 BUNDLE_ID="dev.nevermind.sugarglider"
-MIN_MACOS="26.0"
+MIN_MACOS="$(swift package describe --type json | plutil -extract platforms.0.version raw -o - -)"
 
 VERSION="${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)}"
 VERSION="${VERSION:-0.0.0-dev}"
