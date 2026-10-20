@@ -72,8 +72,7 @@ struct ChartCanvas: View {
         var size: CGSize
         var start: Date
         var end: Date
-        var lo: Double
-        var hi: Double
+        var axis: ChartMath.ValueAxis
         var units: AppSettings.Units
         var boluses: [Treatment]
         var notes: [Treatment]
@@ -87,7 +86,7 @@ struct ChartCanvas: View {
 
         /// Takes display units, unlike `bandY(mgdl:)`.
         func y(_ value: Double) -> CGFloat {
-            plot.minY + CGFloat((value - lo) / (hi - lo)) * plot.height
+            plot.minY + CGFloat((value - axis.lo) / (axis.hi - axis.lo)) * plot.height
         }
 
         func y(of reading: Reading) -> CGFloat { y(units.value(fromMgdl: reading.sgv)) }
@@ -141,17 +140,14 @@ struct ChartCanvas: View {
             ? ChartMath.deliverySteps(treatments, from: start, to: end) : []
 
         let units = settings.units
-        let mgdl = units == .mgdl
-        let targetLow = units.display(settings.targetLow), targetHigh = units.display(settings.targetHigh)
-        let pad = mgdl ? 10.0 : 0.5, minSpan = mgdl ? 40.0 : 2.0
-        let clampLow = mgdl ? 40.0 : 2.0, clampHigh = mgdl ? 500.0 : 28.0
-        let values = visible.map { units.value(fromMgdl: $0.sgv) }
-        let lo = max(clampLow, (min(values.min() ?? targetLow, targetLow) - pad).rounded(.down))
-        let hi = max(min(clampHigh, (max(values.max() ?? targetHigh, targetHigh) + pad).rounded(.up)),
-                     lo + minSpan)
+        let axis = ChartMath.valueAxis(
+            values: visible.map { units.value(fromMgdl: $0.sgv) },
+            thresholds: [settings.extremeLow, settings.targetLow, settings.targetHigh, settings.extremeHigh]
+                .map { units.display($0) },
+            mgdl: units == .mgdl)
 
         return Layout(visible: visible, latest: latest, plot: plot, lane: lane, size: size,
-                      start: start, end: end, lo: lo, hi: hi, units: units,
+                      start: start, end: end, axis: axis, units: units,
                       boluses: boluses, notes: notes, steps: steps)
     }
 
@@ -247,8 +243,8 @@ struct ChartCanvas: View {
 
     private func drawGridlines(_ ctx: GraphicsContext, labels: GraphicsContext, layout l: Layout,
                                avoiding taken: [CGRect]) {
-        let step = ChartMath.niceStep(l.hi - l.lo)
-        for level in stride(from: (l.lo / step).rounded(.up) * step, through: l.hi, by: step) {
+        let axis = l.axis
+        for level in stride(from: (axis.lo / axis.step).rounded(.up) * axis.step, through: axis.hi, by: axis.step) {
             let y = l.y(level)
             ctx.stroke(Self.horizontalLine(at: y, across: l.plot),
                        with: .color(Self.separator.opacity(0.35)), lineWidth: 0.5)

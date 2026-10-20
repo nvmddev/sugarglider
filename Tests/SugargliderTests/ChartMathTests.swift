@@ -25,6 +25,25 @@ extension SugargliderTests {
         #expect(abs(ChartMath.niceStep(2) - 0.5) < 1e-9)
     }
 
+    @Test func valueAxisKeepsTheThresholdsInViewOnAQuietDay() {
+        let axis = ChartMath.valueAxis(values: [5.6, 7.4, 6.1], thresholds: [3.0, 3.9, 10.0, 13.9], mgdl: false)
+        // Gridlines 2…14, half a step past the top one; the bottom stops at the 2 mmol/L clamp.
+        #expect(axis == .init(lo: 2, hi: 15, step: 2))
+    }
+
+    @Test func valueAxisWidensForReadingsBeyondTheThresholds() {
+        let axis = ChartMath.valueAxis(values: [80, 320], thresholds: [54, 70, 180, 250], mgdl: true)
+        #expect(axis == .init(lo: 40, hi: 375, step: 50))
+    }
+
+    @Test func valueAxisStaysWithinTheClampsAndAMinimumSpan() {
+        let clamped = ChartMath.valueAxis(values: [39, 600], thresholds: [70, 180], mgdl: true)
+        #expect(clamped == .init(lo: 40, hi: 500, step: 100))
+
+        let flat = ChartMath.valueAxis(values: [6, 6], thresholds: [6, 6], mgdl: false)
+        #expect(flat.hi - flat.lo >= 2)
+    }
+
     @Test func labelsNeedDayOnceAWindowCanRepeatAClockTime() {
         #expect(ChartMath.labelsNeedDay(span: 6 * 3600) == false)
         #expect(ChartMath.labelsNeedDay(span: 23.5 * 3600) == false)

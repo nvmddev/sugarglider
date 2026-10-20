@@ -178,4 +178,27 @@ enum ChartMath {
         let nice: Double = normalized < 1.5 ? 1 : (normalized < 3 ? 2 : (normalized < 7 ? 5 : 10))
         return nice * magnitude
     }
+
+    /// The glucose axis, in display units.
+    struct ValueAxis: Equatable {
+        var lo: Double
+        var hi: Double
+        var step: Double
+    }
+
+    /// Always reaches every threshold, so a quiet day keeps the scale of a wild one rather than
+    /// being stretched to fill the chart. Each end lies half a step past a gridline, so the
+    /// outermost lines don't vanish into the frame. Only the readings get a margin of their own,
+    /// for the line's stroke.
+    static func valueAxis(values: [Double], thresholds: [Double], mgdl: Bool) -> ValueAxis {
+        let pad = mgdl ? 10.0 : 0.5, minSpan = mgdl ? 40.0 : 2.0
+        let clampLow = mgdl ? 40.0 : 2.0, clampHigh = mgdl ? 500.0 : 28.0
+        let ends = values.flatMap { [$0 - pad, $0 + pad] } + thresholds
+        let low = max(clampLow, ends.min() ?? clampLow)
+        let high = max(min(clampHigh, ends.max() ?? clampHigh), low + minSpan)
+        let step = niceStep(high - low)
+        let lo = max(clampLow, (low / step).rounded(.down) * step - step / 2)
+        let hi = min(clampHigh, (high / step).rounded(.up) * step + step / 2)
+        return ValueAxis(lo: lo, hi: max(hi, lo + minSpan), step: step)
+    }
 }
