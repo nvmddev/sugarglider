@@ -139,7 +139,9 @@ struct DropdownShot: View {
 
     var body: some View {
         MenuBarContentView(settings: settings, store: store)
-            .overlay(alignment: .bottom) { ActionRowStandIn(appearance: appearance).padding(18) }
+            .overlay(alignment: .bottom) {
+                ActionRowStandIn(appearance: appearance).padding(MenuBarContentView.insets)
+            }
             .background(appearance.panelBackground)
             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay {

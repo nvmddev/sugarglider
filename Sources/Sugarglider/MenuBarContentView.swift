@@ -9,11 +9,14 @@ struct MenuBarContentView: View {
     @State private var rangeFieldEditing = false
 
     private let contentWidth: CGFloat = 280
+    private static let spacing: CGFloat = 10
+    /// The button row sits as far above the bottom edge as below the divider, so it reads centered between them.
+    static let insets = EdgeInsets(top: 18, leading: 18, bottom: spacing, trailing: 18)
     private static let rangeSliderBounds =
         Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Self.spacing) {
             ChartCanvas(readings: store.readings, rangeHours: settings.rangeHours, settings: settings,
                         treatments: store.treatments)
                 .frame(height: 135 + ChartCanvas.laneSpace(for: store.treatments, settings: settings))
@@ -41,7 +44,7 @@ struct MenuBarContentView: View {
             actionButtons
         }
         .frame(width: contentWidth)
-        .padding(18)
+        .padding(Self.insets)
         .background(defocusBackdrop)
         .onAppear {
             store.refreshHistory(force: false)
