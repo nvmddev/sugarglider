@@ -62,27 +62,26 @@ struct MenuBarContentView: View {
             .onTapGesture { endRangeEditing() }
     }
 
+    // Not .glass: the panel is glass already, and Apple advises against glass on glass.
     private var actionButtons: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 8) {
-                actionButton("Refresh", systemImage: "arrow.clockwise", shortcut: "r") {
-                    store.refresh()
-                    store.refreshHistory(force: true)
-                    store.refreshDetails(force: true)
-                }
-                actionButton("Settings…", systemImage: "gearshape", shortcut: ",") { showSettings() }
-                Spacer()
-                actionButton("Quit", systemImage: "power", shortcut: "q") { NSApp.terminate(nil) }
+        HStack(spacing: 8) {
+            actionButton("Refresh", systemImage: "arrow.clockwise", shortcut: "r") {
+                store.refresh()
+                store.refreshHistory(force: true)
+                store.refreshDetails(force: true)
             }
+            actionButton("Settings…", systemImage: "gearshape", shortcut: ",") { showSettings() }
+            Spacer()
+            actionButton("Quit", systemImage: "power", shortcut: "q") { NSApp.terminate(nil) }
         }
-        .buttonStyle(.glass)
+        .buttonStyle(.bordered)
         .buttonBorderShape(.circle)
     }
 
     private func actionButton(_ title: String, systemImage: String, shortcut: KeyEquivalent,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            // A glass circle sizes to its label, so only equal squares give equal circles.
+            // A circle sizes to its label, so only equal squares give equal circles.
             Label(title, systemImage: systemImage)
                 .labelStyle(.iconOnly)
                 .frame(width: 18, height: 18)
