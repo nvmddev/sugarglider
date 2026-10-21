@@ -13,6 +13,14 @@ extension View {
         }
     }
 
+    /// Glass, or the window color over the glass. The glass clips its content to its own shape, so the solid
+    /// color keeps the round corners. `containerBackground(_:for: .window)` has no effect on this panel.
+    func dropdownBackground(_ background: AppSettings.DropdownBackground) -> some View {
+        self.background {
+            if background == .solid { Color(nsColor: .windowBackgroundColor) }
+        }
+    }
+
     /// AppKit shows a window's tooltips only while its app is active, unless the window opts in, and the
     /// dropdown opens over whichever app is in front.
     func windowShowsToolTipsWhenInactive() -> some View {

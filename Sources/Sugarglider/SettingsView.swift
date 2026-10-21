@@ -56,6 +56,10 @@ private struct GeneralTab: View {
                     Text("Light").tag(AppSettings.Theme.light)
                     Text("Dark").tag(AppSettings.Theme.dark)
                 }
+                Picker("Dropdown background", selection: $settings.dropdownBackground) {
+                    Text("Glass").tag(AppSettings.DropdownBackground.glass)
+                    Text("Solid").tag(AppSettings.DropdownBackground.solid)
+                }
                 Picker("Units", selection: $settings.units) {
                     Text("mmol/L").tag(AppSettings.Units.mmol)
                     Text("mg/dL").tag(AppSettings.Units.mgdl)

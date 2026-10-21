@@ -46,6 +46,7 @@ struct MenuBarContentView: View {
         .frame(width: contentWidth)
         .padding(Self.insets)
         .background(defocusBackdrop)
+        .dropdownBackground(settings.dropdownBackground)
         .onAppear {
             store.refreshHistory(force: false)
             store.refreshDetails(force: false)

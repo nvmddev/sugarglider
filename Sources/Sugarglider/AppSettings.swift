@@ -116,6 +116,12 @@ final class AppSettings {
 
     var theme: Theme = .system { didSet { persist(theme.rawValue, "theme") } }
 
+    enum DropdownBackground: String { case glass, solid }
+
+    var dropdownBackground: DropdownBackground = .glass {
+        didSet { persist(dropdownBackground.rawValue, "dropdownBackground") }
+    }
+
     enum DeltaDisplay: Int { case off = 0, menu = 1, menuAndStatusBar = 2 }
 
     var deltaDisplay: DeltaDisplay = .menu { didSet { persist(deltaDisplay.rawValue, "deltaDisplay") } }
@@ -395,6 +401,7 @@ final class AppSettings {
         load(\.extremeLow, "extremeLow")
         load(\.extremeHigh, "extremeHigh")
         load(\.theme, "theme")
+        load(\.dropdownBackground, "dropdownBackground")
         load(\.deltaDisplay, "deltaDisplay")
         load(\.rangeHours, "rangeHours")
         load(\.staleAfterMinutes, "staleAfterMinutes")
