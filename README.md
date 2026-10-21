@@ -77,6 +77,8 @@ straight away whether the connection works.
 - A chart of the last 2 to 72 hours. Drag the slider or type an exact number of
   hours. Hover any point for its value and time. Gaps longer than 15 minutes
   break the line instead of pretending there was data.
+- When a reading is past what your sensor can measure, you see LOW or HIGH,
+  as in Nightscout, and the chart line turns dotted for that stretch.
 - Color by zone: very low, below, in range, above, very high. Pick every
   color yourself, or blend them smoothly, or save a look as a preset and
   switch back to it later. The stock palette is monochrome and follows

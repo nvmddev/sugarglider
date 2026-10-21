@@ -292,11 +292,12 @@ final class ReadingStore {
 }
 
 extension ReadingStore {
-    /// Signed change since the previous reading, e.g. "+0.3"; nil when switched off or when the
-    /// two readings aren't consecutive.
+    /// Signed change since the previous reading, e.g. "+0.3"; nil when switched off, when the
+    /// two readings aren't consecutive, or when either is LOW or HIGH, which have no value.
     func deltaText() -> String? {
         guard settings.deltaDisplay != .off,
-              let current = lastReading, let previous = previousReading else { return nil }
+              let current = lastReading, let previous = previousReading,
+              current.outOfRange == nil, previous.outOfRange == nil else { return nil }
         let gap = current.date.timeIntervalSince(previous.date)
         guard gap > 0, gap < 12 * 60 else { return nil }
         let units = settings.units
