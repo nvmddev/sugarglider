@@ -8,8 +8,8 @@ struct SugargliderApp: App {
     init() {
         let settings = AppSettings()
         let store = ReadingStore(settings: settings)
-        _settings = State(initialValue: settings)
-        _store = State(initialValue: store)
+        self.settings = settings
+        self.store = store
         store.start()
     }
 

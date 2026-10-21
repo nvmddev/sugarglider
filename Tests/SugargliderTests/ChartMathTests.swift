@@ -1,9 +1,8 @@
 import AppKit
-import Testing
 import SwiftUI
+import Testing
 @testable import Sugarglider
 
-/// `Path` exposes no equivalent of `NSBezierPath.elementCount`, so collect them.
 private func elements(of path: Path) -> [Path.Element] {
     var result: [Path.Element] = []
     path.forEach { result.append($0) }
@@ -26,97 +25,141 @@ extension SugargliderTests {
         #expect(abs(ChartMath.niceStep(2) - 0.5) < 1e-9)
     }
 
+    @Test func valueAxisKeepsTheThresholdsInViewOnAQuietDay() {
+        let axis = ChartMath.valueAxis(values: [5.6, 7.4, 6.1], thresholds: [3.0, 3.9, 10.0, 13.9], mgdl: false)
+        // Gridlines 2…14, half a step past the top one; the bottom stops at the 2 mmol/L clamp.
+        #expect(axis == .init(lo: 2, hi: 15, step: 2))
+    }
+
+    @Test func valueAxisWidensForReadingsBeyondTheThresholds() {
+        let axis = ChartMath.valueAxis(values: [80, 320], thresholds: [54, 70, 180, 250], mgdl: true)
+        #expect(axis == .init(lo: 40, hi: 375, step: 50))
+    }
+
+    @Test func valueAxisStaysWithinTheClampsAndAMinimumSpan() {
+        let clamped = ChartMath.valueAxis(values: [39, 600], thresholds: [70, 180], mgdl: true)
+        #expect(clamped == .init(lo: 40, hi: 500, step: 100))
+
+        let flat = ChartMath.valueAxis(values: [6, 6], thresholds: [6, 6], mgdl: false)
+        #expect(flat.hi - flat.lo >= 2)
+    }
+
     @Test func labelsNeedDayOnceAWindowCanRepeatAClockTime() {
         #expect(ChartMath.labelsNeedDay(span: 6 * 3600) == false)
         #expect(ChartMath.labelsNeedDay(span: 23.5 * 3600) == false)
-        // A day or wider puts the same clock time at both ends of the axis.
         #expect(ChartMath.labelsNeedDay(span: 24 * 3600))
         #expect(ChartMath.labelsNeedDay(span: 72 * 3600))
     }
 
-    /// One constant, two users: the chart breaks its line on a wider gap, and
-    /// `ReadingStore` merges polled entries into the history only within it.
     @Test func dropoutThresholdIsSharedWithTheStore() {
         #expect(ChartMath.dropoutThreshold == 15 * 60)
         #expect(ReadingStore.contiguityThreshold == ChartMath.dropoutThreshold)
     }
 
     @Test func segmentsSplitOnDropouts() {
-        let base = Date()
-        func asc(_ minutes: [Double]) -> [Reading] {   // oldest-first
-            minutes.sorted(by: >).map { reading(100, minutesAgo: $0, from: base) }
+        let base = Date.now
+        func oldestFirst(minutesAgo: [Double]) -> [Reading] {
+            minutesAgo.sorted(by: >).map { reading(100, minutesAgo: $0, from: base) }
         }
         #expect(ChartMath.segments(of: [], gapThreshold: 900).isEmpty)
-
-        let single = ChartMath.segments(of: asc([0]), gapThreshold: 900)
-        #expect(single.count == 1 && single[0].count == 1)
-
-        let contiguous = ChartMath.segments(of: asc([10, 5, 0]), gapThreshold: 900)  // 5-min steps
-        #expect(contiguous.count == 1 && contiguous[0].count == 3)
-
-        // 45,40 then a 30-min gap then 10,5,0 → two runs of 2 and 3.
-        let split = ChartMath.segments(of: asc([45, 40, 10, 5, 0]), gapThreshold: 900)
+        #expect(ChartMath.segments(of: oldestFirst(minutesAgo: [0]), gapThreshold: 900).map(\.count) == [1])
+        #expect(ChartMath.segments(of: oldestFirst(minutesAgo: [10, 5, 0]), gapThreshold: 900).map(\.count) == [3])
+        // A 30-minute gap between 40 and 10.
+        let split = ChartMath.segments(of: oldestFirst(minutesAgo: [45, 40, 10, 5, 0]), gapThreshold: 900)
         #expect(split.map(\.count) == [2, 3])
     }
 
     @Test func colorForZone() {
         let zones = defaultZones()
-        // Defaults: extremeLow 54, targetLow 70, targetHigh 180, extremeHigh 250.
         #expect(AppSettings.colorsMatch(ChartMath.color(for: 50, zones: zones), zones.extremeLowColor))
         #expect(AppSettings.colorsMatch(ChartMath.color(for: 60, zones: zones), zones.belowColor))
         #expect(AppSettings.colorsMatch(ChartMath.color(for: 100, zones: zones), zones.inRangeColor))
         #expect(AppSettings.colorsMatch(ChartMath.color(for: 200, zones: zones), zones.aboveColor))
         #expect(AppSettings.colorsMatch(ChartMath.color(for: 300, zones: zones), zones.extremeHighColor))
-        // Boundaries (strict comparisons in color(for:)).
-        #expect(AppSettings.colorsMatch(ChartMath.color(for: 54, zones: zones), zones.belowColor))   // not < 54
-        #expect(AppSettings.colorsMatch(ChartMath.color(for: 70, zones: zones), zones.inRangeColor)) // not < 70
-        #expect(AppSettings.colorsMatch(ChartMath.color(for: 180, zones: zones), zones.inRangeColor)) // not > 180
-        #expect(AppSettings.colorsMatch(ChartMath.color(for: 250, zones: zones), zones.aboveColor))  // not > 250
+        // A threshold itself belongs to the zone nearer the target range.
+        #expect(AppSettings.colorsMatch(ChartMath.color(for: 54, zones: zones), zones.belowColor))
+        #expect(AppSettings.colorsMatch(ChartMath.color(for: 70, zones: zones), zones.inRangeColor))
+        #expect(AppSettings.colorsMatch(ChartMath.color(for: 180, zones: zones), zones.inRangeColor))
+        #expect(AppSettings.colorsMatch(ChartMath.color(for: 250, zones: zones), zones.aboveColor))
     }
 
     @Test func smoothElementCounts() {
         let p = { (x: CGFloat) in CGPoint(x: x, y: x) }
-        #expect(elements(of: ChartMath.smooth([])).count == 0)
-        #expect(elements(of: ChartMath.smooth([p(0)])).count == 1)             // moveTo
-        #expect(elements(of: ChartMath.smooth([p(0), p(1)])).count == 2)       // moveTo + lineTo
-        #expect(elements(of: ChartMath.smooth([p(0), p(1), p(2)])).count == 3) // moveTo + 2 curves
+        #expect(elements(of: ChartMath.smooth([])).isEmpty)
+        #expect(elements(of: ChartMath.smooth([p(0)])).count == 1)
+        #expect(elements(of: ChartMath.smooth([p(0), p(1)])).count == 2)
+        #expect(elements(of: ChartMath.smooth([p(0), p(1), p(2)])).count == 3)   // move + 2 curves
     }
 
-    @Test func sampleReadingsSweepAllZones() {
-        let end = Date()
+    @Test func sampleReadingsSweepAllZones() throws {
+        let end = Date.now
         let readings = ChartMath.sampleReadings(
             extremeLow: 54, targetLow: 70, targetHigh: 180, extremeHigh: 250, endingAt: end)
 
         #expect(readings.count == 35)
         #expect(readings.last?.date == end)
         #expect(zip(readings, readings.dropFirst()).allSatisfy { $0.date < $1.date })
-        // 5-min spacing → the whole span fits a 3-hour chart window.
-        #expect(readings.first!.date >= end.addingTimeInterval(-3 * 3600))
+        // 5-minute spacing fits the whole curve into a 3-hour window.
+        #expect(try #require(readings.first).date >= end.addingTimeInterval(-3 * 3600))
 
-        // The curve must visit every zone so each configurable color shows.
         let values = readings.map { Double($0.sgv) }
-        #expect(values.contains { $0 < 54 })            // very low
-        #expect(values.contains { (54..<70).contains($0) })   // below optimal
-        #expect(values.contains { (70...180).contains($0) })  // in range
-        #expect(values.contains { (180...250).contains($0) }) // above optimal
-        #expect(values.contains { $0 > 250 })           // very high
+        #expect(values.contains { $0 < 54 })
+        #expect(values.contains { (54..<70).contains($0) })
+        #expect(values.contains { (70...180).contains($0) })
+        #expect(values.contains { (180...250).contains($0) })
+        #expect(values.contains { $0 > 250 })
         #expect(values.allSatisfy { (40...400).contains($0) })
     }
 
+    @Test func sampleTreatmentsFollowTheSampleSweeps() throws {
+        let end = Date.now, span: TimeInterval = 6 * 3600
+        let start = end.addingTimeInterval(-span)
+        let treatments = ChartMath.sampleTreatments(endingAt: end, span: span, cycles: 2)
+
+        #expect(treatments.allSatisfy { (start...end).contains($0.date) })
+        #expect(zip(treatments, treatments.dropFirst()).allSatisfy { $0.date <= $1.date })
+        #expect(Set(treatments.map(\.id)).count == treatments.count)
+        #expect(treatments.filter { $0.bolusUnits != nil }.count == 4)
+
+        // The rate covers the whole window in one run.
+        let steps = ChartMath.deliverySteps(treatments, from: start, to: end)
+        #expect(ChartMath.contiguousRuns(steps).count == 1)
+        #expect(steps.first?.start == start)
+        #expect(steps.last?.end == end)
+
+        // Each alert sits on a low of the sample curve.
+        let readings = ChartMath.sampleReadings(extremeLow: 54, targetLow: 70, targetHigh: 180, extremeHigh: 250,
+                                                endingAt: end, count: 6 * 12 + 1, cycles: 2)
+        let alerts = treatments.filter { $0.noteText != nil }
+        #expect(alerts.count == 2)
+        for alert in alerts {
+            let nearest = try #require(readings.min {
+                abs($0.date.timeIntervalSince(alert.date)) < abs($1.date.timeIntervalSince(alert.date))
+            })
+            #expect(nearest.sgv < 54)
+        }
+    }
+
+    /// Half a sweep keeps its alert and meal bolus but not the correction, which falls past the end.
+    @Test func sampleTreatmentsStopAtTheWindowEnd() {
+        let end = Date.now
+        let treatments = ChartMath.sampleTreatments(endingAt: end, span: 6 * 3600, cycles: 1.5)
+        #expect(treatments.allSatisfy { $0.date <= end })
+        #expect(treatments.compactMap(\.bolusUnits) == [5.5, 1.5, 5.5])
+        #expect(treatments.filter { $0.noteText != nil }.count == 2)
+    }
+
     @Test func nearestIndexFindsClosestByX() {
-        let base = Date()
-        // `reading(minutesAgo:)` counts backwards, so negating puts these at
-        // 0, 300 and 600 seconds after `base`, the same unit `x` returns.
-        let readings = [0.0, 300.0, 600.0].map { reading(100, minutesAgo: -$0 / 60, from: base) }
-        func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(base)) }
+        let base = Date.now
+        let offsets: [TimeInterval] = [0, 300, 600]
+        let readings = offsets.map { Reading(sgv: 100, direction: "Flat", date: base.addingTimeInterval($0)) }
+        func x(_ date: Date) -> CGFloat { CGFloat(date.timeIntervalSince(base)) }
         #expect(ChartMath.nearestIndex(to: 0, x: x, in: readings, maxDistance: 24) == 0)
         #expect(ChartMath.nearestIndex(to: 310, x: x, in: readings, maxDistance: 24) == 1)
         #expect(ChartMath.nearestIndex(to: 590, x: x, in: readings, maxDistance: 24) == 2)
-        #expect(ChartMath.nearestIndex(to: 1000, x: x, in: readings, maxDistance: 24) == nil)  // too far
+        #expect(ChartMath.nearestIndex(to: 1000, x: x, in: readings, maxDistance: 24) == nil)
     }
 }
-
-// MARK: - Full render smoke tests (via ImageRenderer, no window needed)
 
 extension SugargliderTests {
     private func renderedImage(_ view: some View) -> CGImage? {
@@ -125,28 +168,33 @@ extension SugargliderTests {
         return renderer.cgImage
     }
 
+    /// Raw bitmap rather than PNG data, whose encoding isn't reproducible.
+    private func pixels(of view: some View) -> Data? {
+        guard let image = renderedImage(view) else { return nil }
+        let rep = NSBitmapImageRep(cgImage: image)
+        guard let bytes = rep.bitmapData else { return nil }
+        return Data(bytes: bytes, count: rep.bytesPerRow * rep.pixelsHigh)
+    }
+
+    private func readingsCrossingEveryZone(until end: Date) -> [Reading] {
+        let points: [(minutesAgo: Double, sgv: Int)] = [(300, 45), (240, 60), (180, 100), (120, 200),
+                                                        (60, 300), (30, 150), (10, 90), (0, 110)]
+        return points.map { reading($0.sgv, minutesAgo: $0.minutesAgo, from: end) }
+    }
+
     @Test func rendersEmptyStateWithoutCrash() {
-        let s = Self.makeSettings()
-        #expect(renderedImage(ChartCanvas(readings: [], rangeHours: 6, settings: s)) != nil)
+        #expect(renderedImage(ChartCanvas(readings: [], rangeHours: 6, settings: Self.makeSettings())) != nil)
     }
 
     @Test func rendersSinglePointAsNoData() {
-        let s = Self.makeSettings()
-        let chart = ChartCanvas(readings: [reading(100, minutesAgo: 0)], rangeHours: 6, settings: s)
+        let chart = ChartCanvas(readings: [reading(100, minutesAgo: 0)], rangeHours: 6, settings: Self.makeSettings())
         #expect(renderedImage(chart) != nil)
-    }
-
-    private func spanningReadings(from base: Date) -> [Reading] {
-        // Values crossing every zone, within the default 6h window.
-        let pts: [(Double, Int)] = [(300, 45), (240, 60), (180, 100),
-                                    (120, 200), (60, 300), (30, 150), (10, 90), (0, 110)]
-        return pts.map { reading($0.1, minutesAgo: $0.0, from: base) }.sorted { $0.date < $1.date }
     }
 
     @Test func rendersFullChartMmolDirectColors() {
         let s = Self.makeSettings()
         s.units = .mmol
-        let chart = ChartCanvas(readings: spanningReadings(from: Date()), rangeHours: 6, settings: s)
+        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s)
         #expect(renderedImage(chart) != nil)
     }
 
@@ -156,8 +204,8 @@ extension SugargliderTests {
         s.blendLineColors = true
         s.chartBackgroundEnabled = true
         s.chartBackgroundColor = Color(red: 0.1, green: 0.1, blue: 0.12, opacity: 1)
-        let chart = ChartCanvas(readings: spanningReadings(from: Date()), rangeHours: 6, settings: s)
-        #expect(renderedImage(chart) != nil)   // exercises the blended-gradient stroke + background fill
+        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s)
+        #expect(renderedImage(chart) != nil)
     }
 
     @Test func rendersWithShadingOffAndDotHidden() {
@@ -165,8 +213,8 @@ extension SugargliderTests {
         s.lineShadingEnabled = false
         s.dotRadius = 0
         s.dotHaloRadius = 0
-        let chart = ChartCanvas(readings: spanningReadings(from: Date()), rangeHours: 6, settings: s)
-        #expect(renderedImage(chart) != nil)   // every optional layer skipped
+        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s)
+        #expect(renderedImage(chart) != nil)
     }
 
     @Test func rendersWithCustomShadingAndDotColors() {
@@ -177,26 +225,15 @@ extension SugargliderTests {
         s.dotColor = Color(red: 0.1, green: 0.9, blue: 0.5, opacity: 1)
         s.dotRadius = 12
         s.dotHaloRadius = 24
-        let chart = ChartCanvas(readings: spanningReadings(from: Date()), rangeHours: 6, settings: s)
-        #expect(renderedImage(chart) != nil)   // fixed colors + the largest allowed dot
+        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s)
+        #expect(renderedImage(chart) != nil)
     }
 
-    /// Raw pixels of an off-screen render, so two variants can be compared.
-    /// PNG encoding isn't reproducible, the bitmap is.
-    private func pixels(of view: some View) -> Data? {
-        guard let image = renderedImage(view) else { return nil }
-        let rep = NSBitmapImageRep(cgImage: image)
-        guard let bytes = rep.bitmapData else { return nil }
-        return Data(bytes: bytes, count: rep.bytesPerRow * rep.pixelsHigh)
-    }
-
-    /// The Settings preview's contract: sample data pinned to its own window end
-    /// keeps drawing however long ago it was generated, whereas on a wall-clock
-    /// window it ages out into the empty state. That's what the live chart wants,
-    /// and what made the preview go blank.
+    /// The Settings preview's contract: samples pinned to their own window end keep drawing
+    /// however old they are, where a wall-clock window lets them age out into the empty state.
     @Test func pinnedWindowEndKeepsStaleSampleDataVisible() {
         let s = Self.makeSettings()
-        let end = Date().addingTimeInterval(-6 * 3600)   // as if generated 6h ago
+        let end = Date.now.addingTimeInterval(-6 * 3600)
         let samples = ChartMath.sampleReadings(
             extremeLow: s.extremeLow, targetLow: s.targetLow,
             targetHigh: s.targetHigh, extremeHigh: s.extremeHigh, endingAt: end)
@@ -206,37 +243,60 @@ extension SugargliderTests {
         let wallClock = pixels(of: ChartCanvas(readings: samples, rangeHours: 3, settings: s))
 
         #expect(emptyState != nil)
-        #expect(pinned != emptyState)      // the curve is drawn
-        #expect(wallClock == emptyState)   // ...and without the pin it wouldn't be
+        #expect(pinned != emptyState)
+        #expect(wallClock == emptyState)
     }
 
-    /// The preview slider spans the real 2…72 h bounds and the sample curve
-    /// grows with the window: 5-min spacing, so 865 points at the top end, plus
-    /// weekday time labels past 24 h.
-    @Test func rendersWidestPreviewWindow() {
+    @Test func rendersWidestPreviewWindow() throws {
         let s = Self.makeSettings()
-        let end = Date()
+        let end = Date.now
         let samples = ChartMath.sampleReadings(
             extremeLow: s.extremeLow, targetLow: s.targetLow,
             targetHigh: s.targetHigh, extremeHigh: s.extremeHigh,
             endingAt: end, count: 72 * 12 + 1)
         #expect(samples.count == 865)
-        #expect(samples.first!.date == end.addingTimeInterval(-72 * 3600))
+        #expect(try #require(samples.first).date == end.addingTimeInterval(-72 * 3600))
 
         let chart = pixels(of: ChartCanvas(readings: samples, rangeHours: 72, settings: s, windowEnd: end))
         #expect(chart != nil)
         #expect(chart != pixels(of: ChartCanvas(readings: [], rangeHours: 72, settings: s)))
     }
 
+    /// Single-reading segments take the isolated-dot branch.
     @Test func rendersWithGapsAndIsolatedPoints() {
-        let base = Date()
-        let s = Self.makeSettings()
-        // Isolated points at 300 and 0, a contiguous run at 100/95/90 → single-point
-        // segments hit the dot branch.
-        let readings = [300, 100, 95, 90, 0].sorted(by: >)
-            .map { reading(120, minutesAgo: $0, from: base) }
-            .sorted { $0.date < $1.date }
-        let chart = ChartCanvas(readings: readings, rangeHours: 6, settings: s)
+        let base = Date.now
+        let readings = [300, 100, 95, 90, 0].map { reading(120, minutesAgo: $0, from: base) }
+        let chart = ChartCanvas(readings: readings, rangeHours: 6, settings: Self.makeSettings())
         #expect(renderedImage(chart) != nil)
+    }
+
+    /// A color that never reaches the chart is a picker doing nothing, as `sliderColor` once did.
+    @Test func pumpLayersDrawInTheirOwnColors() throws {
+        let s = Self.makeSettings()
+        s.chartShowsDeliveryRate = true
+        s.chartShowsAnnouncements = true
+        let end = Date.now
+        let samples = ChartMath.sampleReadings(
+            extremeLow: s.extremeLow, targetLow: s.targetLow,
+            targetHigh: s.targetHigh, extremeHigh: s.extremeHigh, endingAt: end)
+        let treatments = ChartMath.sampleTreatments(endingAt: end, span: 3 * 3600)
+        func chart() -> Data? {
+            pixels(of: ChartCanvas(readings: samples, rangeHours: 3, settings: s, windowEnd: end,
+                                   treatments: treatments))
+        }
+
+        let stock = try #require(chart())
+        let colors: [ReferenceWritableKeyPath<AppSettings, Color>] = [\.bolusColor, \.deliveryRateColor,
+                                                                       \.announcementColor]
+        for keyPath in colors {
+            let original = s[keyPath: keyPath]
+            s[keyPath: keyPath] = Color(red: 0.9, green: 0.1, blue: 0.2, opacity: 1)
+            let recolored = try #require(chart())
+            // Not just unequal: once a color made from `labelColor` has been archived, as every
+            // assignment does, later renders drift by ±1 in a few pixels anyway.
+            let largest = zip(recolored, stock).map { abs(Int($0) - Int($1)) }.max() ?? 0
+            #expect(largest > 64, "\(keyPath) doesn't reach the chart")
+            s[keyPath: keyPath] = original
+        }
     }
 }
