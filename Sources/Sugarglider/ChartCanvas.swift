@@ -32,7 +32,13 @@ struct ChartCanvas: View {
                 case .ended: hover = nil
                 }
             }
+            // The view's bounds are the chart's frame, so it lines up with whatever sits next to it. Only the
+            // canvas reaches past them, into the space around, for the latest dot's halo on the right edge.
+            .padding(.trailing, -dotOverhang)
     }
+
+    /// A `Canvas` clips at its bounds, and the latest dot sits on the frame's right edge.
+    private var dotOverhang: CGFloat { max(settings.dotRadius, settings.dotHaloRadius) }
 
     /// Decided on every cached treatment, not just the window's, so dragging the range can't
     /// make the chart jump in height.
@@ -121,16 +127,14 @@ struct ChartCanvas: View {
         let visible = readings.filter { $0.date >= start }
         guard visible.count >= 2, let latest = visible.last else { return nil }
 
-        let leftInset: CGFloat = 0.5, topInset: CGFloat = 10, bottomInset: CGFloat = 16
-        // Room for the latest dot's halo at the right edge, capped so a big halo can't squeeze a
-        // narrow chart away.
-        let rightInset = min(max(0.5, settings.dotRadius, settings.dotHaloRadius), size.width / 4)
+        // Half the frame's stroke, so the stroke ends at the view's edge. Everything else draws inside.
+        let inset: CGFloat = 0.5
         let laneSpace = Self.laneSpace(for: treatments, settings: settings)
-        let plot = CGRect(x: leftInset, y: bottomInset + laneSpace,
-                          width: size.width - leftInset - rightInset,
-                          height: size.height - topInset - bottomInset - laneSpace)
+        let plot = CGRect(x: inset, y: inset + laneSpace,
+                          width: size.width - dotOverhang - 2 * inset,
+                          height: size.height - 2 * inset - laneSpace)
         let lane = laneSpace > 0
-            ? CGRect(x: plot.minX, y: bottomInset, width: plot.width, height: laneSpace)
+            ? CGRect(x: plot.minX, y: inset, width: plot.width, height: laneSpace)
             : nil
 
         let inWindow = treatments.filter { $0.date >= start && $0.date <= end }
@@ -172,7 +176,7 @@ struct ChartCanvas: View {
     private func draw(in context: GraphicsContext, size: CGSize) {
         guard let l = layout(size: size) else {
             context.draw(Text("No data for this range").font(.system(size: 11)).foregroundStyle(.secondary),
-                         at: CGPoint(x: size.width / 2, y: size.height / 2))
+                         at: CGPoint(x: (size.width - dotOverhang) / 2, y: size.height / 2))
             return
         }
 
