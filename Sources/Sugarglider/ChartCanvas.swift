@@ -95,7 +95,14 @@ struct ChartCanvas: View {
             plot.minY + CGFloat((value - axis.lo) / (axis.hi - axis.lo)) * plot.height
         }
 
-        func y(of reading: Reading) -> CGFloat { y(units.value(fromMgdl: reading.sgv)) }
+        /// LOW and HIGH sit at their markers but stay inside the plot by half a stroke: the mg/dL
+        /// axis stops at 40, which would leave LOW's 39 drawn under the frame.
+        func y(of reading: Reading) -> CGFloat {
+            let y = y(units.value(fromMgdl: reading.sgv))
+            guard reading.outOfRange != nil else { return y }
+            let inset = ChartCanvas.lineStroke.lineWidth / 2
+            return min(max(y, plot.minY + inset), plot.maxY - inset)
+        }
 
         /// Clamped into the plot, since zone bands exist even where their threshold is off the axis.
         func bandY(mgdl: Double) -> CGFloat {
@@ -162,6 +169,8 @@ struct ChartCanvas: View {
     private static let ink = Color(nsColor: .labelColor)
     private static let separator = Color(nsColor: .separatorColor)
     private static let lineStroke = StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+    /// Round dots, for where the sensor read LOW or HIGH.
+    private static let boundStroke = StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [0, 4])
 
     private var zones: ChartMath.Zones {
         ChartMath.Zones(
@@ -314,16 +323,24 @@ struct ChartCanvas: View {
             if settings.lineShadingEnabled {
                 fillUnder(ctx, path: path, from: first.x, to: last.x, plot: plot, zones: zones)
             }
-            if settings.blendLineColors {
-                strokeBlended(ctx, path: path, bands: bands, plot: plot)
-            } else {
-                for band in bands where band.top - band.bottom > 0.5 {
-                    var clipped = ctx
-                    clipped.clip(to: Path(CGRect(x: plot.minX, y: band.bottom,
-                                                 width: plot.width, height: band.top - band.bottom)))
-                    clipped.stroke(path, with: .color(band.color.opacity(0.9)), style: Self.lineStroke)
+            // Beyond the sensor's range only the bound is known, so the line turns dotted there.
+            let beyond = ChartMath.outOfRangeSpans(segment)
+            guard !beyond.isEmpty else {
+                strokeLine(ctx, path: path, bands: bands, plot: plot, style: Self.lineStroke)
+                continue
+            }
+            let mask = Path { mask in
+                for span in beyond {
+                    let from = l.x(span.lowerBound)
+                    mask.addRect(CGRect(x: from, y: plot.minY, width: l.x(span.upperBound) - from, height: plot.height))
                 }
             }
+            var measured = ctx
+            measured.clip(to: mask, options: .inverse)
+            strokeLine(measured, path: path, bands: bands, plot: plot, style: Self.lineStroke)
+            var bound = ctx
+            bound.clip(to: mask)
+            strokeLine(bound, path: path, bands: bands, plot: plot, style: Self.boundStroke)
         }
 
         let latest = CGPoint(x: l.x(l.latest.date), y: l.y(of: l.latest))
@@ -350,7 +367,20 @@ struct ChartCanvas: View {
             startPoint: CGPoint(x: plot.midX, y: plot.maxY), endPoint: CGPoint(x: plot.midX, y: plot.minY)))
     }
 
-    private func strokeBlended(_ ctx: GraphicsContext, path: Path, bands: [Band], plot: CGRect) {
+    private func strokeLine(_ ctx: GraphicsContext, path: Path, bands: [Band], plot: CGRect, style: StrokeStyle) {
+        if settings.blendLineColors {
+            strokeBlended(ctx, path: path, bands: bands, plot: plot, style: style)
+            return
+        }
+        for band in bands where band.top - band.bottom > 0.5 {
+            var clipped = ctx
+            clipped.clip(to: Path(CGRect(x: plot.minX, y: band.bottom,
+                                         width: plot.width, height: band.top - band.bottom)))
+            clipped.stroke(path, with: .color(band.color.opacity(0.9)), style: style)
+        }
+    }
+
+    private func strokeBlended(_ ctx: GraphicsContext, path: Path, bands: [Band], plot: CGRect, style: StrokeStyle) {
         let stops = bands.filter { $0.top - $0.bottom > 0.5 }.map { band in
             Gradient.Stop(color: band.color.opacity(0.9),
                           location: min(max(((band.bottom + band.top) / 2 - plot.minY) / plot.height, 0), 1))
@@ -359,7 +389,7 @@ struct ChartCanvas: View {
         ctx.stroke(path, with: .linearGradient(
             Gradient(stops: stops.sorted { $0.location < $1.location }),
             startPoint: CGPoint(x: plot.midX, y: plot.minY), endPoint: CGPoint(x: plot.midX, y: plot.maxY)),
-            style: Self.lineStroke)
+            style: style)
     }
 
     /// Rate and boluses share no axis, so each scales on its own, with a floor (1 U/h, 2 U) so a

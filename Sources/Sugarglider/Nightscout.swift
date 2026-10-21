@@ -6,8 +6,24 @@ struct Reading {
     let direction: String
     let date: Date
 
+    /// Nightscout's markers for a value beyond the sensor's range, one step past each bound. Only
+    /// the side is known, so its own client shows LOW and HIGH in either unit.
+    enum OutOfRange: Int {
+        case low = 39
+        case high = 401
+    }
+
+    var outOfRange: OutOfRange? { OutOfRange(rawValue: sgv) }
+
     func value(in units: AppSettings.Units) -> Double { units.value(fromMgdl: sgv) }
-    func text(in units: AppSettings.Units) -> String { units.text(fromMgdl: sgv) }
+
+    func text(in units: AppSettings.Units) -> String {
+        switch outOfRange {
+        case .low: "LOW"
+        case .high: "HIGH"
+        case nil: units.text(fromMgdl: sgv)
+        }
+    }
 
     /// Paired arrows for the doubles, because ⇈ and ⇊ render too thin.
     var trendArrow: String {

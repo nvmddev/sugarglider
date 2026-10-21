@@ -71,6 +71,18 @@ extension SugargliderTests {
         #expect(store.deltaText() == nil)
     }
 
+    /// A marker is a bound, not a value, so a difference to it would be made up.
+    @Test(arguments: [(39, 60), (60, 39), (401, 380), (380, 401), (39, 39)])
+    func deltaIsNilAcrossLowOrHigh(sgv: Int, previousSGV: Int) {
+        let settings = Self.makeSettings()
+        settings.deltaDisplay = .menu
+        let store = ReadingStore(settings: settings)
+        let now = Date.now
+        store.lastReading = reading(sgv, from: now)
+        store.previousReading = reading(previousSGV, minutesAgo: 5, from: now)
+        #expect(store.deltaText() == nil)
+    }
+
     @Test func historyCountFollowsTheSelectedRange() {
         #expect(ReadingStore.historyCount(forRangeHours: 6) == 420)
         #expect(ReadingStore.historyCount(forRangeHours: 24) == 1500)

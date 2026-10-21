@@ -201,15 +201,20 @@ struct MenuBarContentView: View {
     }
 
     private func readingText(_ reading: Reading) -> Text {
-        let value = Text("\(reading.text(in: settings.units)) \(settings.units.label)")
+        // LOW and HIGH have no value to put a unit to, and no delta: they say where the sensor ran out instead.
+        let text = reading.text(in: settings.units)
+        let value = Text(reading.outOfRange == nil ? "\(text) \(settings.units.label)" : text)
             .font(.system(size: 15, weight: .medium))
         let arrow = reading.trendArrow.isEmpty
             ? Text("")
             : Text(" \(reading.trendArrow)").font(.system(size: 17, weight: .semibold))
-        let delta = store.deltaText().map {
-            Text("  (\($0))").font(.system(size: 13)).foregroundStyle(.secondary)
+        let note: String? = switch reading.outOfRange {
+        case .low: "below the sensor's range"
+        case .high: "above the sensor's range"
+        case nil: store.deltaText().map { "(\($0))" }
         }
-        return Text("\(value)\(arrow)\(delta ?? Text(""))")
+        let detail = note.map { Text("  \($0)").font(.system(size: 13)).foregroundStyle(.secondary) }
+        return Text("\(value)\(arrow)\(detail ?? Text(""))")
     }
 
     private var ageText: String {
