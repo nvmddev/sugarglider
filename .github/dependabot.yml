@@ -1,7 +1,6 @@
 version: 2
 updates:
-  # The app itself has zero dependencies, so GitHub Actions is the only
-  # ecosystem here — and the one that quietly goes stale otherwise.
+  # The app has no dependencies, so GitHub Actions is the only ecosystem.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

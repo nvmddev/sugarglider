@@ -2,54 +2,35 @@ import Testing
 import Foundation
 @testable import Sugarglider
 
-/// The `NightscoutError` message for a failed result, or nil on success. Each
-/// case has a unique one, so it's a terse way to assert which error occurred.
-func errorText<T>(_ result: Result<T, Error>) -> String? {
-    if case .failure(let e) = result {
-        return (e as? NightscoutError)?.errorDescription ?? e.localizedDescription
-    }
-    return nil
-}
-
-func successReadings(_ result: Result<[Reading], Error>) -> [Reading]? {
-    if case .success(let r) = result { return r }
-    return nil
-}
-
-// MARK: - Error paths that need no network
+private let oneReading = #"[{"sgv":100,"direction":"Flat","date":1700000400000}]"#
 
 extension SugargliderTests {
-    @Test func fetchNotConfigured() async {
-        #expect(errorText(await fetchEntriesAsync(count: 1, baseURL: "")) == "Not configured")
+    @Test func fetchWithoutASiteURLIsNotConfigured() async {
+        await #expect(throws: NightscoutError.notConfigured) {
+            try await Nightscout.fetchEntries(count: 1, baseURL: "", token: "")
+        }
     }
 
-    @Test func fetchBadURL() async {
-        // The embedded space makes URLComponents fail.
-        #expect(errorText(await fetchEntriesAsync(count: 1, baseURL: "http://exa mple.com")) == "Invalid URL")
+    @Test func fetchRejectsAnInvalidSiteURL() async {
+        await #expect(throws: NightscoutError.badURL) {
+            try await Nightscout.fetchEntries(count: 1, baseURL: "http://exa mple.com", token: "")
+        }
     }
-}
 
-// MARK: - Full request/response against a loopback server
-
-extension SugargliderTests {
-    @Test func fetchSuccessParsesAndSortsAscending() async throws {
+    @Test func fetchDecodesReadingsOldestFirst() async throws {
         let server = try LocalHTTPServer(json: """
             [{"sgv":150,"direction":"Flat","date":1700000300000},
              {"sgv":100,"direction":"FortyFiveUp","date":1700000000000}]
             """)
         defer { server.stop() }
 
-        let readings = try #require(successReadings(await fetchEntriesAsync(count: 10, baseURL: server.baseURL)))
-        #expect(readings.count == 2)
-        #expect(readings[0].sgv == 100)                 // earlier date sorts first
-        #expect(readings[0].direction == "FortyFiveUp")
-        #expect(readings[0].date.timeIntervalSince1970 == 1_700_000_000)  // ms → s
-        #expect(readings[1].sgv == 150)
+        let readings = try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+        #expect(readings.map(\.sgv) == [100, 150])
+        #expect(readings.first?.direction == "FortyFiveUp")
+        #expect(readings.first?.date == Date(timeIntervalSince1970: 1_700_000_000))
     }
 
-    /// Each field is decoded on its own, so one unusable row costs only that
-    /// row. A strict `Decodable` would fail the whole response.
-    @Test func fetchSkipsMalformedRows() async throws {
+    @Test func fetchSkipsUnusableRowsAndDefaultsAMissingDirection() async throws {
         let server = try LocalHTTPServer(json: """
             [{"sgv":100,"direction":"Flat","date":1700000000000},
              {"direction":"Flat","date":1700000100000},
@@ -60,15 +41,11 @@ extension SugargliderTests {
             """)
         defer { server.stop() }
 
-        let readings = try #require(successReadings(await fetchEntriesAsync(count: 10, baseURL: server.baseURL)))
-        #expect(readings.count == 2)               // rows missing sgv/date, or with a non-numeric sgv
-        #expect(readings[0].sgv == 100)
-        #expect(readings[1].sgv == 110)
-        #expect(readings[1].direction == "")       // missing direction defaults to ""
+        let readings = try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+        #expect(readings.map(\.sgv) == [100, 110])
+        #expect(readings.last?.direction == "")
     }
 
-    /// `sgv` is read as a `Double` and rounded: some uploaders report fractional
-    /// mg/dL, and those readings used to be dropped as malformed.
     @Test func fetchRoundsFractionalSgv() async throws {
         let server = try LocalHTTPServer(json: """
             [{"sgv":100.4,"direction":"Flat","date":1700000000000},
@@ -76,124 +53,93 @@ extension SugargliderTests {
             """)
         defer { server.stop() }
 
-        let readings = try #require(successReadings(await fetchEntriesAsync(count: 10, baseURL: server.baseURL)))
-        #expect(readings.map(\.sgv) == [100, 101])
+        #expect(try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+            .map(\.sgv) == [100, 101])
     }
 
-    @Test func fetchEmptyArrayIsEmptyError() async throws {
+    @Test func fetchOfASiteWithoutReadingsThrowsEmpty() async throws {
         let server = try LocalHTTPServer(json: "[]")
         defer { server.stop() }
-        #expect(errorText(await fetchEntriesAsync(count: 10, baseURL: server.baseURL)) == "No readings")
+
+        await #expect(throws: NightscoutError.empty) {
+            try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+        }
     }
 
-    /// "Nothing new" is the expected answer for an incremental top-up, so an
-    /// empty response must not be an error when `since` is set.
-    @Test func fetchSinceToleratesEmptyResponse() async throws {
+    @Test func fetchSinceAcceptsAnEmptyAnswer() async throws {
         let server = try LocalHTTPServer(json: "[]")
         defer { server.stop() }
-        let readings = try #require(successReadings(
-            await fetchEntriesAsync(count: 10, since: Date(), baseURL: server.baseURL)))
-        #expect(readings.isEmpty)
+
+        #expect(try await Nightscout.fetchEntries(count: 10, since: .now, baseURL: server.baseURL, token: "")
+            .isEmpty)
     }
 
     @Test func fetchSinceSendsTheDateFilterInMilliseconds() async throws {
-        let server = try LocalHTTPServer(json: """
-            [{"sgv":100,"direction":"Flat","date":1700000400000}]
-            """)
+        let server = try LocalHTTPServer(json: oneReading)
         defer { server.stop() }
 
-        let since = Date(timeIntervalSince1970: 1_700_000_000)
-        _ = await fetchEntriesAsync(count: 10, since: since, baseURL: server.baseURL)
-        let line = try #require(server.requestLines.first)
-        // Percent-encoded by URLComponents; Nightscout's query parser decodes it.
-        #expect(line.contains("date%5D%5B$gt%5D=1700000000000")
-                || line.contains("date][$gt]=1700000000000"))
-        #expect(line.contains("count=10"))
+        _ = try await Nightscout.fetchEntries(count: 10, since: Date(timeIntervalSince1970: 1_700_000_000),
+                                              baseURL: server.baseURL, token: "")
+        #expect(server.requestLines == [
+            "GET /api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$gt%5D=1700000000000 HTTP/1.1",
+        ])
     }
 
-    /// The plain fetch must stay plain: a stray filter would make the first,
-    /// full history request return only recent entries.
-    @Test func fetchWithoutSinceSendsNoDateFilter() async throws {
-        let server = try LocalHTTPServer(json: """
-            [{"sgv":100,"direction":"Flat","date":1700000400000}]
-            """)
+    @Test(arguments: [("   ", ""), (" secret ", "&token=secret")])
+    func fetchTrimsTheSiteURLAndToken(token: String, tokenQuery: String) async throws {
+        let server = try LocalHTTPServer(json: oneReading)
         defer { server.stop() }
 
-        _ = await fetchEntriesAsync(count: 10, baseURL: server.baseURL)
-        let line = try #require(server.requestLines.first)
-        #expect(!line.contains("gt"))
+        _ = try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL + "///", token: token)
+        #expect(server.requestLines == ["GET /api/v1/entries/sgv.json?count=10\(tokenQuery) HTTP/1.1"])
     }
 
-    @Test func fetchNonJSONIsDecodeError() async throws {
-        let server = try LocalHTTPServer(json: "not json at all")
+    @Test(arguments: ["not json at all", #"{"foo":1}"#])
+    func fetchRejectsAnythingButAJSONArray(body: String) async throws {
+        let server = try LocalHTTPServer(json: body)
         defer { server.stop() }
-        #expect(errorText(await fetchEntriesAsync(count: 10, baseURL: server.baseURL)) == "Bad response")
+
+        await #expect(throws: NightscoutError.decode) {
+            try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+        }
     }
 
-    @Test func fetchJSONObjectInsteadOfArrayIsDecodeError() async throws {
-        let server = try LocalHTTPServer(json: "{\"foo\":1}")
-        defer { server.stop() }
-        #expect(errorText(await fetchEntriesAsync(count: 10, baseURL: server.baseURL)) == "Bad response")
-    }
-
-    @Test func fetchHTTPErrorStatus() async throws {
+    @Test func fetchReportsAnHTTPErrorStatus() async throws {
         let server = try LocalHTTPServer(status: 500, json: "[]")
         defer { server.stop() }
-        #expect(errorText(await fetchEntriesAsync(count: 10, baseURL: server.baseURL)) == "HTTP 500")
-    }
 
-    /// A trailing slash on the site URL and a blank token must not reach the query.
-    @Test func fetchNormalizesBaseURLAndOmitsABlankToken() async throws {
-        let server = try LocalHTTPServer(json: #"[{"sgv":100,"direction":"Flat","date":1700000400000}]"#)
-        defer { server.stop() }
-
-        _ = await fetchEntriesAsync(count: 10, baseURL: server.baseURL + "///", token: "   ")
-        let line = try #require(server.requestLines.first)
-        #expect(line.contains("/api/v1/entries/sgv.json"))
-        #expect(!line.contains("token"))
+        await #expect(throws: NightscoutError.http(500)) {
+            try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+        }
     }
 }
 
-// MARK: - Connection probe (the Settings status indicator)
-
 extension SugargliderTests {
-    @Test func probeConnectedWithReadings() async throws {
-        let server = try LocalHTTPServer(json: #"[{"sgv":100,"direction":"Flat","date":1700000000000}]"#)
+    @Test(arguments: [#"[{"sgv":100,"direction":"Flat","date":1700000000000}]"#, "[]"])
+    func probeCountsAReachableSiteAsConnectedEvenWithoutReadings(body: String) async throws {
+        let server = try LocalHTTPServer(json: body)
         defer { server.stop() }
-        let result = await Nightscout.probe(baseURL: server.baseURL, token: "")
-        #expect(result == .connected)
+
+        #expect(await Nightscout.probe(baseURL: server.baseURL, token: "") == .connected)
     }
 
-    @Test func probeConnectedWhenSiteHasNoReadings() async throws {
-        let server = try LocalHTTPServer(json: "[]")
+    @Test(arguments: [401, 403])
+    func probeReportsRejectedCredentials(status: Int) async throws {
+        let server = try LocalHTTPServer(status: status, json: "[]")
         defer { server.stop() }
-        let result = await Nightscout.probe(baseURL: server.baseURL, token: "")
-        #expect(result == .connected)   // credentials work; there's just no data
+
+        #expect(await Nightscout.probe(baseURL: server.baseURL, token: "wrong")
+            == .failed("Authentication failed — check the token"))
     }
 
-    @Test func probeUnauthorizedIsAuthFailure() async throws {
-        let server = try LocalHTTPServer(status: 401, json: "[]")
-        defer { server.stop() }
-        let result = await Nightscout.probe(baseURL: server.baseURL, token: "wrong")
-        #expect(result == .failed("Authentication failed — check the token"))
-    }
-
-    @Test func probeForbiddenIsAuthFailure() async throws {
-        let server = try LocalHTTPServer(status: 403, json: "[]")
-        defer { server.stop() }
-        let result = await Nightscout.probe(baseURL: server.baseURL, token: "wrong")
-        #expect(result == .failed("Authentication failed — check the token"))
-    }
-
-    @Test func probeServerErrorReportsStatus() async throws {
+    @Test func probeReportsAnyOtherHTTPStatus() async throws {
         let server = try LocalHTTPServer(status: 500, json: "[]")
         defer { server.stop() }
-        let result = await Nightscout.probe(baseURL: server.baseURL, token: "")
-        #expect(result == .failed("HTTP 500"))
+
+        #expect(await Nightscout.probe(baseURL: server.baseURL, token: "") == .failed("HTTP 500"))
     }
 
-    @Test func probeInvalidURL() async {
-        let result = await Nightscout.probe(baseURL: "http://exa mple.com", token: "")
-        #expect(result == .failed("Invalid URL"))
+    @Test func probeReportsAnInvalidURL() async {
+        #expect(await Nightscout.probe(baseURL: "http://exa mple.com", token: "") == .failed("Invalid URL"))
     }
 }

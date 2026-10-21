@@ -1,14 +1,11 @@
 #!/bin/bash
-# Submit an artifact to Apple's notary service and wait for the verdict.
+# Submits a file to Apple's notary service and waits for the verdict.
 #
 #   scripts/notarize.sh <file> [--staple]
 #
-# Requires APPLE_ID, APPLE_TEAM_ID and APPLE_APP_PASSWORD (an app-specific
-# password from appleid.apple.com, not the account password).
-#
-# A .zip can be submitted but not stapled: the ticket goes onto the .app inside
-# it, so callers notarize the zip, staple the app, then re-zip. A .dmg is both
-# submitted and stapled directly, hence the flag.
+# Needs APPLE_ID, APPLE_TEAM_ID and APPLE_APP_PASSWORD (an app-specific password,
+# not the account password). A .dmg can be stapled, a .zip can't: callers staple
+# the app inside it and zip it again.
 set -euo pipefail
 
 FILE="${1:-}"
@@ -20,8 +17,7 @@ STAPLE="${2:-}"
 : "${APPLE_APP_PASSWORD:?APPLE_APP_PASSWORD is required}"
 
 echo "==> Notarizing ${FILE}"
-# Captured rather than streamed, so the submission id is still available to
-# fetch the log. "Invalid" is the one verdict where the detail matters.
+# Captured, not streamed: on failure the submission id is needed to fetch the log.
 if output="$(xcrun notarytool submit "${FILE}" \
     --apple-id "${APPLE_ID}" \
     --team-id "${APPLE_TEAM_ID}" \

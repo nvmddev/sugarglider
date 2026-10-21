@@ -1,129 +1,126 @@
 import Foundation
 
-/// Live reading state: the latest and previous reading, the chart history, any
-/// error, and the pump data the dropdown shows. Nothing here is persisted; a
-/// handful of requests rebuilds it all.
-///
-/// `init` is deliberately inert (no timer, no network) so tests can construct a
-/// store without side effects. `start()` is the explicit trigger the app calls
-/// once at launch.
-@MainActor
+/// Live state behind the status item and the dropdown; nothing is persisted. `init` has no
+/// side effects, so tests can build a store freely; the app calls `start()` once.
 @Observable
 final class ReadingStore {
-    private let settings: AppSettings
-
     var lastReading: Reading?
     var previousReading: Reading?
     var lastError: String?
-    var readings: [Reading] = []      // history for the chart
+    /// The chart's history, oldest first.
+    var readings: [Reading] = []
 
-    // What a pump uploader reports besides glucose. Fetched like the history,
-    // only while the dropdown is open, and only the parts a switch in Settings
-    // asks for: see `refreshDetails(force:)`.
     var pumpStatus: PumpStatus?
-    var treatments: [Treatment] = []  // the chart's window, oldest first
+    /// The chart's treatments, oldest first.
+    var treatments: [Treatment] = []
     var reservoirChanged: Date?
     var batteryChanged: Date?
 
-    // Bookkeeping nothing observes, hence out of Observation's change tracking.
-    @ObservationIgnored private var historyFetchedAt: Date?
-    @ObservationIgnored private var pumpStatusFetchedAt: Date?
-    @ObservationIgnored private var treatmentsFetchedAt: Date?
-    @ObservationIgnored private var changesFetchedAt: Date?
-    /// Like `historyWindowStart`, for `treatments`.
+    /// Start of the window the last full fetch requested, which is what the cache covers.
+    @ObservationIgnored private(set) var historyWindowStart: Date?
     @ObservationIgnored private(set) var treatmentsWindowStart: Date?
     @ObservationIgnored private(set) var timer: Timer?
-    /// Bumped by `reconnect()`. In-flight fetches capture it at launch and drop
-    /// their response if it changed, so a slow answer from the previous site
-    /// can't land after a URL change and repopulate the store with its data.
+
+    private enum Part { case history, pumpStatus, treatments, changeDates }
+    @ObservationIgnored private var fetchedAt: [Part: Date] = [:]
+    /// Bumped by `reconnect()`. Responses to earlier requests are dropped, so a slow answer
+    /// from the previous site can't repopulate the store.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var reconnectDebounce: Task<Void, Never>?
     @ObservationIgnored private var coverageDebounce: Task<Void, Never>?
-    /// Start of the window the last full history fetch asked for, i.e. what the
-    /// cache is built to cover. See `coversHistory(from:)`.
-    @ObservationIgnored private(set) var historyWindowStart: Date?
 
-    /// Same threshold the chart uses to break its line on a dropout, so the two
-    /// can't disagree about what counts as one continuous history.
+    private let settings: AppSettings
+
     static let contiguityThreshold = ChartMath.dropoutThreshold
-    private var pollInterval: TimeInterval { TimeInterval(settings.pollIntervalSeconds) }
+    /// Treatments are fetched from this far before the window, so a temp basal already running
+    /// at its left edge is drawn: loops set them for 30 minutes.
+    static let tempBasalLookback: TimeInterval = 30 * 60
+    /// How far a top-up reaches back past the newest cached treatment. Treatments land out of
+    /// order: a bolus is dated when it was given and uploaded minutes later.
+    static let treatmentOverlap: TimeInterval = 60 * 60
+    /// Older reservoir and battery changes aren't worth showing an age for.
+    private static let changeLookback: TimeInterval = 60 * 86_400
+    private static let widestWindow = TimeInterval(AppSettings.rangeHoursLimits.upperBound) * 3600
+    // Nightscout's own event types, the ones its age pills read.
+    private static let reservoirChangeEvent = "Insulin Change"
+    private static let batteryChangeEvent = "Pump Battery Change"
 
     init(settings: AppSettings) {
         self.settings = settings
     }
 
-    /// Subscribes to the settings changes this store reacts to, then starts
-    /// polling. The wiring lives here rather than at the call site so the store
-    /// owns which of its own methods each change drives.
     func start() {
         settings.onConnectionChanged = { [weak self] in self?.reconnect() }
-        settings.onPollIntervalChanged = { [weak self] in self?.restartTimer() }
+        settings.onPollIntervalChanged = { [weak self] in self?.schedulePolling() }
         settings.onRangeHoursChanged = { [weak self] in self?.ensureHistoryCoverage() }
-        if settings.isConfigured { refresh() }
-        startTimer()
+        refresh()
+        schedulePolling()
     }
 
-    func startTimer() {
-        let t = Timer(timeInterval: pollInterval, repeats: true) { [weak self] _ in
+    private func schedulePolling() {
+        timer?.invalidate()
+        let interval = TimeInterval(settings.pollIntervalSeconds)
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
-        // Generous tolerance lets macOS coalesce the wakeup.
-        t.tolerance = pollInterval * 0.5
-        // `.common` keeps the poll firing during event tracking, e.g. while the
-        // range slider is dragged, where a `.default`-mode timer stalls.
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
+        timer.tolerance = interval / 2
+        // In the default mode the poll would stall while the range slider is dragged.
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
-    /// Rebuilds the timer so a changed interval takes effect immediately rather
-    /// than after the next fire.
-    func restartTimer() {
-        timer?.invalidate()
-        startTimer()
-    }
-
+    /// Fetches the two newest entries: the older one is what the delta is taken against.
     func refresh() {
         guard settings.isConfigured else { return }
-        // Two readings so the delta to the previous value is always available.
-        let gen = generation
+        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
         Task {
             do {
-                let fetched = try await Nightscout.fetchEntries(count: 2, baseURL: settings.baseURL, token: settings.token)
-                guard gen == generation else { return }
-                lastReading = fetched.last
-                if fetched.count >= 2 { previousReading = fetched[fetched.count - 2] }
-                lastError = nil
-                // The poll's entries are history too, so folding them in keeps
-                // the chart current between history fetches, often making the
-                // fetch on the next dropdown open a no-op. Only while they join
-                // up with the cache though: leaving a gap in place preserves the
-                // `since` boundary the next top-up needs to fill it.
-                if let newest = readings.last, let firstNew = fetched.first,
-                   firstNew.date > newest.date,
-                   firstNew.date.timeIntervalSince(newest.date) <= Self.contiguityThreshold {
-                    merge(fetched)
-                }
+                let latest = try await Nightscout.fetchEntries(count: 2, baseURL: baseURL, token: token)
+                guard generation == self.generation else { return }
+                showNewest(of: latest)
+                if Self.joinsUp(latest, with: readings) { merge(latest) }
             } catch {
-                guard gen == generation else { return }
-                lastError = (error as? NightscoutError)?.errorDescription ?? error.localizedDescription
+                guard generation == self.generation else { return }
+                lastError = error.localizedDescription
             }
         }
     }
 
-    /// Upper bound on entries per history request. The date filter is what
-    /// selects the window, so this is only a guard against a site uploading
-    /// every minute instead of every five. A normal site never reaches it.
+    /// Whether polled entries add to the history without a dropout. Entries beyond one stay
+    /// out, so the next top-up starts at its near edge and fills it.
+    static func joinsUp(_ polled: [Reading], with history: [Reading]) -> Bool {
+        guard let newestCached = history.last?.date,
+              let firstNew = polled.first(where: { $0.date > newestCached }) else { return false }
+        return firstNew.date.timeIntervalSince(newestCached) <= contiguityThreshold
+    }
+
+    /// Fetches the window once, then only what arrived after the newest cached entry.
+    func refreshHistory(force: Bool) {
+        guard settings.isConfigured, force || !fetchedRecently(.history) else { return }
+        let start = windowStart
+        let covered = coversHistory(from: start)
+        // Never nil, not even for a covered but empty cache: that would be an unfiltered request.
+        let since = (covered ? readings.last?.date : nil) ?? start
+        let count = Self.historyCount(forRangeHours: settings.rangeHours)
+        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
+        Task {
+            guard let fetched = try? await Nightscout.fetchEntries(
+                    count: count, since: since, baseURL: baseURL, token: token),
+                  generation == self.generation else { return }
+            fetchedAt[.history] = .now
+            if !covered { historyWindowStart = start }
+            merge(fetched)
+        }
+    }
+
+    /// A cap, not a selector: the date filter picks the window, this only bounds a site that
+    /// uploads every minute instead of every five.
     static func historyCount(forRangeHours hours: Int) -> Int {
         min(hours * 60 + 60, 2880)
     }
 
-    /// Whether the cache already reaches back to `start`, so it only needs
-    /// topping up at the newest end.
-    ///
-    /// Compares against the window that was *requested*, not against the oldest
-    /// reading received: a site with nothing older than yesterday would
-    /// otherwise look permanently uncovered and refetch its whole window on
-    /// every call.
+    /// Goes by the window that was requested, not by the oldest reading received: a site with
+    /// only a few hours of data would otherwise refetch its whole window on every call.
     static func historyCovers(requested: Date?, from start: Date) -> Bool {
         guard let requested else { return false }
         return requested <= start
@@ -133,44 +130,15 @@ final class ReadingStore {
         Self.historyCovers(requested: historyWindowStart, from: start)
     }
 
-    /// Fetches only what's missing. The first call for a window pulls the whole
-    /// thing; afterwards the cache is topped up with whatever arrived since its
-    /// newest entry, which is normally a handful of readings, or none.
-    func refreshHistory(force: Bool) {
-        guard settings.isConfigured else { return }
-        if !force, let at = historyFetchedAt, Date().timeIntervalSince(at) < 60 { return }
-        let windowStart = Date().addingTimeInterval(-Double(settings.rangeHours) * 3600)
-        let covered = coversHistory(from: windowStart)
-        // Topping up asks for everything after the newest cached entry; a full
-        // fetch asks for the window itself. Either way the server does the
-        // selecting, and it's never an unfiltered request, not even for a site
-        // whose window came back empty (covered, but with nothing to top up from).
-        let since = (covered ? readings.last?.date : nil) ?? windowStart
-        let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        let gen = generation
-        Task {
-            guard let fetched = try? await Nightscout.fetchEntries(
-                    count: count, since: since,
-                    baseURL: settings.baseURL, token: settings.token),
-                  gen == generation else { return }
-            historyFetchedAt = Date()
-            if !covered { historyWindowStart = windowStart }
-            merge(fetched)
-        }
-    }
-
-    /// The cache is sized to the window, so widening the range needs history
-    /// that was never fetched. Debounced because dragging the slider walks
-    /// through every step on the way, and it bypasses the once-a-minute
-    /// throttle: this is a visible gap in the chart, not a routine refresh.
-    /// The chart's treatments follow the same window, so they're topped up
-    /// alongside, once they've been fetched at all.
+    /// Fetches what a widened range is missing, the treatments too once they've been fetched at
+    /// all. Debounced, since a slider drag walks through every step, and unthrottled, since the
+    /// gap shows in the chart.
     func ensureHistoryCoverage() {
         guard settings.isConfigured else { return }
-        let windowStart = Date().addingTimeInterval(-Double(settings.rangeHours) * 3600)
-        let needsHistory = !coversHistory(from: windowStart)
-        let needsTreatments = settings.needsTreatments && treatmentsFetchedAt != nil
-            && !Self.historyCovers(requested: treatmentsWindowStart, from: windowStart)
+        let start = windowStart
+        let needsHistory = !coversHistory(from: start)
+        let needsTreatments = settings.needsTreatments && fetchedAt[.treatments] != nil
+            && !Self.historyCovers(requested: treatmentsWindowStart, from: start)
         guard needsHistory || needsTreatments else { return }
         coverageDebounce?.cancel()
         coverageDebounce = Task {
@@ -180,13 +148,8 @@ final class ReadingStore {
         }
     }
 
-    // MARK: - Pump details
-
-    /// Everything the dropdown shows besides glucose: the device status, the
-    /// chart's treatments, and when the reservoir and battery were last
-    /// changed. Called when the dropdown opens, with the same once-a-minute
-    /// throttle as the history, kept per part so one switched on in Settings
-    /// is fetched on the next open rather than a minute later.
+    /// Fetches each part only while a switch shows it. The throttle is per part, so one just
+    /// switched on is fetched on the next open.
     func refreshDetails(force: Bool) {
         refreshPumpStatus(force: force)
         refreshTreatments(force: force)
@@ -195,144 +158,85 @@ final class ReadingStore {
 
     private func refreshPumpStatus(force: Bool) {
         guard settings.isConfigured, settings.needsPumpStatus,
-              force || !Self.fetchedRecently(pumpStatusFetchedAt) else { return }
-        let gen = generation
+              force || !fetchedRecently(.pumpStatus) else { return }
+        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
         Task {
-            // Nil is an answer (the site reports no pump). A failed fetch keeps
-            // what's there instead: the dropdown dates it, and blanking it on
-            // one network hiccup would only make it flicker.
-            do {
-                let status = try await Nightscout.fetchPumpStatus(baseURL: settings.baseURL,
-                                                                  token: settings.token)
-                guard gen == generation else { return }
-                pumpStatusFetchedAt = Date()
-                pumpStatus = status
-            } catch {}
+            // Not `try?`, which would flatten the two: nil is an answer (no pump on the site),
+            // a failure keeps the old status.
+            let status: PumpStatus?
+            do { status = try await Nightscout.fetchPumpStatus(baseURL: baseURL, token: token) } catch { return }
+            guard generation == self.generation else { return }
+            fetchedAt[.pumpStatus] = .now
+            pumpStatus = status
         }
-    }
-
-    /// How far before the window the chart's treatments are fetched from, so a
-    /// temp basal already running at the left edge is drawn from there on.
-    /// Loop and the CamAPS FX uploader write them for 30 minutes.
-    static let tempBasalLookback: TimeInterval = 30 * 60
-
-    /// How far a top-up reaches back past the newest cached treatment. Unlike
-    /// a glucose entry, a treatment can land after newer ones: a bolus is
-    /// dated when it was given and uploaded minutes later, a temp basal when
-    /// the pump last answered.
-    static let treatmentOverlap: TimeInterval = 60 * 60
-
-    /// Where a treatments fetch starts: the whole window (plus the lookback)
-    /// until it's covered, then only an overlap past the newest cached one.
-    static func treatmentsSince(windowStart: Date, covered: Bool, newestCached: Date?) -> Date {
-        if covered, let newestCached {
-            return max(newestCached.addingTimeInterval(-treatmentOverlap),
-                       windowStart.addingTimeInterval(-tempBasalLookback))
-        }
-        return windowStart.addingTimeInterval(-tempBasalLookback)
     }
 
     func refreshTreatments(force: Bool) {
         guard settings.isConfigured, settings.needsTreatments,
-              force || !Self.fetchedRecently(treatmentsFetchedAt) else { return }
-        let windowStart = Date().addingTimeInterval(-Double(settings.rangeHours) * 3600)
-        let covered = Self.historyCovers(requested: treatmentsWindowStart, from: windowStart)
-        let since = Self.treatmentsSince(windowStart: windowStart, covered: covered,
+              force || !fetchedRecently(.treatments) else { return }
+        let start = windowStart
+        let covered = Self.historyCovers(requested: treatmentsWindowStart, from: start)
+        let since = Self.treatmentsSince(windowStart: start, covered: covered,
                                          newestCached: treatments.last?.date)
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        let gen = generation
+        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
         Task {
             guard let fetched = try? await Nightscout.fetchTreatments(
-                    since: since, count: count, baseURL: settings.baseURL, token: settings.token),
-                  gen == generation else { return }
-            treatmentsFetchedAt = Date()
-            if !covered { treatmentsWindowStart = windowStart }
+                    since: since, count: count, baseURL: baseURL, token: token),
+                  generation == self.generation else { return }
+            fetchedAt[.treatments] = .now
+            if !covered { treatmentsWindowStart = start }
             treatments = Self.merged(treatments, with: fetched)
         }
     }
 
-    /// `fetched` folded into `cached` by id, so a record a top-up delivers again
-    /// replaces its cached copy. Trimmed to the widest selectable window.
-    static func merged(_ cached: [Treatment], with fetched: [Treatment], now: Date = Date()) -> [Treatment] {
-        var byID = Dictionary(cached.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
-        for t in fetched { byID[t.id] = t }
-        let cutoff = now.addingTimeInterval(
-            -Double(AppSettings.rangeHoursLimits.upperBound) * 3600 - tempBasalLookback)
-        return byID.values.filter { $0.date >= cutoff }.sorted { $0.date < $1.date }
+    static func treatmentsSince(windowStart: Date, covered: Bool, newestCached: Date?) -> Date {
+        let wholeWindow = windowStart.addingTimeInterval(-tempBasalLookback)
+        guard covered, let newestCached else { return wholeWindow }
+        return max(newestCached.addingTimeInterval(-treatmentOverlap), wholeWindow)
     }
-
-    /// How far back a reservoir or battery change is looked for. Older than
-    /// this, the age isn't worth showing.
-    static let changeLookback: TimeInterval = 60 * 86_400
 
     private func refreshChangeDates(force: Bool) {
         guard settings.isConfigured, settings.needsChangeDates,
-              force || !Self.fetchedRecently(changesFetchedAt) else { return }
-        let since = Date().addingTimeInterval(-Self.changeLookback)
-        let (url, token) = (settings.baseURL, settings.token)
-        let (reservoir, battery) = (settings.showReservoir, settings.showPumpBattery)
-        let gen = generation
+              force || !fetchedRecently(.changeDates) else { return }
+        let since = Date.now.addingTimeInterval(-Self.changeLookback)
+        let (showsReservoir, showsBattery) = (settings.showReservoir, settings.showPumpBattery)
+        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
         Task {
-            // Nightscout's names for the two, the ones its age pills read.
-            func latest(_ eventType: String) async throws -> Date? {
-                try await Nightscout.fetchLatestEvent(eventType, since: since, baseURL: url, token: token)
+            func latest(_ eventType: String, if shown: Bool) async throws -> Date? {
+                guard shown else { return nil }
+                return try await Nightscout.fetchLatestEvent(eventType, since: since,
+                                                             baseURL: baseURL, token: token)
             }
-            // Nil is an answer here (no change on record), so only a thrown
-            // error keeps the old dates.
+            // Like the status: nil is an answer (no change on record), a failure keeps the old dates.
+            let dates: (reservoir: Date?, battery: Date?)
             do {
-                let reservoirDate: Date? = if reservoir { try await latest("Insulin Change") } else { nil }
-                let batteryDate: Date? = if battery { try await latest("Pump Battery Change") } else { nil }
-                guard gen == generation else { return }
-                changesFetchedAt = Date()
-                reservoirChanged = reservoirDate
-                batteryChanged = batteryDate
-            } catch {}
+                async let reservoir = latest(Self.reservoirChangeEvent, if: showsReservoir)
+                async let battery = latest(Self.batteryChangeEvent, if: showsBattery)
+                dates = try await (reservoir, battery)
+            } catch { return }
+            guard generation == self.generation else { return }
+            fetchedAt[.changeDates] = .now
+            reservoirChanged = dates.reservoir
+            batteryChanged = dates.battery
         }
     }
 
-    private static func fetchedRecently(_ at: Date?) -> Bool {
-        guard let at else { return false }
-        return Date().timeIntervalSince(at) < 60
-    }
-
-    /// Folds `fetched` into the cache, keyed by timestamp so a re-delivered
-    /// entry replaces rather than duplicates its cached copy. Trimmed to the
-    /// widest selectable window so the array can't grow without bound.
-    private func merge(_ fetched: [Reading]) {
-        guard !fetched.isEmpty else { return }
-        var byDate = Dictionary(readings.map { ($0.date, $0) }, uniquingKeysWith: { _, new in new })
-        for r in fetched { byDate[r.date] = r }
-        let cutoff = Date().addingTimeInterval(-Double(AppSettings.rangeHoursLimits.upperBound) * 3600)
-        readings = byDate.values.filter { $0.date >= cutoff }.sorted { $0.date < $1.date }
-        // History includes the newest points; keep the bar in sync.
-        if let newest = readings.last {
-            lastReading = newest
-            if readings.count >= 2 { previousReading = readings[readings.count - 2] }
-            lastError = nil
-        }
-    }
-
-    /// Drops cached state and re-fetches, since a new site invalidates
-    /// everything. State clears immediately but the re-fetch is debounced:
-    /// Settings is non-modal, so this fires on every keystroke in the URL and
-    /// token fields, and each character would otherwise trigger two requests
-    /// against a half-typed URL.
+    /// Forgets the previous site at once but debounces the re-fetch: this runs on every
+    /// keystroke in the URL and token fields.
     func reconnect() {
         generation += 1
         lastReading = nil
         previousReading = nil
         lastError = nil
         readings = []
-        historyFetchedAt = nil
-        historyWindowStart = nil
         pumpStatus = nil
         treatments = []
         reservoirChanged = nil
         batteryChanged = nil
-        pumpStatusFetchedAt = nil
-        treatmentsFetchedAt = nil
+        historyWindowStart = nil
         treatmentsWindowStart = nil
-        changesFetchedAt = nil
+        fetchedAt = [:]
         coverageDebounce?.cancel()
         reconnectDebounce?.cancel()
         reconnectDebounce = Task {
@@ -342,42 +246,87 @@ final class ReadingStore {
         }
     }
 
-    /// Signed change since the previous reading, e.g. "+0.3". Nil when the delta
-    /// is off, there's no prior reading, or the gap is too large for the two to
-    /// count as consecutive.
+    static func merged(_ cached: [Reading], with fetched: [Reading], now: Date = .now) -> [Reading] {
+        merged(cached, with: fetched, by: \.date, date: \.date,
+               keepingFrom: now.addingTimeInterval(-widestWindow))
+    }
+
+    static func merged(_ cached: [Treatment], with fetched: [Treatment], now: Date = .now) -> [Treatment] {
+        merged(cached, with: fetched, by: \.id, date: \.date,
+               keepingFrom: now.addingTimeInterval(-widestWindow - tempBasalLookback))
+    }
+
+    /// `fetched` folded into `cached`, a record delivered again replacing its cached copy.
+    private static func merged<Record, Key: Hashable & Comparable>(
+        _ cached: [Record], with fetched: [Record],
+        by key: KeyPath<Record, Key>, date: KeyPath<Record, Date>, keepingFrom cutoff: Date
+    ) -> [Record] {
+        Dictionary((cached + fetched).map { ($0[keyPath: key], $0) }, uniquingKeysWith: { _, newer in newer })
+            .values
+            .filter { $0[keyPath: date] >= cutoff }
+            // The key breaks ties, so the order never depends on the dictionary's.
+            .sorted { ($0[keyPath: date], $0[keyPath: key]) < ($1[keyPath: date], $1[keyPath: key]) }
+    }
+
+    private func merge(_ fetched: [Reading]) {
+        guard !fetched.isEmpty else { return }
+        readings = Self.merged(readings, with: fetched)
+        showNewest(of: readings)
+    }
+
+    private func showNewest(of sorted: [Reading]) {
+        guard let newest = sorted.last else { return }
+        lastReading = newest
+        if sorted.count >= 2 { previousReading = sorted[sorted.count - 2] }
+        lastError = nil
+    }
+
+    private var windowStart: Date {
+        .now.addingTimeInterval(-TimeInterval(settings.rangeHours) * 3600)
+    }
+
+    private func fetchedRecently(_ part: Part) -> Bool {
+        guard let fetched = fetchedAt[part] else { return false }
+        return Date.now.timeIntervalSince(fetched) < 60
+    }
+}
+
+extension ReadingStore {
+    /// Signed change since the previous reading, e.g. "+0.3"; nil when switched off or when the
+    /// two readings aren't consecutive.
     func deltaText() -> String? {
         guard settings.deltaDisplay != .off,
-              let cur = lastReading, let prev = previousReading else { return nil }
-        let gap = cur.date.timeIntervalSince(prev.date)
+              let current = lastReading, let previous = previousReading else { return nil }
+        let gap = current.date.timeIntervalSince(previous.date)
         guard gap > 0, gap < 12 * 60 else { return nil }
         let units = settings.units
-        let d = cur.value(in: units) - prev.value(in: units)
-        return units == .mmol ? String(format: "%+.1f", d) : String(format: "%+.0f", d)
+        let delta = current.value(in: units) - previous.value(in: units)
+        return String(format: units == .mmol ? "%+.1f" : "%+.0f", delta)
     }
 
-    /// Read live, so a changed `staleAfterMinutes` applies to the reading
-    /// already on screen.
     var isStale: Bool {
-        guard let r = lastReading else { return false }
-        return Date().timeIntervalSince(r.date) > settings.staleThreshold
+        guard let lastReading else { return false }
+        return Date.now.timeIntervalSince(lastReading.date) > settings.staleThreshold
     }
 
-    /// Age short enough for the menu bar: "13m", "2h", "3d". Rounds down, so it
-    /// never claims more time has passed than has.
-    static func compactAge(_ date: Date) -> String {
-        let secs = max(0, Int(Date().timeIntervalSince(date)))
-        if secs < 3600 { return "\(secs / 60)m" }
-        if secs < 86_400 { return "\(secs / 3600)h" }
-        return "\(secs / 86_400)d"
+    /// "13m", "2h", "3d". Rounds down: it must never claim more time has passed than has.
+    static func compactAge(_ date: Date, now: Date = .now) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        return switch seconds {
+        case ..<3600: "\(seconds / 60)m"
+        case ..<86_400: "\(seconds / 3600)h"
+        default: "\(seconds / 86_400)d"
+        }
     }
 
-    /// Compact relative time, e.g. "just now", "3 min ago", "2 h ago".
-    static func relative(_ date: Date) -> String {
-        let secs = Int(Date().timeIntervalSince(date))
-        if secs < 30 { return "just now" }
-        if secs < 90 { return "1 min ago" }
-        if secs < 3600 { return "\(secs / 60) min ago" }
-        if secs < 7200 { return "1 h ago" }
-        return "\(secs / 3600) h ago"
+    static func relative(_ date: Date, now: Date = .now) -> String {
+        let seconds = Int(now.timeIntervalSince(date))
+        return switch seconds {
+        case ..<30: "just now"
+        case ..<90: "1 min ago"
+        case ..<3600: "\(seconds / 60) min ago"
+        case ..<7200: "1 h ago"
+        default: "\(seconds / 3600) h ago"
+        }
     }
 }
