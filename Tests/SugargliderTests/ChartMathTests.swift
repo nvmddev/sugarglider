@@ -69,6 +69,24 @@ extension SugargliderTests {
         #expect(split.map(\.count) == [2, 3])
     }
 
+    @Test func outOfRangeSpansReachHalfwayToTheNeighbors() {
+        // Whole seconds, so the halves come out exact.
+        let base = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        func segment(_ values: [Int]) -> [Reading] {
+            values.enumerated().map { i, sgv in reading(sgv, minutesAgo: Double(values.count - 1 - i) * 5, from: base) }
+        }
+        func minutesAgo(_ spans: [ClosedRange<Date>]) -> [ClosedRange<Double>] {
+            spans.map { base.timeIntervalSince($0.upperBound) / 60...base.timeIntervalSince($0.lowerBound) / 60 }
+        }
+
+        #expect(ChartMath.outOfRangeSpans(segment([100, 60, 40, 60])).isEmpty)
+        // Readings at 15, 10, 5 and 0 minutes ago; the two LOWs run from 12.5 to 2.5.
+        #expect(minutesAgo(ChartMath.outOfRangeSpans(segment([60, 39, 39, 60]))) == [2.5...12.5])
+        // A lone marker still gets a stretch, and one at an end stops at its own reading.
+        #expect(minutesAgo(ChartMath.outOfRangeSpans(segment([401, 300, 401, 300, 401])))
+                == [17.5...20, 7.5...12.5, 0...2.5])
+    }
+
     @Test func colorForZone() {
         let zones = defaultZones()
         #expect(AppSettings.colorsMatch(ChartMath.color(for: 50, zones: zones), zones.extremeLowColor))
@@ -260,6 +278,22 @@ extension SugargliderTests {
         let chart = pixels(of: ChartCanvas(readings: samples, rangeHours: 72, settings: s, windowEnd: end))
         #expect(chart != nil)
         #expect(chart != pixels(of: ChartCanvas(readings: [], rangeHours: 72, settings: s)))
+    }
+
+    /// Both units, since LOW's 39 lies under the mg/dL axis' floor of 40, and both line styles.
+    @Test(arguments: [(AppSettings.Units.mgdl, false), (.mmol, true)])
+    func rendersLowAndHighStretchesDotted(units: AppSettings.Units, blended: Bool) {
+        let s = Self.makeSettings()
+        s.units = units
+        s.blendLineColors = blended
+        let end = Date.now
+        let values = [120, 80, 50, 39, 39, 39, 60, 140, 250, 350, 401, 401, 380, 300, 39]
+        let readings = values.enumerated().map { i, sgv in
+            reading(sgv, minutesAgo: Double(values.count - 1 - i) * 5, from: end)
+        }
+        let chart = pixels(of: ChartCanvas(readings: readings, rangeHours: 2, settings: s, windowEnd: end))
+        #expect(chart != nil)
+        #expect(chart != pixels(of: ChartCanvas(readings: [], rangeHours: 2, settings: s)))
     }
 
     /// Single-reading segments take the isolated-dot branch.

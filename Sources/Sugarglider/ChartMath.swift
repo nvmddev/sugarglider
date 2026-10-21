@@ -39,6 +39,25 @@ enum ChartMath {
         return runs
     }
 
+    /// Where a segment runs beyond the sensor's range. Each reading takes the time halfway to its
+    /// neighbors, so a lone LOW gets a stretch of its own.
+    static func outOfRangeSpans(_ segment: [Reading]) -> [ClosedRange<Date>] {
+        var spans: [ClosedRange<Date>] = []
+        for (i, reading) in segment.enumerated() where reading.outOfRange != nil {
+            func halfway(to j: Int) -> Date {
+                guard segment.indices.contains(j) else { return reading.date }
+                return reading.date.addingTimeInterval(segment[j].date.timeIntervalSince(reading.date) / 2)
+            }
+            let span = halfway(to: i - 1)...halfway(to: i + 1)
+            if let last = spans.last, last.upperBound >= span.lowerBound {
+                spans[spans.count - 1] = last.lowerBound...span.upperBound
+            } else {
+                spans.append(span)
+            }
+        }
+        return spans
+    }
+
     /// A Catmull-Rom spline through the points.
     static func smooth(_ points: [CGPoint]) -> Path {
         var path = Path()

@@ -28,6 +28,20 @@ extension SugargliderTests {
         #expect(Reading(sgv: mgdl, direction: "Flat", date: .now).text(in: units) == expected)
     }
 
+    @Test(arguments: [AppSettings.Units.mmol, .mgdl])
+    func outOfRangeMarkersReadLowAndHighInEitherUnit(units: AppSettings.Units) {
+        #expect(Reading(sgv: 39, direction: "DoubleDown", date: .now).outOfRange == .low)
+        #expect(Reading(sgv: 39, direction: "DoubleDown", date: .now).text(in: units) == "LOW")
+        #expect(Reading(sgv: 401, direction: "DoubleUp", date: .now).outOfRange == .high)
+        #expect(Reading(sgv: 401, direction: "DoubleUp", date: .now).text(in: units) == "HIGH")
+        // The sensor's own bounds are real readings.
+        for sgv in [38, 40, 400, 402] {
+            let bound = Reading(sgv: sgv, direction: "Flat", date: .now)
+            #expect(bound.outOfRange == nil)
+            #expect(bound.text(in: units) == units.text(fromMgdl: sgv))
+        }
+    }
+
     @Test func unitLabels() {
         #expect(AppSettings.Units.mmol.label == "mmol/L")
         #expect(AppSettings.Units.mgdl.label == "mg/dL")
