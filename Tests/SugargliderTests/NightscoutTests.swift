@@ -112,7 +112,7 @@ extension SugargliderTests {
     func probeReportsRejectedCredentials(status: Int) async throws {
         let site = StubbedSite(status: status, json: "[]")
 
-        #expect(await site.nightscout(token: "wrong").probe() == .failed("Authentication failed — check the token"))
+        #expect(await site.nightscout(token: "wrong").probe() == .failed("Authentication failed. Check the token."))
     }
 
     @Test func probeReportsAnyOtherHTTPStatus() async throws {

@@ -184,7 +184,7 @@ struct Nightscout {
         } catch NightscoutError.empty {
             return .connected  // the credentials work, the site just has no readings yet
         } catch NightscoutError.http(401), NightscoutError.http(403) {
-            return .failed(String(localized: "Authentication failed — check the token"))
+            return .failed(String(localized: "Authentication failed. Check the token."))
         } catch {
             return .failed(error.localizedDescription)
         }

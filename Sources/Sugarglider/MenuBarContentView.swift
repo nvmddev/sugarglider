@@ -120,7 +120,7 @@ struct MenuBarContentView: View {
         let age = reading.date.relative(to: store.now)
         let line = store.isStale ? Text("Reading from \(age) (stale)") : Text("Reading from \(age)")
         guard let error = store.lastError else { return line }
-        return Text("\(line) — \(error)")
+        return Text("\(line) · \(error)")
     }
 }
 

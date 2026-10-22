@@ -40,7 +40,7 @@ struct ColorsTab: View {
                 }
                 .padding(5)
             }
-            Text("Preview — sample data, not your readings")
+            Text("Preview with sample data, not your readings")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)

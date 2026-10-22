@@ -19,7 +19,7 @@ struct GlucoseTab: View {
                         .foregroundStyle(.orange)
                 } footer: {
                     Text("""
-                        Until these are in order — very low ≤ low < high ≤ very high — the chart \
+                        Until these are in order (very low ≤ low < high ≤ very high), the chart \
                         can't color the zones or draw the optimal range.
                         """)
                         .foregroundStyle(.secondary)
