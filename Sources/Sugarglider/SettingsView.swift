@@ -284,13 +284,14 @@ private struct ColorsTab: View {
                         .toggleStyle(.switch)
                         .labelsHidden()
                 }
+                // Top of the chart to bottom; also keeps the widest caption away from the trailing edge.
                 swatchRow("Pump data", [
-                    Swatch("Boluses", help: "Bolus bars under the chart", color: $settings.bolusColor,
-                           enabled: settings.chartShowsBoluses),
-                    Swatch("Delivery rate", help: "The delivery rate under the chart",
-                           color: $settings.deliveryRateColor, enabled: settings.chartShowsDeliveryRate),
                     Swatch("Announcements", help: "Announcement marks along the top",
                            color: $settings.announcementColor, enabled: settings.chartShowsAnnouncements),
+                    Swatch("Delivery rate", help: "The delivery rate under the chart",
+                           color: $settings.deliveryRateColor, enabled: settings.chartShowsDeliveryRate),
+                    Swatch("Boluses", help: "Bolus bars under the chart", color: $settings.bolusColor,
+                           enabled: settings.chartShowsBoluses),
                 ])
             } header: {
                 Text("Chart")
@@ -325,19 +326,20 @@ private struct ColorsTab: View {
         HStack {
             Text(label)
             Spacer()
-            HStack(alignment: .top, spacing: 4) {
+            HStack(alignment: .top, spacing: Self.swatchSpacing) {
                 ForEach(swatches) { swatch in
                     VStack(spacing: 3) {
                         ColorPicker(swatch.help, selection: swatch.color)
                             .labelsHidden()
+                        // Zero-width, so the column is as wide as the well and the last well ends flush
+                        // with the row like every other control; the caption overhangs it, centered.
                         Text(swatch.caption)
                             .font(.caption2)
                             .foregroundStyle(swatch.enabled ? .secondary : .tertiary)
                             .lineLimit(1)
                             .fixedSize()
+                            .frame(width: 0)
                     }
-                    // A minimum, not a width: "Announcements" is wider and must not run into its neighbor.
-                    .frame(minWidth: Self.swatchWidth)
                     .disabled(!swatch.enabled)
                     .help(swatch.help)
                 }
@@ -347,7 +349,8 @@ private struct ColorsTab: View {
         .accessibilityLabel(label)
     }
 
-    private static let swatchWidth: CGFloat = 70
+    // Room for two neighboring captions' overhang ("Announcements" next to "Delivery rate").
+    private static let swatchSpacing: CGFloat = 34
 
     // A mode menu plus the well it unlocks, in place of a switch row followed by a color row.
     private func choiceRow<Value: Hashable>(_ label: String, selection: Binding<Value>, color: Binding<Color>,
@@ -360,7 +363,7 @@ private struct ColorsTab: View {
         }
     }
 
-    // A control and the well it unlocks, the well in the swatch rows' last column.
+    // A control and the well it unlocks, flush with the trailing edge like the swatch rows' last well.
     private func wellRow(_ label: String, color: Binding<Color>, enabled: Bool,
                          @ViewBuilder control: () -> some View) -> some View {
         LabeledContent(label) {
@@ -369,7 +372,6 @@ private struct ColorsTab: View {
                 ColorPicker("\(label) color", selection: color)
                     .labelsHidden()
                     .disabled(!enabled)
-                    .frame(width: Self.swatchWidth)
             }
         }
     }
