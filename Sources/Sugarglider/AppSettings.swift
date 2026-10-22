@@ -43,7 +43,7 @@ final class AppSettings {
         func value(fromMgdl mgdl: Double) -> Double { self == .mmol ? mgdl / Self.mgdlPerMmol : mgdl }
         func mgdl(from value: Double) -> Double { self == .mmol ? value * Self.mgdlPerMmol : value }
         func text(fromMgdl sgv: Int) -> String {
-            self == .mmol ? String(format: "%.1f", value(fromMgdl: Double(sgv))) : String(sgv)
+            self == .mmol ? value(fromMgdl: Double(sgv)).formatted(.number.precision(.fractionLength(1))) : sgv.formatted()
         }
     }
 
@@ -59,23 +59,15 @@ final class AppSettings {
     /// keystroke, so clamping a neighbor would fight the user mid-edit. They matter
     /// because `ChartMath.color(for:zones:)` tests them in order.
     var thresholdOrderWarning: String? {
-        if targetLow >= targetHigh { return "Low must be below High." }
-        if extremeLow > targetLow { return "Very low can't be above Low." }
-        if extremeHigh < targetHigh { return "Very high can't be below High." }
+        if targetLow >= targetHigh { return String(localized: "Low must be below High.") }
+        if extremeLow > targetLow { return String(localized: "Very low can't be above Low.") }
+        if extremeHigh < targetHigh { return String(localized: "Very high can't be below High.") }
         return nil
     }
 
-    /// Pinned so the entry fields show "5.6", like the locale-independent
-    /// `String(format:)` readings, in every region. They also reject "5,6".
-    static let numberLocale = Locale(identifier: "en_US_POSIX")
-
-    static let wholeNumberFormat = IntegerFormatStyle<Int>(locale: numberLocale).grouping(.never)
-
     /// Matches `Units.text(fromMgdl:)`.
     var thresholdFormat: FloatingPointFormatStyle<Double> {
-        FloatingPointFormatStyle<Double>(locale: Self.numberLocale)
-            .precision(.fractionLength(0...(units == .mmol ? 1 : 0)))
-            .grouping(.never)
+        .number.precision(.fractionLength(0...(units == .mmol ? 1 : 0))).grouping(.never)
     }
 
     enum Theme: String {

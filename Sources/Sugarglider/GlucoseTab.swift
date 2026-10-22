@@ -18,8 +18,10 @@ struct GlucoseTab: View {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                 } footer: {
-                    Text("Until these are in order — very low ≤ low < high ≤ very high — the chart "
-                         + "can't color the zones or draw the optimal range.")
+                    Text("""
+                        Until these are in order — very low ≤ low < high ≤ very high — the chart \
+                        can't color the zones or draw the optimal range.
+                        """)
                         .foregroundStyle(.secondary)
                 }
             }

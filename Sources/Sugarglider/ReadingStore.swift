@@ -294,7 +294,7 @@ extension ReadingStore {
         guard gap > 0, gap < 12 * 60 else { return nil }
         let units = settings.units
         let delta = current.value(in: units) - previous.value(in: units)
-        return String(format: units == .mmol ? "%+.1f" : "%+.0f", delta)
+        return delta.formatted(.number.precision(.fractionLength(units == .mmol ? 1 : 0)).sign(strategy: .always()))
     }
 
     var isStale: Bool {
