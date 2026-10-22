@@ -159,7 +159,7 @@ enum ChartMath {
         return (0..<count).map { i in
             // A whole cycle's last point wraps to 0, which is fine: the sweep starts and ends at `mid`.
             let progress = (Double(i) / Double(count - 1) * cycles).truncatingRemainder(dividingBy: 1)
-            return Reading(sgv: Int(value(at: progress).rounded()), direction: "",
+            return Reading(sgv: Int(value(at: progress).rounded()), direction: nil,
                            date: end.addingTimeInterval(-Double(count - 1 - i) * interval))
         }
     }

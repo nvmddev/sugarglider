@@ -8,35 +8,39 @@ extension SugargliderTests {
             ("DoubleUp", "↑↑"), ("SingleUp", "↑"), ("FortyFiveUp", "↗"),
             ("Flat", "→"),
             ("FortyFiveDown", "↘"), ("SingleDown", "↓"), ("DoubleDown", "↓↓"),
-            ("NONE", ""), ("NOT COMPUTABLE", ""), ("", ""),
           ])
     func trendArrow(direction: String, expected: String) {
-        #expect(Reading(sgv: 100, direction: direction, date: .now).trendArrow == expected)
+        #expect(Reading.Direction(rawValue: direction)?.arrow == expected)
+    }
+
+    @Test func directionsWithoutATrendHaveNoArrow() {
+        for name in ["NONE", "NOT COMPUTABLE", "RATE OUT OF RANGE", ""] {
+            #expect(Reading.Direction(rawValue: name) == nil)
+        }
     }
 
     @Test(arguments: [(AppSettings.Units.mgdl, 90.0), (.mmol, 5.0)])
     func glucoseConvertsBetweenUnits(units: AppSettings.Units, valueOf90: Double) {
-        #expect(abs(units.display(90) - valueOf90) < 1e-9)
         #expect(abs(units.value(fromMgdl: 90) - valueOf90) < 1e-9)
-        #expect(abs(Reading(sgv: 90, direction: "Flat", date: .now).value(in: units) - valueOf90) < 1e-9)
-        #expect(abs(units.toMgdl(valueOf90) - 90) < 1e-9)
+        #expect(abs(reading(90).value(in: units) - valueOf90) < 1e-9)
+        #expect(abs(units.mgdl(from: valueOf90) - 90) < 1e-9)
     }
 
     @Test(arguments: [(AppSettings.Units.mgdl, 90, "90"), (.mmol, 90, "5.0"), (.mmol, 100, "5.6")])
     func glucoseTextHasOneDecimalInMmol(units: AppSettings.Units, mgdl: Int, expected: String) {
         #expect(units.text(fromMgdl: mgdl) == expected)
-        #expect(Reading(sgv: mgdl, direction: "Flat", date: .now).text(in: units) == expected)
+        #expect(reading(mgdl).text(in: units) == expected)
     }
 
     @Test(arguments: [AppSettings.Units.mmol, .mgdl])
     func outOfRangeMarkersReadLowAndHighInEitherUnit(units: AppSettings.Units) {
-        #expect(Reading(sgv: 39, direction: "DoubleDown", date: .now).outOfRange == .low)
-        #expect(Reading(sgv: 39, direction: "DoubleDown", date: .now).text(in: units) == "LOW")
-        #expect(Reading(sgv: 401, direction: "DoubleUp", date: .now).outOfRange == .high)
-        #expect(Reading(sgv: 401, direction: "DoubleUp", date: .now).text(in: units) == "HIGH")
+        #expect(reading(39, direction: .doubleDown).outOfRange == .low)
+        #expect(reading(39, direction: .doubleDown).text(in: units) == "LOW")
+        #expect(reading(401, direction: .doubleUp).outOfRange == .high)
+        #expect(reading(401, direction: .doubleUp).text(in: units) == "HIGH")
         // The sensor's own bounds are real readings.
         for sgv in [38, 40, 400, 402] {
-            let bound = Reading(sgv: sgv, direction: "Flat", date: .now)
+            let bound = reading(sgv)
             #expect(bound.outOfRange == nil)
             #expect(bound.text(in: units) == units.text(fromMgdl: sgv))
         }

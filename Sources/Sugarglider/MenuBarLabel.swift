@@ -13,7 +13,7 @@ struct MenuBarLabel: View {
     private var title: String {
         guard settings.isConfigured else { return "CGM ⚙" }
         guard let reading = store.lastReading else { return store.lastError == nil ? "CGM …" : "CGM ⚠" }
-        let arrow = reading.trendArrow.isEmpty ? "" : " \(reading.trendArrow)"
+        let arrow = reading.direction.map { " \($0.arrow)" } ?? ""
         let delta = settings.deltaDisplay == .menuAndStatusBar ? store.deltaText().map { "  (\($0))" } : nil
         // The age is the only escalation, by design: the app can't tell a sensor gap from a
         // network one, so it never notifies.

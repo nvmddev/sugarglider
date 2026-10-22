@@ -101,8 +101,8 @@ extension PumpStatus {
         deliveryRate = camaps?.number("delivery_rate")
         insulinToday = camaps?.number("insulin_today")
         insulinYesterday = camaps?.number("insulin_yesterday")
-        averageToday = camaps?.number("glucose_mean_today_mmol").map { $0 * 18 }
-        averageYesterday = camaps?.number("glucose_mean_yesterday_mmol").map { $0 * 18 }
+        averageToday = camaps?.number("glucose_mean_today_mmol").map(AppSettings.Units.mmol.mgdl)
+        averageYesterday = camaps?.number("glucose_mean_yesterday_mmol").map(AppSettings.Units.mmol.mgdl)
     }
 }
 

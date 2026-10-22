@@ -26,7 +26,7 @@ extension SugargliderTests {
 
         let readings = try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10)
         #expect(readings.map(\.sgv) == [100, 150])
-        #expect(readings.first?.direction == "FortyFiveUp")
+        #expect(readings.first?.direction == .fortyFiveUp)
         #expect(readings.first?.date == Date(timeIntervalSince1970: 1_700_000_000))
     }
 
@@ -43,7 +43,7 @@ extension SugargliderTests {
 
         let readings = try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10)
         #expect(readings.map(\.sgv) == [100, 110])
-        #expect(readings.last?.direction == "")
+        #expect(readings.last?.direction == nil)
     }
 
     @Test func fetchRoundsFractionalSgv() async throws {

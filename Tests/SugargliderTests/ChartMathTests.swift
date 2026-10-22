@@ -165,7 +165,7 @@ extension SugargliderTests {
     @Test func nearestIndexFindsClosestByX() {
         let base = Date.now
         let offsets: [TimeInterval] = [0, 300, 600]
-        let readings = offsets.map { Reading(sgv: 100, direction: "Flat", date: base.addingTimeInterval($0)) }
+        let readings = offsets.map { Reading(sgv: 100, direction: .flat, date: base.addingTimeInterval($0)) }
         func x(_ date: Date) -> CGFloat { CGFloat(date.timeIntervalSince(base)) }
         #expect(ChartMath.nearestIndex(to: 0, x: x, in: readings, maxDistance: 24) == 0)
         #expect(ChartMath.nearestIndex(to: 310, x: x, in: readings, maxDistance: 24) == 1)

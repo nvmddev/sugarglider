@@ -3,8 +3,27 @@ import Foundation
 /// `sgv` is always mg/dL, Nightscout's native unit.
 struct Reading {
     let sgv: Int
-    let direction: String
+    /// Nil when the uploader has none ("NONE", "NOT COMPUTABLE", "RATE OUT OF RANGE").
+    let direction: Direction?
     let date: Date
+
+    enum Direction: String {
+        case doubleUp = "DoubleUp", singleUp = "SingleUp", fortyFiveUp = "FortyFiveUp", flat = "Flat"
+        case fortyFiveDown = "FortyFiveDown", singleDown = "SingleDown", doubleDown = "DoubleDown"
+
+        /// Paired arrows for the doubles, because ⇈ and ⇊ render too thin.
+        var arrow: String {
+            switch self {
+            case .doubleUp: "↑↑"
+            case .singleUp: "↑"
+            case .fortyFiveUp: "↗"
+            case .flat: "→"
+            case .fortyFiveDown: "↘"
+            case .singleDown: "↓"
+            case .doubleDown: "↓↓"
+            }
+        }
+    }
 
     /// Nightscout's markers for a value beyond the sensor's range, one step past each bound. Only
     /// the side is known, so its own client shows LOW and HIGH in either unit.
@@ -15,27 +34,13 @@ struct Reading {
 
     var outOfRange: OutOfRange? { OutOfRange(rawValue: sgv) }
 
-    func value(in units: AppSettings.Units) -> Double { units.value(fromMgdl: sgv) }
+    func value(in units: AppSettings.Units) -> Double { units.value(fromMgdl: Double(sgv)) }
 
     func text(in units: AppSettings.Units) -> String {
         switch outOfRange {
         case .low: "LOW"
         case .high: "HIGH"
         case nil: units.text(fromMgdl: sgv)
-        }
-    }
-
-    /// Paired arrows for the doubles, because ⇈ and ⇊ render too thin.
-    var trendArrow: String {
-        switch direction {
-        case "DoubleUp":      "↑↑"
-        case "SingleUp":      "↑"
-        case "FortyFiveUp":   "↗"
-        case "Flat":          "→"
-        case "FortyFiveDown": "↘"
-        case "SingleDown":    "↓"
-        case "DoubleDown":    "↓↓"
-        default:              ""  // NONE, NOT COMPUTABLE, RATE OUT OF RANGE
         }
     }
 }
@@ -92,7 +97,7 @@ struct Nightscout {
 
         var reading: Reading? {
             guard let sgv, let millis else { return nil }
-            return Reading(sgv: Int(sgv.rounded()), direction: direction ?? "",
+            return Reading(sgv: Int(sgv.rounded()), direction: direction.flatMap(Reading.Direction.init),
                            date: Date(timeIntervalSince1970: millis / 1000))
         }
     }

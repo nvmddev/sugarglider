@@ -124,9 +124,8 @@ struct MenuBarContentView: View {
         let text = reading.text(in: settings.units)
         let value = Text(reading.outOfRange == nil ? "\(text) \(settings.units.label)" : text)
             .font(.system(size: 15, weight: .medium))
-        let arrow = reading.trendArrow.isEmpty
-            ? Text("")
-            : Text(" \(reading.trendArrow)").font(.system(size: 17, weight: .semibold))
+        let arrow = reading.direction.map { Text(" \($0.arrow)").font(.system(size: 17, weight: .semibold)) }
+            ?? Text("")
         let note: String? = switch reading.outOfRange {
         case .low: "below the sensor's range"
         case .high: "above the sensor's range"

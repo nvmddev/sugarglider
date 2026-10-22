@@ -36,16 +36,15 @@ final class AppSettings {
     enum Units: String {
         case mmol, mgdl
 
-        private static let mgdlPerMmol = 18.0
+        static let mgdlPerMmol = 18.0
 
         var label: String { self == .mmol ? "mmol/L" : "mg/dL" }
 
-        func display(_ mgdl: Double) -> Double { self == .mmol ? mgdl / Self.mgdlPerMmol : mgdl }
-        func value(fromMgdl sgv: Int) -> Double { display(Double(sgv)) }
+        func value(fromMgdl mgdl: Double) -> Double { self == .mmol ? mgdl / Self.mgdlPerMmol : mgdl }
+        func mgdl(from value: Double) -> Double { self == .mmol ? value * Self.mgdlPerMmol : value }
         func text(fromMgdl sgv: Int) -> String {
-            self == .mmol ? String(format: "%.1f", value(fromMgdl: sgv)) : String(sgv)
+            self == .mmol ? String(format: "%.1f", value(fromMgdl: Double(sgv))) : String(sgv)
         }
-        func toMgdl(_ value: Double) -> Double { self == .mmol ? value * Self.mgdlPerMmol : value }
     }
 
     var units: Units = .mmol { didSet { persist(units.rawValue, "units") } }
@@ -453,7 +452,7 @@ final class AppSettings {
         guard !defaults.bool(forKey: "thresholdsMgdl") else { return }
         for key in ["targetLow", "targetHigh", "extremeLow", "extremeHigh"] {
             if let value = defaults.object(forKey: key) as? Double, value > 0, value < 40 {
-                defaults.set(Units.mmol.toMgdl(value).rounded(), forKey: key)
+                defaults.set(Units.mmol.mgdl(from: value).rounded(), forKey: key)
             }
         }
         defaults.set(true, forKey: "thresholdsMgdl")

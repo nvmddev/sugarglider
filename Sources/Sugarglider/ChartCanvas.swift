@@ -89,7 +89,7 @@ struct ChartCanvas: View {
         /// LOW and HIGH sit at their markers but stay inside the plot by half a stroke: the mg/dL
         /// axis stops at 40, which would leave LOW's 39 drawn under the frame.
         func y(of reading: Reading) -> CGFloat {
-            let y = y(units.value(fromMgdl: reading.sgv))
+            let y = y(reading.value(in: units))
             guard reading.outOfRange != nil else { return y }
             let inset = ChartCanvas.lineStroke.lineWidth / 2
             return min(max(y, plot.minY + inset), plot.maxY - inset)
@@ -97,7 +97,7 @@ struct ChartCanvas: View {
 
         /// Clamped into the plot, since zone bands exist even where their threshold is off the axis.
         func bandY(mgdl: Double) -> CGFloat {
-            min(max(y(units.display(mgdl)), plot.minY), plot.maxY)
+            min(max(y(units.value(fromMgdl: mgdl)), plot.minY), plot.maxY)
         }
 
         /// Back to the unflipped context, where text is drawn.
@@ -143,9 +143,9 @@ struct ChartCanvas: View {
 
         let units = settings.units
         let axis = ChartMath.valueAxis(
-            values: visible.map { units.value(fromMgdl: $0.sgv) },
+            values: visible.map { $0.value(in: units) },
             thresholds: [settings.extremeLow, settings.targetLow, settings.targetHigh, settings.extremeHigh]
-                .map { units.display($0) },
+                .map { units.value(fromMgdl: $0) },
             mgdl: units == .mgdl)
 
         return Layout(visible: visible, latest: latest, plot: plot, lane: lane, size: size,
@@ -265,8 +265,8 @@ struct ChartCanvas: View {
 
     private func drawTargetBand(_ ctx: GraphicsContext, layout l: Layout) {
         let plot = l.plot
-        let yLow = l.y(l.units.display(settings.targetLow))
-        let yHigh = l.y(l.units.display(settings.targetHigh))
+        let yLow = l.y(l.units.value(fromMgdl: settings.targetLow))
+        let yHigh = l.y(l.units.value(fromMgdl: settings.targetHigh))
         let bottom = max(min(yLow, yHigh), plot.minY), top = min(max(yLow, yHigh), plot.maxY)
         guard top > bottom else { return }
 
