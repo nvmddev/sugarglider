@@ -34,6 +34,7 @@ final class ReadingStore {
     @ObservationIgnored private var widening: Task<Void, Never>?
 
     private let settings: AppSettings
+    private let session: URLSession
 
     /// Treatments are fetched from this far before the window, so a temp basal already running
     /// at its left edge is drawn: loops set them for 30 minutes.
@@ -48,8 +49,13 @@ final class ReadingStore {
     private static let reservoirChangeEvent = "Insulin Change"
     private static let batteryChangeEvent = "Pump Battery Change"
 
-    init(settings: AppSettings) {
+    init(settings: AppSettings, session: URLSession = Nightscout.sharedSession) {
         self.settings = settings
+        self.session = session
+    }
+
+    private var site: Nightscout {
+        Nightscout(baseURL: settings.baseURL, token: settings.token, session: session)
     }
 
     /// Polls, keeps the clock and follows the settings the fetches depend on, for the app's lifetime.
@@ -88,7 +94,7 @@ final class ReadingStore {
     /// Fetches the two newest entries: the older one is what the delta is taken against.
     func refresh() async {
         guard settings.isConfigured else { return }
-        let (site, generation) = (settings.nightscout, generation)
+        let (site, generation) = (site, generation)
         do {
             let latest = try await site.entries(count: 2)
             guard generation == self.generation else { return }
@@ -209,7 +215,7 @@ final class ReadingStore {
     /// answer (no pump on the site, no change on record) and comes back as `.some(nil)`.
     private func fetch<Value>(_ request: (Nightscout) async throws -> Value) async -> Value? {
         let generation = generation
-        guard let value = try? await request(settings.nightscout), generation == self.generation else { return nil }
+        guard let value = try? await request(site), generation == self.generation else { return nil }
         return value
     }
 
