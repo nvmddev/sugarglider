@@ -56,7 +56,7 @@ detect_bump() {
 }
 
 # Everything the shipped bundle is built from.
-APP_PATHS=(Sources Resources Package.swift)
+APP_PATHS=(Sources Resources Sugarglider.xcodeproj)
 
 case "${1:-}" in
 app-changed)

@@ -6,7 +6,7 @@ user-visible thing here rather than a release detail:
 
 | Signed with                            | Keychain used             | Access prompts                              |
 | -------------------------------------- | ------------------------- | ------------------------------------------- |
-| Ad-hoc (`./build.sh` with no identity) | file-based login Keychain | on every rebuild, as the signature changes  |
+| Ad-hoc (Xcode, or plain `./build.sh`)  | file-based login Keychain | on every rebuild, as the signature changes  |
 | Developer ID                           | file-based login Keychain | once per update, then "Always Allow" sticks |
 | Developer ID + provisioning profile    | data-protection Keychain  | none                                        |
 
@@ -36,7 +36,8 @@ immediate exit 137 when the binary is started directly. Three one-time steps:
    Distribution → **Developer ID** → pick the App ID → pick the *Developer ID
    Application* certificate → download.
 3. The downloaded file saved as `Resources/embedded.provisionprofile`
-   (gitignored), and `TEAM_ID` set when building:
+   (gitignored), and `TEAM_ID` set when building. `build.sh` then installs the
+   profile where Xcode looks for one and signs with `Resources/Sugarglider.entitlements`:
 
    ```sh
    TEAM_ID=TEAMID \
@@ -45,8 +46,8 @@ immediate exit 137 when the binary is started directly. Three one-time steps:
    ```
 
 Apple grants the profile `keychain-access-groups` as the team wildcard
-`TEAMID.*`, which covers the concrete group `build.sh` writes into the
-entitlements. Worth checking before building, because a profile that lacks it
+`TEAMID.*`, which covers the concrete group in
+`Resources/Sugarglider.entitlements`. Worth checking before building, because a profile that lacks it
 yields an app that signs cleanly and then refuses to launch:
 
 ```sh

@@ -29,19 +29,14 @@ jobs:
           swift --version
           xcodebuild -version
 
-      - name: Check icon artifacts are current
-        run: ./scripts/make-icon.sh verify
-
-      - name: Build (debug)
-        run: swift build
-
+      # Builds the app in Debug and runs the suite inside it.
       - name: Test
-        run: swift test
+        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64
 
       - name: Assemble app bundle
         run: ./build.sh
 
-      # build.sh already fails on a wrong SDK version; this shows what it recorded.
+      # macOS gives an app its current design only when it records a current SDK.
       - name: Verify bundle
         run: |
           set -euo pipefail
@@ -85,11 +80,8 @@ jobs:
           swift --version
           xcodebuild -version
 
-      - name: Build (debug)
-        run: swift build
-
       - name: Test
-        run: swift test
+        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64
 
       - name: Assemble app bundle
         run: ./build.sh

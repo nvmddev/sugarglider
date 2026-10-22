@@ -12,23 +12,23 @@ easiest ones to merge.
 ```sh
 git clone https://github.com/nvmddev/sugarglider.git
 cd sugarglider
-swift build              # debug build
-swift test               # test suite (Swift Testing)
-./build.sh               # release build, assembled into Sugarglider.app
+open Sugarglider.xcodeproj   # run with ⌘R, test with ⌘U
+./build.sh                   # release build, archived into Sugarglider.app
 open Sugarglider.app
 ```
 
 You need a Mac with **Apple silicon** running **macOS 26** or newer, and
-**Xcode 26 or newer** (Swift 6.2). The Command Line Tools alone won't do: they
-can't run the tests, because the Swift Testing macros only ship with Xcode, and
-with the macOS 27 SDK they can't build the app either, since SwiftUI's `@State`
-is a macro there too.
+**Xcode 26 or newer** (Swift 6.2). The Command Line Tools alone won't do, the
+project builds with `xcodebuild`. The tests run from the command line the way
+CI runs them:
 
-`build.sh` passes the linker the version of the SDK it builds with and fails if
-the binary doesn't record exactly that. macOS gives an app its current design,
-Liquid Glass, only when the binary says it was linked against a current SDK, and
-SwiftPM 6.4 writes the deployment target there unless told otherwise. The
-environment variables the script reads are listed at its top.
+```sh
+xcodebuild test -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS
+```
+
+They run inside the app, which notices and stays out of the menu bar for them.
+`build.sh` archives the Release configuration and copies the app here; the
+environment variables it reads are listed at its top.
 
 To relaunch after a rebuild, quit the running copy first:
 
@@ -54,8 +54,8 @@ A few conventions span several files:
   the one exception and goes to the Keychain ([docs/signing.md](docs/signing.md)).
 - Glucose is stored in mg/dL everywhere. The display unit only applies when a
   value is shown.
-- Numbers show a dot and no grouping in every region: `String(format:)`, or a
-  `FormatStyle` pinned to `AppSettings.numberLocale`, never a bare `.number`.
+- Numbers, dates and durations follow the user's region: they go through a
+  `FormatStyle`, never `String(format:)`.
 - The app target is isolated to the main actor by default, and macOS 26 is the
   floor, so there are no `#available` checks.
 
@@ -104,7 +104,7 @@ still one merge click.
 
 ## Before you open a PR
 
-- `swift test` passes.
+- The tests pass (⌘U, or `xcodebuild test` as above).
 - `./build.sh` succeeds and you've actually run the app.
 - Anything touching drawing or colors was checked in **both** Light and Dark
   mode, and with both mmol/L and mg/dL if it touches values.
@@ -115,7 +115,8 @@ still one merge click.
   They are rendered from the app's own views with invented readings, never
   captured from the screen.
 - If you changed the icon artwork in `Resources/AppIcon.icon`, re-run
-  `scripts/make-icon.sh` and commit what it regenerates. CI fails otherwise.
+  `scripts/make-readme-icon.sh` and commit the README pictures it writes. The
+  app's own icon needs nothing, Xcode compiles it on every build.
 
 CI repeats the automated checks. Its required **Build & test** job runs on
 macOS 26 with Xcode 26.0.1, the oldest toolchain the project supports.

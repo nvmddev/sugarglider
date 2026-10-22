@@ -22,7 +22,7 @@ SOURCES=()
 while IFS= read -r file; do SOURCES+=("${file}"); done \
     < <(find Sources/Sugarglider -name '*.swift' ! -name 'SugargliderApp.swift')
 
-# The app target's settings in Package.swift; keep them in sync.
+# The app target's settings in Sugarglider.xcodeproj; keep them in sync.
 SWIFT_FLAGS=(
     -swift-version 6
     -target arm64-apple-macos26.0
