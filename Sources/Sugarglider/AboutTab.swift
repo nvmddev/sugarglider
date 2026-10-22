@@ -21,9 +21,10 @@ struct AboutTab: View {
             Section {
                 Label {
                     Text("""
-                        Sugarglider only displays what your Nightscout site reports. It is not a \
-                        medical device and raises no alarms — don't rely on it to catch a high, \
-                        a low, or a stopped feed, and don't use it for treatment decisions.
+                        Sugarglider only displays what your Nightscout site reports, and that can \
+                        be stale or wrong. It is not a medical device and raises no alarms. Don't \
+                        rely on it to catch a high, a low, or a stopped feed, and don't use it for \
+                        treatment decisions.
                         """)
                 } icon: {
                     Image(systemName: "info.circle")
