@@ -182,7 +182,6 @@ enum NightscoutTime {
     private static let withoutFraction = Date.ISO8601FormatStyle()
 }
 
-/// Insulin in units (U), rates in U/h.
 enum PumpFormat {
     static func insulin(_ units: Double) -> String { "\(units.formatted(digits(2))) U" }
     static func dailyInsulin(_ units: Double) -> String { "\(units.formatted(digits(1))) U" }

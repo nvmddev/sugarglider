@@ -174,8 +174,7 @@ struct ColorsTab: View {
         }
     }
 
-    // One row of wells instead of a row per color; a common column width lines them up across rows.
-    // Not LabeledContent: that pins its label to the top of a two-line row instead of centering it.
+    // An HStack, not LabeledContent: that pins its label to the top of a two-line row instead of centering it.
     private func swatchRow(_ label: String, _ swatches: [Swatch]) -> some View {
         HStack {
             Text(label)
@@ -206,7 +205,7 @@ struct ColorsTab: View {
     // Room for two neighboring captions' overhang ("Announcements" next to "Delivery rate").
     private static let swatchSpacing: CGFloat = 34
 
-    // A mode menu plus the well it unlocks, in place of a switch row followed by a color row.
+    // A mode menu plus the well it unlocks.
     private func choiceRow<Value: Hashable>(_ label: String, selection: Binding<Value>, color: Binding<Color>,
                                             customEnabled: Bool,
                                             @ViewBuilder options: () -> some View) -> some View {

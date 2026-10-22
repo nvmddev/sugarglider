@@ -278,7 +278,7 @@ extension SugargliderTests {
         #expect(chart != pixels(of: GlucoseChart(readings: [], rangeHours: 72, settings: s, windowEnd: .now)))
     }
 
-    /// Both units, since LOW's 39 lies under the mg/dL axis' floor of 40, and both line styles.
+    /// Both units, since LOW's 39 lies under the mg/dL axis' floor of 40, with and without blending.
     @Test(arguments: [(AppSettings.Units.mgdl, false), (.mmol, true)])
     func rendersLowAndHighStretchesDotted(units: AppSettings.Units, blended: Bool) {
         let s = Self.makeSettings()
@@ -302,7 +302,7 @@ extension SugargliderTests {
         #expect(renderedImage(chart) != nil)
     }
 
-    /// A color that never reaches the chart is a picker doing nothing, as `sliderColor` once did.
+    /// A color that never reaches the chart is a picker doing nothing.
     @Test func pumpLayersDrawInTheirOwnColors() throws {
         let s = Self.makeSettings()
         s.chartShowsDeliveryRate = true

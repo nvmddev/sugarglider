@@ -11,7 +11,7 @@ struct SettingsView: View {
             Tab("Pump", systemImage: "syringe") { PumpTab(settings: settings) }
             Tab("About", systemImage: "info.circle") { AboutTab() }
         }
-        // Every tab is a .grouped Form, which scrolls where a plain one would clip.
+        // A fixed size is fine: each tab's form is .grouped, which scrolls where a plain one would clip.
         .frame(width: 520, height: 640)
     }
 }
