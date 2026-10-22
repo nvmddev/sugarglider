@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MenuBarContentView: View {
-    var settings: AppSettings
+    @Bindable var settings: AppSettings
     var store: ReadingStore
     @Environment(\.openSettings) private var openSettings
 
@@ -19,9 +19,7 @@ struct MenuBarContentView: View {
                 .frame(height: 135 + GlucoseChart.laneSpace(for: store.treatments, settings: settings))
 
             HStack(spacing: 8) {
-                // Steps by the hour without drawing a tick for each.
-                Slider(value: rangeBinding, in: Self.rangeSliderBounds, step: 1,
-                       label: { Text("Chart range") }, tick: { _ in nil })
+                Slider(value: $settings.rangeHours.sliderValue, in: Self.rangeSliderBounds) { Text("Chart range") }
                     .labelsHidden()
                     .tint(settings.sliderColor)
                     .accessibilityValue("\(settings.rangeHours) hours")
@@ -82,13 +80,6 @@ struct MenuBarContentView: View {
         .help(title)
     }
 
-    private var rangeBinding: Binding<Double> {
-        Binding(
-            get: { Double(settings.rangeHours) },
-            set: { settings.rangeHours = Int($0) }
-        )
-    }
-
     // An accessory app's window that is only ordered front ignores typing, so Settings has to become key.
     // SwiftUI creates the window asynchronously, hence the poll.
     private func showSettings() {
@@ -140,5 +131,13 @@ struct MenuBarContentView: View {
         let line = store.isStale ? Text("Reading from \(age) (stale)") : Text("Reading from \(age)")
         guard let error = store.lastError else { return line }
         return Text("\(line) — \(error)")
+    }
+}
+
+extension Binding<Int> {
+    /// A whole number as a slider's value. Rounded here rather than through `step:`, because a
+    /// stepped slider on macOS draws a tick mark for every step.
+    var sliderValue: Binding<Double> {
+        Binding<Double>(get: { Double(wrappedValue) }, set: { wrappedValue = Int($0.rounded()) })
     }
 }

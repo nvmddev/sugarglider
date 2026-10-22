@@ -382,14 +382,17 @@ private struct HoverPill: View {
     let note: String?
 
     var body: some View {
+        // Concrete colors: the panel would make semantic styles vibrant, blending them with what's
+        // behind the window instead of with this background.
         VStack(alignment: .leading, spacing: 1) {
             Text(title)
             Group {
                 if let insulin { Text(insulin) }
                 if let note { Text(note) }
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color(nsColor: .secondaryLabelColor))
         }
+        .foregroundStyle(Color(nsColor: .labelColor))
         .font(.caption)
         .monospacedDigit()
         .fixedSize(horizontal: false, vertical: true)

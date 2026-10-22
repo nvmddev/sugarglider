@@ -5,7 +5,7 @@ struct ColorsTab: View {
     @State private var showingSavePreset = false
     @State private var newPresetName = ""
     // Deliberately not settings.rangeHours: the preview is a demo and must not move the dropdown's window.
-    @State private var previewHours = 6.0
+    @State private var previewHours = 6
     // Pins the chart's window to the samples, which only regenerate when the body runs.
     @State private var sampleEnd = Date.now
 
@@ -22,16 +22,17 @@ struct ColorsTab: View {
                 VStack(spacing: 8) {
                     let treatments = sampleTreatments
                     // Grows by the lane like the dropdown's chart, so the lane doesn't squeeze the plot.
-                    GlucoseChart(readings: sampleReadings, rangeHours: Int(previewHours),
+                    GlucoseChart(readings: sampleReadings, rangeHours: previewHours,
                                 settings: settings, windowEnd: sampleEnd, treatments: treatments)
                         .frame(height: 95 + GlucoseChart.laneSpace(for: treatments, settings: settings))
                     HStack(spacing: 8) {
-                        Slider(value: $previewHours, in: Self.previewHoursBounds, step: 1,
-                               label: { Text("Preview chart range") }, tick: { _ in nil })
-                            .labelsHidden()
-                            .tint(settings.sliderColor)
-                            .accessibilityValue("\(Int(previewHours)) hours, preview only")
-                        Text("\(Int(previewHours)) h")
+                        Slider(value: $previewHours.sliderValue, in: Self.previewHoursBounds) {
+                            Text("Preview chart range")
+                        }
+                        .labelsHidden()
+                        .tint(settings.sliderColor)
+                        .accessibilityValue("\(previewHours) hours, preview only")
+                        Text("\(previewHours) h")
                             .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                             .frame(width: 30, alignment: .trailing)
@@ -59,7 +60,7 @@ struct ColorsTab: View {
     private static let previewHoursPerCycle = 3.0
 
     private var previewCycles: Double {
-        max(1, (previewHours / Self.previewHoursPerCycle).squareRoot())
+        max(1, (Double(previewHours) / Self.previewHoursPerCycle).squareRoot())
     }
 
     // 5-minute spacing; anything wider exceeds ChartMath.dropoutThreshold and breaks the line.
@@ -67,14 +68,14 @@ struct ColorsTab: View {
         ChartMath.sampleReadings(
             extremeLow: settings.extremeLow, targetLow: settings.targetLow,
             targetHigh: settings.targetHigh, extremeHigh: settings.extremeHigh,
-            endingAt: sampleEnd, count: Int(previewHours) * 12 + 1,
+            endingAt: sampleEnd, count: previewHours * 12 + 1,
             cycles: previewCycles
         )
     }
 
     // Shown or not by the Pump tab's chart switches, like the real chart.
     private var sampleTreatments: [Treatment] {
-        ChartMath.sampleTreatments(endingAt: sampleEnd, span: previewHours * 3600, cycles: previewCycles)
+        ChartMath.sampleTreatments(endingAt: sampleEnd, span: Double(previewHours) * 3600, cycles: previewCycles)
     }
 
     private var form: some View {
