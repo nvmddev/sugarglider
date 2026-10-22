@@ -73,9 +73,9 @@ straight away whether the connection works.
   since the last reading. When a reading gets old (11 minutes by default, you
   can change that), it picks up a `⚠` and its age, so a short gap is easy to
   tell from a feed that died.
-- A chart of the last 2 to 72 hours. Drag the slider or type an exact number of
-  hours. Hover any point for its value and time. Gaps longer than 15 minutes
-  break the line instead of pretending there was data.
+- A chart of the last 2 to 72 hours, an hour per step on the slider. Hover any
+  point for its value and time. Gaps longer than 15 minutes break the line
+  instead of pretending there was data.
 - When a reading is past what your sensor can measure, you see LOW or HIGH,
   as in Nightscout, and the chart line turns dotted for that stretch.
 - Color by zone: very low, below, in range, above, very high. Pick every
@@ -86,11 +86,16 @@ straight away whether the connection works.
   low/high bounds are yours to set.
 - Pump data, if your site has it: active insulin, reservoir and battery under
   the reading, plus boluses, the delivery rate and pump or sensor alerts on the
-  chart, in colors you pick. With CamAPS FX you may also get the pump mode and
-  daily figures. Every item has its own switch in **Settings → Pump**, and a
-  site with only CGM data shows none of it.
+  chart, in colors you pick. If your uploader also sends the pump mode or daily
+  figures, you get those too. Every item has its own switch in
+  **Settings → Pump**, and a site with only CGM data shows none of it.
 - No notifications, ever. Sugarglider only sees your Nightscout site, so it
   can't tell a sensor gap from a flat uploader, and it won't pretend otherwise.
+
+Sugarglider misses or misreads something your uploader sends, or you'd like an
+option it doesn't have? [Open an issue](https://github.com/nvmddev/sugarglider/issues/new/choose)
+or a pull request. For pump values, paste a record from your site's
+`/api/v1/devicestatus.json` and take out any personal information.
 
 ## Trend arrows
 
@@ -113,8 +118,8 @@ can't read it. The app runs in macOS's App Sandbox, allowed to make network
 requests and nothing more.
 
 It polls your site once a minute by default, which you can change, and only
-pulls chart history and pump data when you open the dropdown. After the first
-fetch it only asks for what's new.
+pulls chart history and pump data when you open the dropdown or
+**Settings → Pump**. After the first fetch it only asks for what's new.
 
 ## Requirements
 

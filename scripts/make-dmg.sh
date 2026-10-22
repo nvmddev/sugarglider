@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP="Sugarglider.app"
-[[ -d "${APP}" ]] || { echo "error: ${APP} not found — run ./build.sh first" >&2; exit 1; }
+[[ -d "${APP}" ]] || { echo "error: ${APP} not found. Run ./build.sh first." >&2; exit 1; }
 
 VERSION="${VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${APP}/Contents/Info.plist")}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"

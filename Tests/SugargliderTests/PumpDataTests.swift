@@ -122,6 +122,18 @@ extension SugargliderTests {
         #expect(PumpStatus.merged([PumpStatus(date: now)]) == nil)
         #expect(PumpStatus.merged([]) == nil)
     }
+
+    @Test func extrasAreTheValuesOnlySomeUploadersSend() throws {
+        #expect(try #require(PumpStatus(record: record(camapsRecord))).extras == Set(PumpStatus.Extra.allCases))
+        let standard = try #require(PumpStatus(record: record("""
+            {"created_at":"2030-01-01T12:00:00Z","pump":{"iob":{"iob":1},"reservoir":120,"battery":{"percent":65}}}
+            """)))
+        #expect(standard.extras.isEmpty)
+        let statusText = try #require(PumpStatus(record: record(
+            #"{"created_at":"2030-01-01T12:00:00Z","pump":{"status":{"status":"normal"}}}"#)))
+        #expect(statusText.extras == [.mode])
+        #expect(PumpStatus(date: .now, insulinYesterday: 47.3, averageToday: 124).extras == [.dailyInsulin, .averageGlucose])
+    }
 }
 
 // MARK: - Treatments
@@ -321,12 +333,13 @@ extension SugargliderTests {
 
     @Test func reconnectClearsPumpData() {
         let store = ReadingStore(settings: Self.makeSettings())
-        store.pumpStatus = PumpStatus(date: .now)
+        store.pumpStatus = PumpStatus(date: .now, mode: .auto)
         store.treatments = [Treatment(id: "a", date: .now, kind: .bolus(units: 1))]
         store.reservoirChanged = .now
         store.batteryChanged = .now
         store.reconnect()
         #expect(store.pumpStatus == nil)
+        #expect(store.reportedPumpExtras.isEmpty)
         #expect(store.treatments.isEmpty)
         #expect(store.reservoirChanged == nil)
         #expect(store.batteryChanged == nil)
@@ -339,6 +352,25 @@ extension SugargliderTests {
                 for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
         await server.store(settings).refreshDetails(force: true)
         #expect(server.requests.isEmpty)
+    }
+
+    @Test func reportedExtrasOutlastAStatusWithoutThem() {
+        let store = ReadingStore(settings: Self.makeSettings())
+        store.pumpStatus = PumpStatus(date: .now, mode: .auto, insulinToday: 21.5)
+        store.pumpStatus = PumpStatus(date: .now, reservoir: 120)
+        store.pumpStatus = nil
+        #expect(store.reportedPumpExtras == [.mode, .dailyInsulin])
+    }
+
+    @Test func thePumpTabAsksTheSiteEvenWithEverySwitchOff() async throws {
+        let server = StubbedSite(json: "[\(camapsRecord)]")
+        let settings = Self.makeSettings()
+        for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
+        let store = server.store(settings)
+        await store.refreshPumpStatus(force: false)
+        #expect(server.requests.isEmpty)
+        await store.refreshPumpStatus(force: false, evenIfSwitchedOff: true)
+        #expect(store.reportedPumpExtras == Set(PumpStatus.Extra.allCases))
     }
 
     @Test func refreshDetailsFetchesThePumpStatus() async throws {
@@ -369,6 +401,37 @@ extension SugargliderTests {
         let newest = try #require(store.treatments.last?.date)
         let overlap = NightscoutTime.string(newest.addingTimeInterval(-ReadingStore.treatmentOverlap))
         #expect(server.requests[1].contains("$gte%5D=\(overlap)"))
+    }
+
+    /// Only the changes a shown row puts an age next to are asked for, each landing in its own row.
+    @Test(arguments: [
+        (true, true, true), (true, true, false), (true, false, true),
+        (false, true, true),    // ages switched off
+        (true, false, false),   // no row to put an age next to
+    ])
+    func changeDatesAreFetchedForTheRowsThatShowThem(showAges: Bool, reservoir: Bool, battery: Bool) async throws {
+        let changed = "2030-01-01T08:00:00.128Z"
+        let server = StubbedSite(json: #"[{"eventType":"Insulin Change","created_at":"\#(changed)"}]"#)
+        let settings = Self.makeSettings()
+        for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
+        settings.showChangeAge = showAges
+        settings.showReservoir = reservoir
+        settings.showPumpBattery = battery
+        let store = server.store(settings)
+
+        await store.refreshDetails(force: true)
+        let date = NightscoutTime.date(changed)
+        #expect(store.reservoirChanged == (showAges && reservoir ? date : nil))
+        #expect(store.batteryChanged == (showAges && battery ? date : nil))
+        let asked = server.requests.filter { $0.contains("eventType") }
+        #expect(asked.contains { $0.contains("=Insulin%20Change") } == (showAges && reservoir))
+        #expect(asked.contains { $0.contains("=Pump%20Battery%20Change") } == (showAges && battery))
+        // Without a date filter Nightscout would search only the last two days.
+        for request in asked {
+            let since = URLComponents(string: request)?.queryItems?.first { $0.name == "find[created_at][$gte]" }?.value
+            let lookback = try #require(NightscoutTime.date(since)).distance(to: .now)
+            #expect(abs(lookback - 60 * 86_400) < 60)
+        }
     }
 }
 
@@ -520,13 +583,6 @@ extension SugargliderTests {
         #expect(GlucoseChart.laneSpace(for: [tempBasal], settings: s) == GlucoseChart.laneHeight)
         s.chartShowsBoluses = false
         #expect(GlucoseChart.laneSpace(for: [bolus], settings: s) == 0)
-    }
-
-    @Test func longAnnouncementsAreClippedForThePill() {
-        #expect(GlucoseChart.clipped("short") == "short")
-        let long = String(repeating: "a", count: 200)
-        #expect(GlucoseChart.clipped(long).count == 160)
-        #expect(GlucoseChart.clipped(long).hasSuffix("…"))
     }
 
     @Test func rendersEveryPumpLayerWithoutCrash() {

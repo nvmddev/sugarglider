@@ -233,8 +233,6 @@ extension SugargliderTests {
 // MARK: - Scalar settings
 
 extension SugargliderTests {
-    /// Reported, never corrected: the fields persist per keystroke, so clamping a
-    /// neighbor would fight anyone swapping a range around.
     @Test func thresholdOrderWarning() {
         let s = Self.makeSettings()
         #expect(s.thresholdOrderWarning == nil)
@@ -654,7 +652,7 @@ extension SugargliderTests {
 // MARK: - Access token storage
 
 extension SugargliderTests {
-    /// The plist is world-readable plaintext; keeping the token out of it is the point.
+    /// Any process running as the user can read the plist; keeping the token out of it is the point.
     @Test func tokenPersistsToTheTokenStoreNotDefaults() {
         let defaults = Self.makeDefaults()
         let tokens = InMemoryTokenStore()
