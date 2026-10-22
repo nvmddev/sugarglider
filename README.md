@@ -73,9 +73,9 @@ straight away whether the connection works.
   since the last reading. When a reading gets old (11 minutes by default, you
   can change that), it picks up a `⚠` and its age, so a short gap is easy to
   tell from a feed that died.
-- A chart of the last 2 to 72 hours. Drag the slider or type an exact number of
-  hours. Hover any point for its value and time. Gaps longer than 15 minutes
-  break the line instead of pretending there was data.
+- A chart of the last 2 to 72 hours, an hour per step on the slider. Hover any
+  point for its value and time. Gaps longer than 15 minutes break the line
+  instead of pretending there was data.
 - When a reading is past what your sensor can measure, you see LOW or HIGH,
   as in Nightscout, and the chart line turns dotted for that stretch.
 - Color by zone: very low, below, in range, above, very high. Pick every
