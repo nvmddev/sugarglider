@@ -26,10 +26,10 @@ struct PumpStatus: Equatable {
 
         var label: String {
             switch self {
-            case .auto: "Auto mode"
-            case .off: "Auto mode off"
-            case .boost(let until): until.map { "Boost until \($0)" } ?? "Boost"
-            case .easeOff(let until): until.map { "Ease-off until \($0)" } ?? "Ease-off"
+            case .auto: String(localized: "Auto mode")
+            case .off: String(localized: "Auto mode off")
+            case .boost(let until): until.map { String(localized: "Boost until \($0)") } ?? String(localized: "Boost")
+            case .easeOff(let until): until.map { String(localized: "Ease-off until \($0)") } ?? String(localized: "Ease-off")
             case .other(let text): text
             }
         }

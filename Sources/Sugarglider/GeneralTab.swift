@@ -19,11 +19,12 @@ struct GeneralTab: View {
                 LabeledContent("Status") { statusView }
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Leave the token empty if your site allows unauthenticated reads. "
-                         + "It is kept in your Keychain, not in the preferences file.")
+                    Text("""
+                        Leave the token empty if your site allows unauthenticated reads. \
+                        It is kept in your Keychain, not in the preferences file.
+                        """)
                     if settings.tokenStorageFailed {
-                        Text("The Keychain refused to store the token, so Sugarglider will "
-                             + "forget it when it quits.")
+                        Text("The Keychain refused to store the token, so Sugarglider will forget it when it quits.")
                             .foregroundStyle(.red)
                     }
                 }
@@ -59,8 +60,7 @@ struct GeneralTab: View {
             } header: {
                 Text("Display")
             } footer: {
-                Text("A reading with no successor for the stale delay is marked with ⚠ and its "
-                     + "age in the menu bar.")
+                Text("A reading with no successor for the stale delay is marked with ⚠ and its age in the menu bar.")
                     .foregroundStyle(.secondary)
             }
         }

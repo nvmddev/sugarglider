@@ -33,7 +33,7 @@ struct MenuBarContentView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 readingLine
-                Text(ageText).font(.system(size: 11)).foregroundStyle(.secondary)
+                ageText.font(.subheadline).foregroundStyle(.secondary)
             }
 
             // No modifiers: without pump data this renders nothing, but a wrapper would still take a gap.
@@ -107,40 +107,36 @@ struct MenuBarContentView: View {
 
     @ViewBuilder private var readingLine: some View {
         if !settings.isConfigured {
-            statusText("Not configured")
+            Text("Not configured").foregroundStyle(.secondary)
         } else if let reading = store.lastReading {
             readingText(reading)
         } else {
-            statusText(store.lastError == nil ? "Loading…" : "No reading yet")
+            Text(store.lastError == nil ? "Loading…" : "No reading yet").foregroundStyle(.secondary)
         }
-    }
-
-    private func statusText(_ text: String) -> Text {
-        Text(text).font(.system(size: 13)).foregroundStyle(.secondary)
     }
 
     private func readingText(_ reading: Reading) -> Text {
         // LOW and HIGH have no value to put a unit to, and no delta: they say where the sensor ran out instead.
         let text = reading.text(in: settings.units)
-        let value = Text(reading.outOfRange == nil ? "\(text) \(settings.units.label)" : text)
-            .font(.system(size: 15, weight: .medium))
-        let arrow = reading.direction.map { Text(" \($0.arrow)").font(.system(size: 17, weight: .semibold)) }
-            ?? Text("")
-        let note: String? = switch reading.outOfRange {
-        case .low: "below the sensor's range"
-        case .high: "above the sensor's range"
-        case nil: store.deltaText().map { "(\($0))" }
+        let value = Text(verbatim: reading.outOfRange == nil ? "\(text) \(settings.units.label)" : text)
+            .font(.title3.weight(.medium))
+        let arrow = reading.direction.map { Text(verbatim: " \($0.arrow)").font(.title2.weight(.semibold)) }
+            ?? Text(verbatim: "")
+        let note: Text? = switch reading.outOfRange {
+        case .low: Text("below the sensor's range")
+        case .high: Text("above the sensor's range")
+        case nil: store.deltaText().map { Text(verbatim: "(\($0))") }
         }
-        let detail = note.map { Text("  \($0)").font(.system(size: 13)).foregroundStyle(.secondary) }
-        return Text("\(value)\(arrow)\(detail ?? Text(""))")
+        let detail = note.map { Text("  \($0.foregroundStyle(.secondary))") } ?? Text(verbatim: "")
+        return Text("\(value)\(arrow)\(detail)")
     }
 
-    private var ageText: String {
-        guard settings.isConfigured else { return "Open Settings to add your Nightscout URL" }
-        guard let reading = store.lastReading else { return store.lastError ?? "" }
-        var text = "Reading from \(reading.date.relative(to: store.now))"
-        if store.isStale { text += " (stale)" }
-        if let error = store.lastError { text += " — \(error)" }
-        return text
+    private var ageText: Text {
+        guard settings.isConfigured else { return Text("Open Settings to add your Nightscout URL") }
+        guard let reading = store.lastReading else { return Text(store.lastError ?? "") }
+        let age = reading.date.relative(to: store.now)
+        let line = store.isStale ? Text("Reading from \(age) (stale)") : Text("Reading from \(age)")
+        guard let error = store.lastError else { return line }
+        return Text("\(line) — \(error)")
     }
 }

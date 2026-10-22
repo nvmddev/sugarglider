@@ -59,9 +59,9 @@ final class AppSettings {
     /// keystroke, so clamping a neighbor would fight the user mid-edit. They matter
     /// because `ChartMath.color(for:zones:)` tests them in order.
     var thresholdOrderWarning: String? {
-        if targetLow >= targetHigh { return "Low must be below High." }
-        if extremeLow > targetLow { return "Very low can't be above Low." }
-        if extremeHigh < targetHigh { return "Very high can't be below High." }
+        if targetLow >= targetHigh { return String(localized: "Low must be below High.") }
+        if extremeLow > targetLow { return String(localized: "Very low can't be above Low.") }
+        if extremeHigh < targetHigh { return String(localized: "Very high can't be below High.") }
         return nil
     }
 

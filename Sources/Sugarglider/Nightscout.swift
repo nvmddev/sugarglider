@@ -54,11 +54,11 @@ nonisolated enum NightscoutError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured:  "Not configured"
-        case .badURL:         "Invalid URL"
-        case .http(let code): "HTTP \(code)"
-        case .empty:          "No readings"
-        case .decode:         "Bad response"
+        case .notConfigured:  String(localized: "Not configured")
+        case .badURL:         String(localized: "Invalid URL")
+        case .http(let code): String(localized: "HTTP \(code)")
+        case .empty:          String(localized: "No readings")
+        case .decode:         String(localized: "Bad response")
         }
     }
 }
@@ -183,7 +183,7 @@ struct Nightscout {
         } catch NightscoutError.empty {
             return .connected  // the credentials work, the site just has no readings yet
         } catch NightscoutError.http(401), NightscoutError.http(403) {
-            return .failed("Authentication failed — check the token")
+            return .failed(String(localized: "Authentication failed — check the token"))
         } catch {
             return .failed(error.localizedDescription)
         }

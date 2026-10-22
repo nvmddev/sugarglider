@@ -23,9 +23,11 @@ struct AboutTab: View {
             }
             Section {
                 Label {
-                    Text("Sugarglider only displays what your Nightscout site reports. It is not a "
-                         + "medical device and raises no alarms — don't rely on it to catch a high, "
-                         + "a low, or a stopped feed, and don't use it for treatment decisions.")
+                    Text("""
+                        Sugarglider only displays what your Nightscout site reports. It is not a \
+                        medical device and raises no alarms — don't rely on it to catch a high, \
+                        a low, or a stopped feed, and don't use it for treatment decisions.
+                        """)
                 } icon: {
                     Image(systemName: "info.circle")
                 }
@@ -78,9 +80,9 @@ enum AppInfo {
     }
 
     static func versionText(short: String?, build: String?) -> String {
-        guard let short, !short.isEmpty else { return "Development build" }
-        guard let build, !build.isEmpty else { return "Version \(short)" }
-        return "Version \(short) (\(build))"
+        guard let short, !short.isEmpty else { return String(localized: "Development build") }
+        guard let build, !build.isEmpty else { return String(localized: "Version \(short)") }
+        return String(localized: "Version \(short) (\(build))")
     }
 
     static var copyright: String {

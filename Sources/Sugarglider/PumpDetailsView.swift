@@ -39,10 +39,10 @@ struct PumpDetailsView: View {
                 }
                 if !daily.isEmpty { dailyTable(daily) }
                 if let stale = Self.staleNote(status: store.pumpStatus, settings: settings, now: store.now) {
-                    Text(stale).font(.system(size: 10)).foregroundStyle(.tertiary)
+                    Text(stale).font(.caption).foregroundStyle(.tertiary)
                 }
             }
-            .font(.system(size: 11))
+            .font(.subheadline)
             .monospacedDigit()
         }
     }
@@ -59,7 +59,7 @@ struct PumpDetailsView: View {
                 Text("Today")
                 Text("Yesterday")
             }
-            .font(.system(size: 10))
+            .font(.caption)
             .foregroundStyle(.tertiary)
             ForEach(rows, id: \.label) { row in
                 GridRow {
@@ -78,7 +78,7 @@ struct PumpDetailsView: View {
         guard let status else { return [] }
         var rows: [Row] = []
         if settings.showActiveInsulin, let iob = status.insulinOnBoard {
-            rows.append(Row(label: "Active insulin", value: PumpFormat.insulin(iob)))
+            rows.append(Row(label: String(localized: "Active insulin"), value: PumpFormat.insulin(iob)))
         }
 
         // With both on, the mode labels the rate ("Auto mode … 1.20 U/h"); an uploader's free-form status
@@ -86,22 +86,22 @@ struct PumpDetailsView: View {
         let mode = settings.showPumpMode ? status.mode : nil
         let rate = settings.showDeliveryRate ? status.deliveryRate : nil
         if let mode, let rate, !mode.isStatusText {
-            rows.append(Row(label: mode.label, value: PumpFormat.rate(rate), help: "Current delivery rate"))
+            rows.append(Row(label: mode.label, value: PumpFormat.rate(rate), help: String(localized: "Current delivery rate")))
         } else {
-            if let mode { rows.append(Row(label: "Mode", value: mode.label)) }
-            if let rate { rows.append(Row(label: "Delivery rate", value: PumpFormat.rate(rate))) }
+            if let mode { rows.append(Row(label: String(localized: "Mode"), value: mode.label)) }
+            if let rate { rows.append(Row(label: String(localized: "Delivery rate"), value: PumpFormat.rate(rate))) }
         }
 
         let ages = settings.showChangeAge
         if settings.showReservoir, let units = status.reservoir {
             let age = ages ? reservoirChanged?.age(at: now, units: 2) : nil
-            rows.append(Row(label: "Reservoir", value: PumpFormat.reservoir(units), note: age,
-                            help: age.map { "Reservoir changed \($0) ago" }))
+            rows.append(Row(label: String(localized: "Reservoir"), value: PumpFormat.reservoir(units), note: age,
+                            help: age.map { String(localized: "Reservoir changed \($0) ago") }))
         }
         if settings.showPumpBattery, let percent = status.batteryPercent {
             let age = ages ? batteryChanged?.age(at: now, units: 2) : nil
-            rows.append(Row(label: "Pump battery", value: PumpFormat.battery(percent), note: age,
-                            help: age.map { "Battery changed \($0) ago" }))
+            rows.append(Row(label: String(localized: "Pump battery"), value: PumpFormat.battery(percent), note: age,
+                            help: age.map { String(localized: "Battery changed \($0) ago") }))
         }
         return rows
     }
@@ -111,13 +111,13 @@ struct PumpDetailsView: View {
         var rows: [DailyRow] = []
         func text(_ value: Double?, _ format: (Double) -> String) -> String { value.map(format) ?? "–" }
         if settings.showDailyInsulin, status.insulinToday != nil || status.insulinYesterday != nil {
-            rows.append(DailyRow(label: "Total insulin",
+            rows.append(DailyRow(label: String(localized: "Total insulin"),
                                  today: text(status.insulinToday, PumpFormat.dailyInsulin),
                                  yesterday: text(status.insulinYesterday, PumpFormat.dailyInsulin)))
         }
         if settings.showAverageGlucose, status.averageToday != nil || status.averageYesterday != nil {
             let glucose = { (mgdl: Double) in settings.units.text(fromMgdl: Int(mgdl.rounded())) }
-            rows.append(DailyRow(label: "Average glucose",
+            rows.append(DailyRow(label: String(localized: "Average glucose"),
                                  today: text(status.averageToday, glucose),
                                  yesterday: text(status.averageYesterday, glucose)))
         }
@@ -128,6 +128,6 @@ struct PumpDetailsView: View {
     /// would show it.
     static func staleNote(status: PumpStatus?, settings: AppSettings, now: Date) -> String? {
         guard let status, now.timeIntervalSince(status.date) > settings.staleThreshold else { return nil }
-        return "Pump data from \(status.date.relative(to: now))"
+        return String(localized: "Pump data from \(status.date.relative(to: now))")
     }
 }
