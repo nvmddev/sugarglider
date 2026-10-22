@@ -109,7 +109,8 @@ straight away whether the connection works.
 Sugarglider talks to your Nightscout site and nothing else. No telemetry, no
 analytics, no third-party anything. Your site URL stays in the app's preferences
 on your Mac, and the access token goes into your Keychain, where other programs
-can't read it.
+can't read it. The app runs in macOS's App Sandbox, allowed to make network
+requests and nothing more.
 
 It polls your site once a minute by default, which you can change, and only
 pulls chart history and pump data when you open the dropdown. After the first
