@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Resources/AppIcon-Dark.png">
-  <img src="Resources/AppIcon-Light.png" width="112" alt="">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/icon-dark.png">
+  <img src="docs/icon-light.png" width="112" alt="">
 </picture>
 
 # Sugarglider

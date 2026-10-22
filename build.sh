@@ -47,10 +47,8 @@ echo "==> Assembling ${APP}"
 rm -rf "${APP}"
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 cp "${BIN_PATH}" "${APP}/Contents/MacOS/${BIN}"
-# Why there are three icon artifacts: see scripts/make-icon.sh.
-cp "Resources/Assets.car" "Resources/AppIcon.icns" \
-    "Resources/AppIcon-Light.png" "Resources/AppIcon-Dark.png" \
-    "${APP}/Contents/Resources/"
+# Why there are two icon artifacts: see scripts/make-icon.sh.
+cp "Resources/Assets.car" "Resources/AppIcon.icns" "${APP}/Contents/Resources/"
 
 echo "==> Stripping symbols"
 strip -x "${APP}/Contents/MacOS/${BIN}"

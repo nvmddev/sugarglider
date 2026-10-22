@@ -3,9 +3,6 @@ import SwiftUI
 
 // A tab because an LSUIElement app has no app menu to hold the standard About item.
 struct AboutTab: View {
-    let settings: AppSettings
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
         Form {
             Section {
@@ -39,13 +36,10 @@ struct AboutTab: View {
 
     private var header: some View {
         VStack(spacing: 2) {
-            // Theme first, so a Light/Dark override wins over the system appearance.
-            if let icon = AppInfo.appIcon(for: settings.theme.colorScheme ?? colorScheme) {
-                Image(nsImage: icon)
-                    .resizable()
-                    .frame(width: 80, height: 80)
-                    .padding(.bottom, 4)
-            }
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 80, height: 80)
+                .padding(.bottom, 4)
             Text("Sugarglider")
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.primary)
@@ -67,12 +61,6 @@ enum AppInfo {
     static let repositoryURL = URL(string: "https://github.com/nvmddev/sugarglider")!
     static let issuesURL = repositoryURL.appending(path: "issues")
     static let licenseURL = repositoryURL.appending(path: "blob/main/LICENSE")
-
-    // Asked by name, AppKit returns the light rendition from Assets.car in either appearance, hence the PNGs.
-    static func appIcon(for scheme: ColorScheme) -> NSImage? {
-        NSImage(named: scheme == .dark ? "AppIcon-Dark" : "AppIcon-Light")
-            ?? NSImage(named: NSImage.applicationIconName)
-    }
 
     static var versionText: String {
         versionText(short: bundleString("CFBundleShortVersionString"),

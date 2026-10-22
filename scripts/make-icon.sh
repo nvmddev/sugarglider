@@ -1,12 +1,11 @@
 #!/bin/bash
 # Compiles Resources/AppIcon.icon (an Icon Composer document) into the icon
-# artifacts committed next to it:
+# artifacts committed next to it, plus the README's pictures of it:
 #
-#   Assets.car                the icon macOS shows, with Aqua, DarkAqua and
-#                             tintable renditions (CFBundleIconName)
-#   AppIcon.icns              single-appearance fallback (CFBundleIconFile)
-#   AppIcon-{Light,Dark}.png  for the About tab: NSImage(named:) only ever
-#                             returns the catalog's light rendition
+#   Resources/Assets.car           the icon macOS shows, with Aqua, DarkAqua
+#                                  and tintable renditions (CFBundleIconName)
+#   Resources/AppIcon.icns         single-appearance fallback (CFBundleIconFile)
+#   docs/icon-{light,dark}.png     the README header, one per color scheme
 #
 #   make-icon.sh [compile]   recompile and record the source hash (Xcode 26+)
 #   make-icon.sh verify      check the recorded hash, no Xcode needed
@@ -135,15 +134,14 @@ compile_icon "${TMP}/AppIcon.icon" "${TMP}/dark"
 # 128@2x (256 px) is the largest size actool puts in the fallback .icns.
 for pass in light dark; do
     iconutil -c iconset "${TMP}/${pass}/AppIcon.icns" -o "${TMP}/${pass}.iconset"
-    variant="$(tr '[:lower:]' '[:upper:]' <<<"${pass:0:1}")${pass:1}"
-    cp "${TMP}/${pass}.iconset/icon_128x128@2x.png" "Resources/AppIcon-${variant}.png"
+    cp "${TMP}/${pass}.iconset/icon_128x128@2x.png" "docs/icon-${pass}.png"
 done
 
 # Last, so a run that dies halfway doesn't record the new source as compiled.
 icon_checksum > "${CHECKSUM_FILE}"
 
-for artifact in Assets.car AppIcon.icns AppIcon-Light.png AppIcon-Dark.png; do
-    echo "    Resources/${artifact} ($(du -h "Resources/${artifact}" | cut -f1))"
+for artifact in Resources/Assets.car Resources/AppIcon.icns docs/icon-light.png docs/icon-dark.png; do
+    echo "    ${artifact} ($(du -h "${artifact}" | cut -f1))"
 done
 echo "    ${CHECKSUM_FILE} ($(cat "${CHECKSUM_FILE}"))"
 
