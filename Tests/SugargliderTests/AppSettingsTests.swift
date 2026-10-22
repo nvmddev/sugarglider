@@ -364,18 +364,6 @@ extension SugargliderTests {
         s.baseURL = "https://site.example"
         #expect(s.isConfigured)
     }
-
-    @Test(arguments: [
-        ("reader-0123456789abcdef", "re***ef"),
-        ("monitor-1a2b3c4d", "mo***4d"),
-        ("secret1", "se***t1"),
-        ("abcdef", "******"),
-        ("ab", "**"),
-        ("", ""),
-    ])
-    func maskedToken(_ token: String, masked: String) {
-        #expect(AppSettings.maskedToken(token) == masked)
-    }
 }
 
 // MARK: - Number formatting

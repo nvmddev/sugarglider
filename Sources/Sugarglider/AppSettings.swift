@@ -38,11 +38,6 @@ final class AppSettings {
 
     var isConfigured: Bool { !baseURL.trimmingCharacters(in: .whitespaces).isEmpty }
 
-    static func maskedToken(_ token: String) -> String {
-        guard token.count > 6 else { return String(repeating: "*", count: token.count) }
-        return "\(token.prefix(2))***\(token.suffix(2))"
-    }
-
     // MARK: - Glucose and display
 
     /// The display unit only: glucose is always held in mg/dL, Nightscout's native unit.

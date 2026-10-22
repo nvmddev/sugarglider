@@ -22,7 +22,6 @@ struct SettingsView: View {
 
 private struct GeneralTab: View {
     @Bindable var settings: AppSettings
-    @FocusState private var tokenFieldFocused: Bool
     @State private var status = ConnectionStatus.unconfigured
 
     private enum ConnectionStatus {
@@ -36,8 +35,7 @@ private struct GeneralTab: View {
             Section {
                 TextField("Nightscout URL", text: $settings.baseURL,
                           prompt: Text("https://your-site.nightscout.app"))
-                TextField("Access token", text: tokenText, prompt: Text("e.g. monitor-1a2b3c4d"))
-                    .focused($tokenFieldFocused)
+                SecureField("Access token", text: $settings.token, prompt: Text("e.g. monitor-1a2b3c4d"))
                 LabeledContent("Status") { statusView }
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
@@ -131,17 +129,6 @@ private struct GeneralTab: View {
         let result = await Nightscout.probe(baseURL: settings.baseURL, token: settings.token)
         guard !Task.isCancelled else { return }
         status = .probed(result)
-    }
-
-    // Masked until focused. The setter drops the mask, so a commit while unfocused can't store it.
-    private var tokenText: Binding<String> {
-        Binding(
-            get: { tokenFieldFocused ? settings.token : AppSettings.maskedToken(settings.token) },
-            set: { newValue in
-                guard newValue != AppSettings.maskedToken(settings.token) else { return }
-                settings.token = newValue
-            }
-        )
     }
 }
 
