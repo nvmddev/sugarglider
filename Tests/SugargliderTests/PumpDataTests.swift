@@ -289,15 +289,6 @@ extension SugargliderTests {
         #expect(steps.count == 1)
         #expect(steps.first?.end == base.addingTimeInterval(5 * 60))
     }
-
-    @Test func nearestIndexWorksOnBareDates() {
-        let base = Date.now
-        let dates = [0.0, 300.0].map { base.addingTimeInterval($0) }
-        func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(base)) }
-        #expect(ChartMath.nearestIndex(to: 290, x: x, dates: dates, maxDistance: 24) == 1)
-        #expect(ChartMath.nearestIndex(to: 150, x: x, dates: dates, maxDistance: 24) == nil)
-        #expect(ChartMath.nearestIndex(to: 0, x: x, dates: [], maxDistance: 24) == nil)
-    }
 }
 
 // MARK: - Store
@@ -533,21 +524,21 @@ extension SugargliderTests {
         let s = Self.makeSettings()
         let bolus = Treatment(id: "b", date: Date.now.addingTimeInterval(-50 * 3600), kind: .bolus(units: 1))
         let tempBasal = Treatment(id: "t", date: .now, kind: .tempBasal(rate: 1, minutes: 30))
-        #expect(ChartCanvas.laneSpace(for: [], settings: s) == 0)
+        #expect(GlucoseChart.laneSpace(for: [], settings: s) == 0)
         // Decided on the whole cache, so a range drag can't make the chart jump.
-        #expect(ChartCanvas.laneSpace(for: [bolus], settings: s) == ChartCanvas.laneHeight)
-        #expect(ChartCanvas.laneSpace(for: [tempBasal], settings: s) == 0)
+        #expect(GlucoseChart.laneSpace(for: [bolus], settings: s) == GlucoseChart.laneHeight)
+        #expect(GlucoseChart.laneSpace(for: [tempBasal], settings: s) == 0)
         s.chartShowsDeliveryRate = true
-        #expect(ChartCanvas.laneSpace(for: [tempBasal], settings: s) == ChartCanvas.laneHeight)
+        #expect(GlucoseChart.laneSpace(for: [tempBasal], settings: s) == GlucoseChart.laneHeight)
         s.chartShowsBoluses = false
-        #expect(ChartCanvas.laneSpace(for: [bolus], settings: s) == 0)
+        #expect(GlucoseChart.laneSpace(for: [bolus], settings: s) == 0)
     }
 
     @Test func longAnnouncementsAreClippedForThePill() {
-        #expect(ChartCanvas.clipped("short") == "short")
+        #expect(GlucoseChart.clipped("short") == "short")
         let long = String(repeating: "a", count: 200)
-        #expect(ChartCanvas.clipped(long).count == 160)
-        #expect(ChartCanvas.clipped(long).hasSuffix("…"))
+        #expect(GlucoseChart.clipped(long).count == 160)
+        #expect(GlucoseChart.clipped(long).hasSuffix("…"))
     }
 
     @Test func rendersEveryPumpLayerWithoutCrash() {
@@ -564,8 +555,8 @@ extension SugargliderTests {
             Treatment(id: "b1", date: now.addingTimeInterval(-2 * 3600), kind: .bolus(units: 3.5)),
             Treatment(id: "n1", date: now.addingTimeInterval(-1.5 * 3600), kind: .note("CamAPS: Hoher Wert")),
         ]
-        let chart = ChartCanvas(readings: readings, rangeHours: 6, settings: s, windowEnd: .now, treatments: treatments)
-        let height = 160 + ChartCanvas.laneSpace(for: treatments, settings: s)
+        let chart = GlucoseChart(readings: readings, rangeHours: 6, settings: s, windowEnd: .now, treatments: treatments)
+        let height = 160 + GlucoseChart.laneSpace(for: treatments, settings: s)
         let renderer = ImageRenderer(content: chart.frame(width: 280, height: height))
         renderer.scale = 1
         #expect(renderer.cgImage != nil)

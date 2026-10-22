@@ -39,57 +39,50 @@ enum ChartMath {
         return runs
     }
 
-    /// Where a segment runs beyond the sensor's range. Each reading takes the time halfway to its
-    /// neighbors, so a lone LOW gets a stretch of its own.
-    static func outOfRangeSpans(_ segment: [Reading]) -> [ClosedRange<Date>] {
-        var spans: [ClosedRange<Date>] = []
-        for (i, reading) in segment.enumerated() where reading.outOfRange != nil {
-            func halfway(to j: Int) -> Date {
-                guard segment.indices.contains(j) else { return reading.date }
-                return reading.date.addingTimeInterval(segment[j].date.timeIntervalSince(reading.date) / 2)
+    /// A segment cut where it runs beyond the sensor's range, which is drawn dotted. Such a run
+    /// reaches to the measured readings on either side, so the line stays unbroken.
+    static func runs(of segment: [Reading]) -> [(beyondRange: Bool, readings: [Reading])] {
+        var runs: [(beyondRange: Bool, readings: [Reading])] = []
+        for (i, reading) in segment.enumerated() {
+            let beyond = reading.outOfRange != nil
+            guard let last = runs.last, last.beyondRange != beyond else {
+                if runs.isEmpty { runs.append((beyond, [reading])) } else { runs[runs.count - 1].readings.append(reading) }
+                continue
             }
-            let span = halfway(to: i - 1)...halfway(to: i + 1)
-            if let last = spans.last, last.upperBound >= span.lowerBound {
-                spans[spans.count - 1] = last.lowerBound...span.upperBound
+            if beyond {
+                runs.append((true, [segment[i - 1], reading]))
             } else {
-                spans.append(span)
+                runs[runs.count - 1].readings.append(reading)
+                runs.append((false, [reading]))
             }
         }
-        return spans
+        return runs
     }
 
-    /// A Catmull-Rom spline through the points.
-    static func smooth(_ points: [CGPoint]) -> Path {
-        var path = Path()
-        guard let first = points.first else { return path }
-        path.move(to: first)
-        guard points.count >= 3 else {
-            points.dropFirst().forEach { path.addLine(to: $0) }
-            return path
+    /// The zone colors as gradient stops up the value axis: hard edges at the thresholds, or one
+    /// stop in the middle of each zone to blend them.
+    static func zoneStops(for zones: Zones, axis: ValueAxis, units: AppSettings.Units,
+                          blended: Bool) -> [Gradient.Stop] {
+        func location(_ mgdl: Double) -> Double {
+            min(max((units.value(fromMgdl: mgdl) - axis.lo) / (axis.hi - axis.lo), 0), 1)
         }
-        for i in 0..<(points.count - 1) {
-            let p0 = points[max(i - 1, 0)], p1 = points[i], p2 = points[i + 1]
-            let p3 = points[min(i + 2, points.count - 1)]
-            path.addCurve(to: p2,
-                          control1: CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6),
-                          control2: CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6))
+        let edges = [0, location(zones.extremeLow), location(zones.targetLow),
+                     location(zones.targetHigh), location(zones.extremeHigh), 1]
+        let colors = [zones.extremeLowColor, zones.belowColor, zones.inRangeColor,
+                      zones.aboveColor, zones.extremeHighColor]
+        let bands = colors.indices.filter { edges[$0 + 1] > edges[$0] }
+        guard !bands.isEmpty else { return [Gradient.Stop(color: zones.inRangeColor, location: 0)] }
+        return bands.flatMap { i in
+            blended
+                ? [Gradient.Stop(color: colors[i], location: (edges[i] + edges[i + 1]) / 2)]
+                : [Gradient.Stop(color: colors[i], location: edges[i]),
+                   Gradient.Stop(color: colors[i], location: edges[i + 1])]
         }
-        return path
     }
 
-    static func nearestIndex(to targetX: CGFloat, x: (Date) -> CGFloat, in readings: [Reading],
-                             maxDistance: CGFloat) -> Int? {
-        nearestIndex(to: targetX, x: x, dates: readings.map(\.date), maxDistance: maxDistance)
-    }
-
-    static func nearestIndex(to targetX: CGFloat, x: (Date) -> CGFloat, dates: [Date],
-                             maxDistance: CGFloat) -> Int? {
-        var best = 0, bestDistance = CGFloat.greatestFiniteMagnitude
-        for (i, date) in dates.enumerated() {
-            let distance = abs(x(date) - targetX)
-            if distance < bestDistance { bestDistance = distance; best = i }
-        }
-        return bestDistance < maxDistance ? best : nil
+    static func nearestIndex(to target: Date, in dates: [Date], maxDistance: TimeInterval) -> Int? {
+        let nearest = dates.indices.min { abs(dates[$0].timeIntervalSince(target)) < abs(dates[$1].timeIntervalSince(target)) }
+        return nearest.flatMap { abs(dates[$0].timeIntervalSince(target)) < maxDistance ? $0 : nil }
     }
 
     struct DeliveryStep: Equatable {
@@ -203,6 +196,9 @@ enum ChartMath {
         var lo: Double
         var hi: Double
         var step: Double
+
+        /// Where the gridlines go: every multiple of `step` on the axis.
+        var levels: [Double] { Array(stride(from: (lo / step).rounded(.up) * step, through: hi, by: step)) }
     }
 
     /// Always reaches every threshold, so a quiet day keeps the scale of a wild one rather than

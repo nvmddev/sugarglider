@@ -14,9 +14,9 @@ struct MenuBarContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Self.spacing) {
-            ChartCanvas(readings: store.readings, rangeHours: settings.rangeHours, settings: settings,
+            GlucoseChart(readings: store.readings, rangeHours: settings.rangeHours, settings: settings,
                         windowEnd: store.now, treatments: store.treatments)
-                .frame(height: 135 + ChartCanvas.laneSpace(for: store.treatments, settings: settings))
+                .frame(height: 135 + GlucoseChart.laneSpace(for: store.treatments, settings: settings))
 
             HStack(spacing: 8) {
                 TintedSlider(value: rangeBinding, range: Self.rangeSliderBounds, step: 1,

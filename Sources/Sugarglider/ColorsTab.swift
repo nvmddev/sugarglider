@@ -22,9 +22,9 @@ struct ColorsTab: View {
                 VStack(spacing: 8) {
                     let treatments = sampleTreatments
                     // Grows by the lane like the dropdown's chart, so the lane doesn't squeeze the plot.
-                    ChartCanvas(readings: sampleReadings, rangeHours: Int(previewHours),
+                    GlucoseChart(readings: sampleReadings, rangeHours: Int(previewHours),
                                 settings: settings, windowEnd: sampleEnd, treatments: treatments)
-                        .frame(height: 95 + ChartCanvas.laneSpace(for: treatments, settings: settings))
+                        .frame(height: 95 + GlucoseChart.laneSpace(for: treatments, settings: settings))
                     HStack(spacing: 8) {
                         TintedSlider(value: $previewHours, range: Self.previewHoursBounds, step: 2,
                                      tint: settings.sliderColor,
