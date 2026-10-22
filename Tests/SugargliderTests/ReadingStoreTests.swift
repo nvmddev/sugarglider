@@ -160,6 +160,31 @@ extension SugargliderTests {
         #expect(store.readings.map(\.sgv) == history)
     }
 
+    /// The error is what turns the title into "CGM ⚠" and fills the dropdown's error line. The last
+    /// reading stays, so the title keeps showing it and its growing age.
+    @Test(arguments: [
+        (500, "{}", NightscoutError.http(500)),
+        (401, #"{"status":401}"#, .http(401)),
+        (200, "<html></html>", .decode),
+        (200, "[]", .empty),
+    ] as [(Int, String, NightscoutError)])
+    func failedPollReportsWhyUntilOneSucceeds(status: Int, json: String, error: NightscoutError) async throws {
+        let failing = StubbedSite(status: status, json: json)
+        let settings = Self.makeSettings()
+        let store = failing.store(settings)
+        store.lastReading = reading(110, minutesAgo: 5)
+
+        await store.refresh()
+        #expect(store.lastError == error.localizedDescription)
+        #expect(store.lastReading?.sgv == 110)
+
+        let working = StubbedSite(json: #"[{"sgv":120,"direction":"Flat","date":\#(epochMillis(.now))}]"#)
+        settings.baseURL = working.baseURL
+        await store.refresh()
+        #expect(store.lastError == nil)
+        #expect(store.lastReading?.sgv == 120)
+    }
+
     @Test func historyAsksForTheWindowOnceThenOnlyForWhatIsNewer() async throws {
         let nowMs = epochMillis(.now)
         let server = StubbedSite(json: """
@@ -181,6 +206,55 @@ extension SugargliderTests {
         #expect(server.requests.count == 2)
         let newest = try #require(store.readings.last?.date)
         #expect(server.requests[1].contains("$gt%5D=\(epochMillis(newest))"))
+    }
+
+    /// The dropdown refreshes on every open. The throttle is per part, so a switch just turned on
+    /// is fetched on the next open while the rest waits out its minute.
+    @Test func eachPartIsFetchedAtMostOnceAMinute() async throws {
+        let server = StubbedSite(json: "[]")
+        let settings = Self.makeSettings()
+        let store = server.store(settings)
+
+        await store.refreshHistory(force: false)
+        await store.refreshDetails(force: false)
+        #expect(server.requests.count == 3)   // readings, device status, treatments
+
+        await store.refreshHistory(force: false)
+        await store.refreshDetails(force: false)
+        #expect(server.requests.count == 3)
+
+        settings.showChangeAge = true
+        await store.refreshDetails(force: false)
+        #expect(server.requests.count == 5)
+        #expect(server.requests.dropFirst(3).allSatisfy { $0.contains("eventType") })
+
+        await store.refreshDetails(force: true)
+        #expect(server.requests.count == 9)
+    }
+
+    /// A failed request leaves what's shown and isn't throttled, so the next open asks again.
+    @Test func aFailedFetchKeepsTheValuesAndIsRetried() async throws {
+        let server = StubbedSite(status: 500, json: "{}")
+        let settings = Self.makeSettings()
+        settings.showChangeAge = true
+        let store = server.store(settings)
+        let status = PumpStatus(date: .now, reservoir: 120)
+        let bolus = Treatment(id: "b", date: .now, kind: .bolus(units: 1))
+        let changed = Date.now.addingTimeInterval(-86_400)
+        store.readings = [reading(110)]
+        store.pumpStatus = status
+        store.treatments = [bolus]
+        store.reservoirChanged = changed
+
+        for _ in 0..<2 {
+            await store.refreshHistory(force: false)
+            await store.refreshDetails(force: false)
+        }
+        #expect(server.requests.count == 2 * 5)   // readings, device status, treatments, two changes
+        #expect(store.readings.map(\.sgv) == [110])
+        #expect(store.pumpStatus == status)
+        #expect(store.treatments == [bolus])
+        #expect(store.reservoirChanged == changed)
     }
 
     @Test func wideningTheRangeFetchesTheMissingHistory() async throws {

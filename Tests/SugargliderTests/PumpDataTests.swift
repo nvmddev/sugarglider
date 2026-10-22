@@ -402,6 +402,37 @@ extension SugargliderTests {
         let overlap = NightscoutTime.string(newest.addingTimeInterval(-ReadingStore.treatmentOverlap))
         #expect(server.requests[1].contains("$gte%5D=\(overlap)"))
     }
+
+    /// Only the changes a shown row puts an age next to are asked for, each landing in its own row.
+    @Test(arguments: [
+        (true, true, true), (true, true, false), (true, false, true),
+        (false, true, true),    // ages switched off
+        (true, false, false),   // no row to put an age next to
+    ])
+    func changeDatesAreFetchedForTheRowsThatShowThem(showAges: Bool, reservoir: Bool, battery: Bool) async throws {
+        let changed = "2030-01-01T08:00:00.128Z"
+        let server = StubbedSite(json: #"[{"eventType":"Insulin Change","created_at":"\#(changed)"}]"#)
+        let settings = Self.makeSettings()
+        for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
+        settings.showChangeAge = showAges
+        settings.showReservoir = reservoir
+        settings.showPumpBattery = battery
+        let store = server.store(settings)
+
+        await store.refreshDetails(force: true)
+        let date = NightscoutTime.date(changed)
+        #expect(store.reservoirChanged == (showAges && reservoir ? date : nil))
+        #expect(store.batteryChanged == (showAges && battery ? date : nil))
+        let asked = server.requests.filter { $0.contains("eventType") }
+        #expect(asked.contains { $0.contains("=Insulin%20Change") } == (showAges && reservoir))
+        #expect(asked.contains { $0.contains("=Pump%20Battery%20Change") } == (showAges && battery))
+        // Without a date filter Nightscout would search only the last two days.
+        for request in asked {
+            let since = URLComponents(string: request)?.queryItems?.first { $0.name == "find[created_at][$gte]" }?.value
+            let lookback = try #require(NightscoutTime.date(since)).distance(to: .now)
+            #expect(abs(lookback - 60 * 86_400) < 60)
+        }
+    }
 }
 
 // MARK: - What the dropdown shows
