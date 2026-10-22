@@ -27,6 +27,23 @@ extension View {
         hostingWindow { $0.allowsToolTipsWhenApplicationIsInactive = true }
     }
 
+    /// Lets the user resize the Settings window, which SwiftUI keeps fixed even under
+    /// `.windowResizability(.contentMinSize)` and opens 900 pt wide whatever the ideal frame says (both
+    /// measured). Deferred a turn because SwiftUI clears `.resizable` again while it sets the window up.
+    /// The frame is saved under a name of our own: SwiftUI's saves the fixed size too, so an existing one
+    /// would hold the window at the old size forever.
+    func windowResizable(defaultSize: CGSize, autosaveName: String) -> some View {
+        hostingWindow { window in
+            guard !window.styleMask.contains(.resizable) else { return }
+            Task { @MainActor in
+                guard !window.styleMask.contains(.resizable) else { return }
+                window.styleMask.insert(.resizable)
+                if !window.setFrameUsingName(autosaveName) { window.setContentSize(defaultSize) }
+                window.setFrameAutosaveName(autosaveName)
+            }
+        }
+    }
+
     // Zero-sized because ImageRenderer draws an NSViewRepresentable as a yellow placeholder.
     private func hostingWindow(_ configure: @escaping (NSWindow) -> Void) -> some View {
         background(WindowConfigurator(configure: configure).frame(width: 0, height: 0))

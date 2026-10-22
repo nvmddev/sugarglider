@@ -12,8 +12,9 @@ struct SettingsView: View {
             Tab("Pump", systemImage: "syringe") { PumpTab(settings: settings) }
             Tab("About", systemImage: "info.circle") { AboutTab(settings: settings) }
         }
-        // Every tab is a .grouped Form: unlike a plain one, it scrolls instead of clipping at this size.
-        .frame(width: 500, height: 480)
+        // Every tab is a .grouped Form, which scrolls where a plain one would clip.
+        .frame(minWidth: 500, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
+        .windowResizable(defaultSize: CGSize(width: 500, height: 700), autosaveName: "SettingsWindow")
         // Not .windowTheme(_:): SwiftUI resets a manual NSWindow.appearance on this window within milliseconds.
         .preferredColorScheme(settings.theme.colorScheme)
     }
