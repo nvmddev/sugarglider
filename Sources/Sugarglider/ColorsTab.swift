@@ -46,12 +46,8 @@ struct ColorsTab: View {
                 .padding(.horizontal, 10)
         }
         .padding([.horizontal, .top], 20)
-        // Lined up with the form below, whose grouped sections stop growing at this width (measured).
-        .frame(maxWidth: Self.formSectionMaxWidth + 40)
         .onAppear { sampleEnd = .now }
     }
-
-    private static let formSectionMaxWidth: CGFloat = 704
 
     private static let previewHoursBounds =
         Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)

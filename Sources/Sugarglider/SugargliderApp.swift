@@ -36,6 +36,5 @@ struct SugargliderApp: App {
         Settings {
             SettingsView(settings: settings)
         }
-        .windowResizability(.contentMinSize)
     }
 }

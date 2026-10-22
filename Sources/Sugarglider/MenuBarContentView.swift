@@ -4,6 +4,7 @@ struct MenuBarContentView: View {
     @Bindable var settings: AppSettings
     var store: ReadingStore
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.dismiss) private var dismiss
 
     private let contentWidth: CGFloat = 280
     private static let spacing: CGFloat = 10
@@ -79,22 +80,12 @@ struct MenuBarContentView: View {
         .help(title)
     }
 
-    // An accessory app's window that is only ordered front ignores typing, so Settings has to become key.
-    // SwiftUI creates the window asynchronously, hence the poll.
+    /// Closes the dropdown first, which would otherwise stay in front of the window. An accessory app
+    /// is inactive, so it has to activate for the window to take typing.
     private func showSettings() {
+        dismiss()
         NSApp.activate()
         openSettings()
-        Task {
-            for _ in 0..<20 {
-                if let window = NSApp.windows.first(where: {
-                    $0.identifier?.rawValue.hasPrefix("com_apple_SwiftUI_Settings") == true
-                }) {
-                    window.makeKeyAndOrderFront(nil)
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(25))
-            }
-        }
     }
 
     @ViewBuilder private var readingLine: some View {

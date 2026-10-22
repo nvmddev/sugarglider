@@ -12,7 +12,6 @@ struct SettingsView: View {
             Tab("About", systemImage: "info.circle") { AboutTab() }
         }
         // Every tab is a .grouped Form, which scrolls where a plain one would clip.
-        .frame(minWidth: 500, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
-        .windowResizable(defaultSize: CGSize(width: 500, height: 700), autosaveName: "SettingsWindow")
+        .frame(width: 520, height: 640)
     }
 }
