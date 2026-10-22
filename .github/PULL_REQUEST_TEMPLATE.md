@@ -18,7 +18,7 @@ A `!` before the colon (or a BREAKING CHANGE trailer) triggers a major bump.
 
 <!-- SwiftUI views aren't unit-testable here, so UI changes need a real run. -->
 
-- [ ] `swift test` passes
+- [ ] The tests pass (⌘U in Xcode, or `xcodebuild test`)
 - [ ] `./build.sh` succeeds and I ran `Sugarglider.app`
 - [ ] Checked the menu-bar item and the dropdown in **both** Light and Dark mode
       (if this touches drawing or colors)

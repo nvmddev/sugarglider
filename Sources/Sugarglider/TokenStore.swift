@@ -1,39 +1,25 @@
 import Foundation
 import Security
 
-/// Where the Nightscout access token is persisted. A seam rather than an
-/// abstraction for its own sake: `KeychainTokenStore` is the only shipping
-/// implementation, but `AppSettings.init` takes one the way it takes a
-/// `UserDefaults`, so the tests never touch (or prompt against) the real
-/// login Keychain.
-@MainActor
+/// A seam so tests never touch, or get prompted by, the real Keychain.
 protocol TokenStorage {
-    /// The stored token, or `""` when there is none.
     func load() -> String
 
-    /// Persists `token`, removing the item when it is empty. `false` means the
-    /// token is memory-only from here on and won't survive a relaunch, which is
-    /// worth telling the user about because nothing else reveals it.
-    @discardableResult
+    /// An empty token removes the stored one. `false` means the token is memory-only from here
+    /// on, which nothing else would reveal to the user.
     func save(_ token: String) -> Bool
 }
 
-/// One generic-password item, ACL'd to this app. The token used to live in
-/// `~/Library/Preferences/dev.nevermind.sugarglider.plist`, which any process
-/// running as the user can read with a plain `defaults read`, no prompt and no
-/// entitlement, and which goes into Time Machine in the clear.
-@MainActor
+/// Not `UserDefaults`: any process running as the user can read a preferences plist without a
+/// prompt, and Time Machine backs it up in the clear.
 struct KeychainTokenStore: TokenStorage {
-    static let service = "dev.nevermind.sugarglider"
-    static let account = "nightscout-token"
+    private static let service = "dev.nevermind.sugarglider"
+    private static let account = "nightscout-token"
 
-    /// macOS exposes two Keychains through one API, and the app's signature
-    /// decides which one it may use. The data-protection Keychain needs a
-    /// `keychain-access-groups` entitlement, which only a build carrying a
-    /// provisioning profile has (docs/signing.md), and never prompts; the older
-    /// login Keychain takes anyone, at the price of a prompt whenever the
-    /// signature changes. Probed once and cached, because asking per call risks
-    /// writing to one and reading the other.
+    /// The data-protection Keychain never prompts but needs the `keychain-access-groups`
+    /// entitlement, which only a build with a provisioning profile has (docs/signing.md); the
+    /// login Keychain takes any signature but prompts when it changes. Probed once, because
+    /// deciding per call risks writing to one Keychain and reading the other.
     private static let usesDataProtection: Bool = {
         var probe = baseQuery(dataProtection: true)
         probe[kSecAttrAccount] = "\(account).probe"
@@ -47,22 +33,19 @@ struct KeychainTokenStore: TokenStorage {
 
     func load() -> String {
         if let token = Self.read(dataProtection: Self.usesDataProtection) { return token }
-        // Nothing there, so look in the other Keychain in case the copy that
-        // stored the token was signed differently. A release that starts or
-        // stops shipping the provisioning profile switches Keychains, and would
-        // otherwise look to every existing user like the token had vanished.
-        // Migrating the item across costs one extra lookup, exactly once.
+        // A build signed differently stores the token in the other Keychain, so a release that
+        // starts or stops shipping the profile would otherwise appear to lose it.
         guard let stray = Self.read(dataProtection: !Self.usesDataProtection) else { return "" }
-        Self.write(stray, dataProtection: Self.usesDataProtection)
-        Self.remove(dataProtection: !Self.usesDataProtection)
+        // Only a copy that arrived may replace the stray one, or a refused write loses the token.
+        if Self.write(stray, dataProtection: Self.usesDataProtection) {
+            Self.remove(dataProtection: !Self.usesDataProtection)
+        }
         return stray
     }
 
-    @discardableResult
     func save(_ token: String) -> Bool {
         guard !token.isEmpty else {
-            // Both, or the stray-item lookup in `load()` resurrects a token the
-            // user just deleted.
+            // Both, or load() would resurrect the stray copy of a token the user just deleted.
             Self.remove(dataProtection: true)
             Self.remove(dataProtection: false)
             return true
@@ -70,13 +53,11 @@ struct KeychainTokenStore: TokenStorage {
         return Self.write(token, dataProtection: Self.usesDataProtection)
     }
 
-    // MARK: - Keychain plumbing
-
     private static func baseQuery(dataProtection: Bool) -> [CFString: Any] {
         var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
-            kSecAttrAccount: account
+            kSecAttrAccount: account,
         ]
         if dataProtection { query[kSecUseDataProtectionKeychain] = true }
         return query
@@ -95,21 +76,18 @@ struct KeychainTokenStore: TokenStorage {
         return token
     }
 
-    @discardableResult
     private static func write(_ token: String, dataProtection: Bool) -> Bool {
         let query = baseQuery(dataProtection: dataProtection)
         let data = Data(token.utf8)
-        // Update in place when the item exists, so its ACL survives a token
-        // change. That ACL is what keeps the next launch from prompting.
-        if SecItemUpdate(query as CFDictionary,
-                         [kSecValueData: data] as CFDictionary) == errSecSuccess { return true }
+        // Updating in place keeps the item's ACL, which is what spares the next launch a prompt.
+        if SecItemUpdate(query as CFDictionary, [kSecValueData: data] as CFDictionary) == errSecSuccess {
+            return true
+        }
         var item = query
         item[kSecValueData] = data
         if dataProtection {
-            // Only the data-protection Keychain has this attribute.
-            // AfterFirstUnlock so a login-item launch can read the token before
-            // anyone has touched the keyboard; ThisDevice keeps it out of iCloud
-            // Keychain, since the token belongs to one Mac.
+            // Only this Keychain has the attribute. AfterFirstUnlock lets a login-item launch read
+            // the token; ThisDeviceOnly keeps it out of iCloud Keychain.
             item[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         }
         return SecItemAdd(item as CFDictionary, nil) == errSecSuccess

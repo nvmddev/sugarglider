@@ -1,12 +1,10 @@
 #!/bin/bash
-# Render Conventional Commits into changelog markdown.
+# Renders Conventional Commits as changelog markdown.
 #
-#   scripts/changelog.sh notes   <version> [from-ref] [to-ref]  → markdown on stdout
-#   scripts/changelog.sh prepend <version> [from-ref] [to-ref]  → insert into CHANGELOG.md
+#   scripts/changelog.sh notes   <version> [from-ref] [to-ref]  markdown on stdout
+#   scripts/changelog.sh prepend <version> [from-ref] [to-ref]  insert into CHANGELOG.md
 #
-# from-ref defaults to the newest tag that isn't <to-ref> itself; to-ref to HEAD.
-# Commits that don't parse as Conventional Commits land under "Other changes"
-# rather than being dropped, so nothing silently disappears from the notes.
+# from-ref defaults to the tag released before v<version>, to-ref to HEAD.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -30,7 +28,6 @@ else
     RANGE="${TO}" # first release: everything down to the root commit
 fi
 
-# Prefer the CI-provided repo identity; fall back to the origin remote locally.
 if [[ -n "${GITHUB_SERVER_URL:-}" && -n "${GITHUB_REPOSITORY:-}" ]]; then
     REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
 else
@@ -43,9 +40,7 @@ fi
 
 DATE="$(git log -1 --format=%cd --date=short "${TO}" 2>/dev/null || date -u +%Y-%m-%d)"
 
-# Section order is the output order. Keyed by file name in a temp dir because
-# macOS ships bash 3.2, which has no associative arrays.
-SECTIONS=(breaking feat fix perf refactor docs build test chore other)
+SECTIONS=(breaking feat fix perf refactor docs build test chore other) # output order
 title_for() {
     case "$1" in
     breaking) echo "⚠️ Breaking changes" ;;
@@ -61,7 +56,6 @@ title_for() {
     esac
 }
 
-# Conventional Commit type to section.
 section_for() {
     case "$1" in
     feat)            echo feat ;;
@@ -76,6 +70,8 @@ section_for() {
     esac
 }
 
+# One file of entries per section: macOS ships bash 3.2, which has no
+# associative arrays.
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 
@@ -116,7 +112,8 @@ while IFS= read -r -d $'\x1e' record; do
 done < <(git log --no-merges --format='%H%x1f%s%x1f%b%x1e' "${RANGE}")
 
 render() {
-    printf '## [%s](%s) — %s\n' "${VERSION}" "${REPO_URL}/releases/tag/v${VERSION}" "${DATE}"
+    local section
+    printf '## [%s](%s) (%s)\n' "${VERSION}" "${REPO_URL}/releases/tag/v${VERSION}" "${DATE}"
 
     if [[ "${count}" -eq 0 ]]; then
         printf '\nNo code changes since %s.\n' "${FROM:-the initial commit}"
@@ -138,8 +135,7 @@ notes)
     render
     ;;
 prepend)
-    NEW="$(mktemp)"
-    # Quoted delimiter: the preamble is literal markdown, nothing expands.
+    NEW="${WORK}/CHANGELOG.md"
     cat > "${NEW}" <<'HEADER'
 # Changelog
 
@@ -147,14 +143,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are generated
 from [Conventional Commits](https://www.conventionalcommits.org/) by
-`scripts/changelog.sh` — edit commit messages, not this file.
+`scripts/changelog.sh`, so edit commit messages, not this file.
 
 HEADER
     render >> "${NEW}"
 
     if [[ -f CHANGELOG.md ]]; then
-        # Everything from the first release heading onwards, so older entries
-        # survive verbatim.
         first_release="$(grep -n '^## ' CHANGELOG.md | head -n1 | cut -d: -f1 || true)"
         if [[ -n "${first_release}" ]]; then
             printf '\n' >> "${NEW}"

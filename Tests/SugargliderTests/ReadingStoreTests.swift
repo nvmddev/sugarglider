@@ -1,282 +1,379 @@
 import Testing
 import Foundation
+import Synchronization
 @testable import Sugarglider
 
-// MARK: - Relative time formatting
-
 extension SugargliderTests {
-    @Test func relativeTimeBuckets() {
-        #expect(ReadingStore.relative(Date().addingTimeInterval(-5)) == "just now")
-        #expect(ReadingStore.relative(Date().addingTimeInterval(-65)) == "1 min ago")
-        #expect(ReadingStore.relative(Date().addingTimeInterval(-200)) == "3 min ago")
-        #expect(ReadingStore.relative(Date().addingTimeInterval(-3660)) == "1 h ago")
-        #expect(ReadingStore.relative(Date().addingTimeInterval(-7320)) == "2 h ago")
+    @Test(arguments: [(5, "this minute"), (65, "1 minute ago"), (200, "3 minutes ago"), (3660, "1 hour ago"),
+                      (7320, "2 hours ago")])
+    func relativeTime(secondsAgo: Int, expected: String) {
+        let now = Date.now
+        #expect(now.addingTimeInterval(-TimeInterval(secondsAgo)).relative(to: now) == expected)
     }
 
-    /// Short enough for the menu bar, and it must never round up: claiming more
-    /// time has passed than has is the one direction that misleads.
-    @Test func compactAgeForTheStatusBar() {
-        #expect(ReadingStore.compactAge(Date().addingTimeInterval(-13 * 60)) == "13m")
-        #expect(ReadingStore.compactAge(Date().addingTimeInterval(-59 * 60 - 59)) == "59m")
-        #expect(ReadingStore.compactAge(Date().addingTimeInterval(-3600 - 30)) == "1h")
-        #expect(ReadingStore.compactAge(Date().addingTimeInterval(-50 * 3600)) == "2d")
-        #expect(ReadingStore.compactAge(Date().addingTimeInterval(30)) == "0m")   // clock skew
+    @Test(arguments: [
+        (13 * 60, 1, "13m"), (59 * 60 + 59, 1, "59m"), (3600 + 30, 1, "1h"), (50 * 3600, 1, "2d"),
+        (5 * 3600 + 12 * 60, 2, "5h 12m"), (49 * 3600 + 60, 2, "2d 1h"),
+        (-30, 1, "0m"),   // clock skew
+    ] as [(Int, Int, String)])
+    func ageRoundsDown(secondsAgo: Int, units: Int, expected: String) {
+        let now = Date.now
+        #expect(now.addingTimeInterval(-TimeInterval(secondsAgo)).age(at: now, units: units) == expected)
     }
-}
 
-// MARK: - Staleness
-
-extension SugargliderTests {
-    @Test func isStaleAfterThreshold() {
+    @Test func isStaleAfterTheDefaultDelay() {
         let store = ReadingStore(settings: Self.makeSettings())
-        #expect(store.isStale == false)   // no reading yet
+        #expect(!store.isStale)
         store.lastReading = reading(100, minutesAgo: 5)
-        #expect(store.isStale == false)
+        #expect(!store.isStale)
         store.lastReading = reading(100, minutesAgo: 12)   // past the 11 min default
-        #expect(store.isStale == true)
+        #expect(store.isStale)
     }
 
-    /// The threshold is the user's `staleAfterMinutes`, read live rather than
-    /// baked in or captured at launch.
     @Test func isStaleFollowsTheConfiguredDelay() {
         let settings = Self.makeSettings()
         let store = ReadingStore(settings: settings)
         store.lastReading = reading(100, minutesAgo: 15)
-        #expect(store.isStale == true)          // at the default of 11 min
-
+        #expect(store.isStale)
         settings.staleAfterMinutes = 20
-        #expect(store.isStale == false)         // same reading, longer grace period
+        #expect(!store.isStale)
         settings.staleAfterMinutes = 5
-        #expect(store.isStale == true)
+        #expect(store.isStale)
     }
-}
 
-// MARK: - Delta between readings
+    /// The menu bar label redraws only when something it reads changes, and while polls fail nothing
+    /// else does.
+    @Test func clockTicksReachWhatTheStaleCheckReads() {
+        let store = ReadingStore(settings: Self.makeSettings())
+        store.lastReading = reading(100, minutesAgo: 5)
+        let redrawn = Atomic(false)
+        withObservationTracking { _ = store.isStale } onChange: { redrawn.store(true, ordering: .relaxed) }
+        store.tick()
+        let didRedraw = redrawn.load(ordering: .relaxed)
+        #expect(didRedraw)
+    }
 
-extension SugargliderTests {
-    @Test func deltaOffIsNil() {
+    @Test(arguments: [
+        (.mmol, 108, 90, "+1.0"),
+        (.mgdl, 108, 90, "+18"),
+        (.mmol, 90, 108, "-1.0"),
+    ] as [(AppSettings.Units, Int, Int, String)])
+    func deltaIsSignedInTheDisplayUnit(units: AppSettings.Units, sgv: Int, previousSGV: Int, expected: String) {
         let settings = Self.makeSettings()
-        settings.deltaDisplay = .off
+        settings.deltaDisplay = .menu
+        settings.units = units
         let store = ReadingStore(settings: settings)
-        let now = Date()
-        store.lastReading = reading(108, minutesAgo: 0, from: now)
-        store.previousReading = reading(90, minutesAgo: 5, from: now)
+        let now = Date.now
+        store.lastReading = reading(sgv, from: now)
+        store.previousReading = reading(previousSGV, minutesAgo: 5, from: now)
+        #expect(store.deltaText() == expected)
+    }
+
+    @Test(arguments: [
+        (.off, 5),
+        (.menu, nil),
+        (.menu, 12),    // too far apart to count as consecutive
+        (.menu, 20),
+        (.menu, -5),    // the previous reading is the newer one
+    ] as [(AppSettings.DeltaDisplay, Int?)])
+    func deltaIsNilUnlessShownForConsecutiveReadings(display: AppSettings.DeltaDisplay, previousMinutesAgo: Int?) {
+        let settings = Self.makeSettings()
+        settings.deltaDisplay = display
+        let store = ReadingStore(settings: settings)
+        let now = Date.now
+        store.lastReading = reading(108, from: now)
+        store.previousReading = previousMinutesAgo.map { reading(90, minutesAgo: Double($0), from: now) }
         #expect(store.deltaText() == nil)
     }
 
-    @Test func deltaNilWithoutPreviousReading() {
+    /// A marker is a bound, not a value, so a difference to it would be made up.
+    @Test(arguments: [(39, 60), (60, 39), (401, 380), (380, 401), (39, 39)])
+    func deltaIsNilAcrossLowOrHigh(sgv: Int, previousSGV: Int) {
         let settings = Self.makeSettings()
         settings.deltaDisplay = .menu
         let store = ReadingStore(settings: settings)
-        store.lastReading = reading(108, minutesAgo: 0)
-        store.previousReading = nil
+        let now = Date.now
+        store.lastReading = reading(sgv, from: now)
+        store.previousReading = reading(previousSGV, minutesAgo: 5, from: now)
         #expect(store.deltaText() == nil)
     }
 
-    @Test func deltaMmolFormatting() {
+    @Test func titleBeforeTheFirstReading() {
         let settings = Self.makeSettings()
-        settings.deltaDisplay = .menu
-        settings.units = .mmol
         let store = ReadingStore(settings: settings)
-        let now = Date()
-        store.lastReading = reading(108, minutesAgo: 0, from: now)   // 6.0 mmol
-        store.previousReading = reading(90, minutesAgo: 5, from: now) // 5.0 mmol
-        #expect(store.deltaText() == "+1.0")
+        let label = MenuBarLabel(settings: settings, store: store)
+        #expect(label.title == "CGM ⚙")
+        settings.baseURL = "https://ns.example"
+        #expect(label.title == "CGM …")
+        store.lastError = "HTTP 500"
+        #expect(label.title == "CGM ⚠")
     }
 
-    @Test func deltaMgdlFormatting() {
+    @Test(arguments: [
+        (.mmol, 120, .flat, "6.7 →"),
+        (.mgdl, 120, .doubleDown, "120 ↓↓"),
+        (.mmol, 120, nil, "6.7"),
+        (.mmol, 39, nil, "LOW"),
+        (.mgdl, 401, .doubleUp, "HIGH ↑↑"),
+    ] as [(AppSettings.Units, Int, Reading.Direction?, String)])
+    func titleShowsTheValueAndArrow(units: AppSettings.Units, sgv: Int, direction: Reading.Direction?,
+                                    expected: String) {
         let settings = Self.makeSettings()
-        settings.deltaDisplay = .menu
-        settings.units = .mgdl
+        settings.baseURL = "https://ns.example"
+        settings.units = units
         let store = ReadingStore(settings: settings)
-        let now = Date()
-        store.lastReading = reading(108, minutesAgo: 0, from: now)
-        store.previousReading = reading(90, minutesAgo: 5, from: now)
-        #expect(store.deltaText() == "+18")
+        store.lastReading = reading(sgv, direction: direction, from: store.now)
+        #expect(MenuBarLabel(settings: settings, store: store).title == expected)
     }
 
-    @Test func deltaNegative() {
+    @Test func titleShowsTheDeltaOnlyWhenSetToTheStatusBar() {
         let settings = Self.makeSettings()
-        settings.deltaDisplay = .menu
-        settings.units = .mmol
+        settings.baseURL = "https://ns.example"
         let store = ReadingStore(settings: settings)
-        let now = Date()
-        store.lastReading = reading(90, minutesAgo: 0, from: now)
-        store.previousReading = reading(108, minutesAgo: 5, from: now)
-        #expect(store.deltaText() == "-1.0")
+        store.lastReading = reading(120, from: store.now)
+        store.previousReading = reading(118, minutesAgo: 5, from: store.now)
+        let label = MenuBarLabel(settings: settings, store: store)
+        #expect(label.title == "6.7 →")   // the default shows it in the dropdown only
+        settings.deltaDisplay = .menuAndStatusBar
+        #expect(label.title == "6.7 →  (+0.1)")
     }
 
-    @Test func deltaNilWhenGapTooLarge() {
+    /// A failed poll leaves the last reading up, so its age is what shows that it's old.
+    @Test func titleShowsTheAgeOnceStale() {
         let settings = Self.makeSettings()
-        settings.deltaDisplay = .menu
+        settings.baseURL = "https://ns.example"
         let store = ReadingStore(settings: settings)
-        let now = Date()
-        store.lastReading = reading(108, minutesAgo: 0, from: now)
-        store.previousReading = reading(90, minutesAgo: 20, from: now)  // 20 min > 12 min limit
-        #expect(store.deltaText() == nil)
+        let label = MenuBarLabel(settings: settings, store: store)
+        store.lastReading = reading(120, minutesAgo: 10, from: store.now)
+        #expect(label.title == "6.7 →")
+        store.lastReading = reading(120, minutesAgo: 23, from: store.now)
+        #expect(label.title == "6.7 → ⚠ 23m")
+        store.lastError = "HTTP 500"
+        #expect(label.title == "6.7 → ⚠ 23m")
     }
 
-    @Test func deltaNilWhenPreviousIsNewer() {
-        let settings = Self.makeSettings()
-        settings.deltaDisplay = .menu
-        let store = ReadingStore(settings: settings)
-        let now = Date()
-        store.lastReading = reading(108, minutesAgo: 0, from: now)
-        store.previousReading = reading(90, minutesAgo: -5, from: now)  // in the future, so gap <= 0
-        #expect(store.deltaText() == nil)
-    }
-}
-
-// MARK: - History sizing and coverage
-
-extension SugargliderTests {
     @Test func historyCountFollowsTheSelectedRange() {
-        // Sized for a per-minute cadence, so a 5-min site never reaches it.
         #expect(ReadingStore.historyCount(forRangeHours: 6) == 420)
         #expect(ReadingStore.historyCount(forRangeHours: 24) == 1500)
-        // …and capped, so the widest window can't pull an unbounded response.
         #expect(ReadingStore.historyCount(forRangeHours: 72) == 2880)
         for hours in AppSettings.rangeHoursLimits {
             let count = ReadingStore.historyCount(forRangeHours: hours)
-            #expect(count > hours * 12)      // covers a 5-min cadence with room to spare
+            #expect(count > hours * 12)   // a site uploading every 5 min never reaches it
             #expect(count <= 2880)
         }
     }
 
     @Test func coverageComparesAgainstTheRequestedWindow() {
-        let now = Date()
-        // Nothing fetched yet.
-        #expect(ReadingStore.historyCovers(requested: nil, from: now.addingTimeInterval(-3600)) == false)
-        // Fetched 6h; a 1h window sits inside it, a 24h one doesn't.
-        let asked = now.addingTimeInterval(-6 * 3600)
-        #expect(ReadingStore.historyCovers(requested: asked, from: now.addingTimeInterval(-3600)))
-        #expect(ReadingStore.historyCovers(requested: asked, from: now.addingTimeInterval(-24 * 3600)) == false)
-        // Same window an hour later: its start slid forward, so it stays covered.
-        #expect(ReadingStore.historyCovers(requested: asked,
-                                           from: now.addingTimeInterval(3600 - 6 * 3600)))
+        let now = Date.now
+        let requested = now.addingTimeInterval(-6 * 3600)
+        #expect(!ReadingStore.covers(nil, from: now.addingTimeInterval(-3600)))
+        #expect(ReadingStore.covers(requested, from: requested))
+        #expect(ReadingStore.covers(requested, from: now.addingTimeInterval(-3600)))
+        #expect(!ReadingStore.covers(requested, from: now.addingTimeInterval(-24 * 3600)))
+        // An hour later the same window has slid forward, so it stays covered.
+        #expect(ReadingStore.covers(requested, from: requested.addingTimeInterval(3600)))
     }
 
-    /// A site with only a few hours of data must not count as uncovered, or it
-    /// would refetch its whole window on every call.
-    @Test func coverageIgnoresHowMuchDataTheSiteActuallyHad() {
-        let now = Date()
-        let asked = now.addingTimeInterval(-72 * 3600)
-        #expect(ReadingStore.historyCovers(requested: asked, from: now.addingTimeInterval(-72 * 3600)))
+    @Test(arguments: [
+        ([0, 5], true),
+        ([5, 10], true),
+        ([15, 20], true),    // a gap the chart still draws as one line
+        ([20, 25], false),
+        ([-5, 0], false),    // nothing new
+    ])
+    func polledEntriesJoinTheHistoryOnlyWithoutADropout(minutesAfterNewestCached: [Int], joins: Bool) {
+        let newestCached = Date.now
+        let history = [reading(110, minutesAgo: 5, from: newestCached), reading(120, from: newestCached)]
+        let polled = minutesAfterNewestCached.map { reading(130, minutesAgo: -Double($0), from: newestCached) }
+        #expect(ReadingStore.joinsUp(polled, with: history) == joins)
+        #expect(!ReadingStore.joinsUp(polled, with: []))
     }
 
-    /// The whole point of the incremental scheme: the window is downloaded once,
-    /// and every later refresh asks only for what came after the newest entry
-    /// already cached.
+    @Test func mergedReadingsReplaceByTimestampAndDropTheVeryOld() {
+        let now = Date.now
+        let merged = ReadingStore.merged(
+            [reading(100, minutesAgo: 80 * 60, from: now), reading(110, minutesAgo: 10, from: now)],
+            with: [reading(120, minutesAgo: 5, from: now), reading(115, minutesAgo: 10, from: now)],
+            now: now)
+        #expect(merged.map(\.sgv) == [115, 120])
+    }
+
+    @Test(arguments: [(10.0, [100, 110, 120]), (40.0, [100])])
+    func pollAddsToTheHistoryOnlyWithoutADropout(cachedMinutesAgo: Double, history: [Int]) async throws {
+        let nowMs = epochMillis(.now)
+        let server = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(nowMs)},
+             {"sgv":110,"direction":"Flat","date":\(nowMs - 300_000)}]
+            """)
+        let settings = Self.makeSettings()
+        let store = server.store(settings)
+        store.readings = [reading(100, minutesAgo: cachedMinutesAgo)]
+
+        await store.refresh()
+        #expect(store.lastReading?.sgv == 120)
+        #expect(store.readings.map(\.sgv) == history)
+    }
+
+    /// The error is what turns the title into "CGM ⚠" and fills the dropdown's error line. The last
+    /// reading stays, so the title keeps showing it and its growing age.
+    @Test(arguments: [
+        (500, "{}", NightscoutError.http(500)),
+        (401, #"{"status":401}"#, .http(401)),
+        (200, "<html></html>", .decode),
+        (200, "[]", .empty),
+    ] as [(Int, String, NightscoutError)])
+    func failedPollReportsWhyUntilOneSucceeds(status: Int, json: String, error: NightscoutError) async throws {
+        let failing = StubbedSite(status: status, json: json)
+        let settings = Self.makeSettings()
+        let store = failing.store(settings)
+        store.lastReading = reading(110, minutesAgo: 5)
+
+        await store.refresh()
+        #expect(store.lastError == error.localizedDescription)
+        #expect(store.lastReading?.sgv == 110)
+
+        let working = StubbedSite(json: #"[{"sgv":120,"direction":"Flat","date":\#(epochMillis(.now))}]"#)
+        settings.baseURL = working.baseURL
+        await store.refresh()
+        #expect(store.lastError == nil)
+        #expect(store.lastReading?.sgv == 120)
+    }
+
     @Test func historyAsksForTheWindowOnceThenOnlyForWhatIsNewer() async throws {
-        let nowMs = epochMillis(Date())
-        let server = try LocalHTTPServer(json: """
+        let nowMs = epochMillis(.now)
+        let server = StubbedSite(json: """
             [{"sgv":120,"direction":"Flat","date":\(nowMs - 300_000)},
              {"sgv":110,"direction":"Flat","date":\(nowMs - 600_000)}]
             """)
-        defer { server.stop() }
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        let store = ReadingStore(settings: settings)
+        let store = server.store(settings)
 
-        store.refreshHistory(force: true)
-        try await waitUntil("the first history fetch") { !store.readings.isEmpty }
+        await store.refreshHistory(force: true)
         #expect(store.readings.count == 2)
-        #expect(store.lastReading?.sgv == 120)          // history keeps the bar in sync
+        #expect(store.lastReading?.sgv == 120)
+        #expect(store.previousReading?.sgv == 110)
         let windowStart = try #require(store.historyWindowStart)
-        #expect(server.requestLines.count == 1)
-        #expect(server.requestLines[0].contains("$gt%5D=\(epochMillis(windowStart))"))
+        #expect(server.requests.count == 1)
+        #expect(server.requests[0].contains("$gt%5D=\(epochMillis(windowStart))"))
 
-        store.refreshHistory(force: true)
-        try await waitUntil("the top-up fetch") { server.requestLines.count == 2 }
+        await store.refreshHistory(force: true)
+        #expect(server.requests.count == 2)
         let newest = try #require(store.readings.last?.date)
-        #expect(server.requestLines[1].contains("$gt%5D=\(epochMillis(newest))"))
-        // Re-delivered entries replace rather than duplicate their cached copies.
-        #expect(store.readings.count == 2)
+        #expect(server.requests[1].contains("$gt%5D=\(epochMillis(newest))"))
     }
 
-    /// Widening the range asks for history that was never fetched, so it has to
-    /// trip a refetch. Note what this waits on: the recorded window, not the
-    /// request count. The window is only set once the response lands, so
-    /// counting requests races the fetch and fails intermittently.
-    @Test func wideningTheRangeFetchesTheMissingHistory() async throws {
-        let nowMs = epochMillis(Date())
-        let server = try LocalHTTPServer(json: """
-            [{"sgv":120,"direction":"Flat","date":\(nowMs - 300_000)}]
-            """)
-        defer { server.stop() }
+    /// The dropdown refreshes on every open. The throttle is per part, so a switch just turned on
+    /// is fetched on the next open while the rest waits out its minute.
+    @Test func eachPartIsFetchedAtMostOnceAMinute() async throws {
+        let server = StubbedSite(json: "[]")
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        let store = ReadingStore(settings: settings)
+        let store = server.store(settings)
 
-        store.refreshHistory(force: true)
-        try await waitUntil("the first history fetch") {
-            store.coversHistory(from: Date().addingTimeInterval(-6 * 3600))   // the default range
+        await store.refreshHistory(force: false)
+        await store.refreshDetails(force: false)
+        #expect(server.requests.count == 3)   // readings, device status, treatments
+
+        await store.refreshHistory(force: false)
+        await store.refreshDetails(force: false)
+        #expect(server.requests.count == 3)
+
+        settings.showChangeAge = true
+        await store.refreshDetails(force: false)
+        #expect(server.requests.count == 5)
+        #expect(server.requests.dropFirst(3).allSatisfy { $0.contains("eventType") })
+
+        await store.refreshDetails(force: true)
+        #expect(server.requests.count == 9)
+    }
+
+    /// A failed request leaves what's shown and isn't throttled, so the next open asks again.
+    @Test func aFailedFetchKeepsTheValuesAndIsRetried() async throws {
+        let server = StubbedSite(status: 500, json: "{}")
+        let settings = Self.makeSettings()
+        settings.showChangeAge = true
+        let store = server.store(settings)
+        let status = PumpStatus(date: .now, reservoir: 120)
+        let bolus = Treatment(id: "b", date: .now, kind: .bolus(units: 1))
+        let changed = Date.now.addingTimeInterval(-86_400)
+        store.readings = [reading(110)]
+        store.pumpStatus = status
+        store.treatments = [bolus]
+        store.reservoirChanged = changed
+
+        for _ in 0..<2 {
+            await store.refreshHistory(force: false)
+            await store.refreshDetails(force: false)
         }
-        #expect(store.coversHistory(from: Date().addingTimeInterval(-24 * 3600)) == false)
+        #expect(server.requests.count == 2 * 5)   // readings, device status, treatments, two changes
+        #expect(store.readings.map(\.sgv) == [110])
+        #expect(store.pumpStatus == status)
+        #expect(store.treatments == [bolus])
+        #expect(store.reservoirChanged == changed)
+    }
+
+    @Test func wideningTheRangeFetchesTheMissingHistory() async throws {
+        let server = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 300_000)}]
+            """)
+        let settings = Self.makeSettings()
+        let store = server.store(settings)
+
+        await store.refreshHistory(force: true)
+        #expect(ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-6 * 3600)))
+        #expect(!ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-24 * 3600)))
 
         settings.rangeHours = 24
-        store.ensureHistoryCoverage()        // debounced 400 ms, then bypasses the throttle
-        try await waitUntil("the widened window") {
-            store.coversHistory(from: Date().addingTimeInterval(-24 * 3600))
+        store.ensureHistoryCoverage()
+        try await waitUntil("the debounced fetch of the widened window") {
+            ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-24 * 3600))
         }
-        #expect(server.requestLines.count >= 2)
+        #expect(server.requests.count >= 2)
     }
 
-    @Test func reconnectForgetsTheCoveredWindow() {
-        let store = ReadingStore(settings: Self.makeSettings())
-        store.readings = [reading(100, minutesAgo: 0)]
-        store.reconnect()
-        #expect(store.historyWindowStart == nil)
-        #expect(store.coversHistory(from: Date().addingTimeInterval(-3600)) == false)
-    }
-}
-
-// MARK: - Reconnect / timer lifecycle
-
-extension SugargliderTests {
-    @Test func reconnectClearsCachedState() {
-        let store = ReadingStore(settings: Self.makeSettings())
-        store.lastReading = reading(100, minutesAgo: 0)
-        store.previousReading = reading(90, minutesAgo: 5)
+    @Test func reconnectForgetsThePreviousSite() async throws {
+        let nowMs = epochMillis(.now)
+        let server = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(nowMs - 300_000)},
+             {"sgv":110,"direction":"Flat","date":\(nowMs - 600_000)}]
+            """)
+        let settings = Self.makeSettings()
+        let store = server.store(settings)
+        await store.refreshHistory(force: true)
+        #expect(store.historyWindowStart != nil)
         store.lastError = "boom"
-        store.readings = [reading(100, minutesAgo: 0)]
-        store.reconnect()   // unconfigured, so the re-fetch no-ops, but state still clears
+
+        settings.baseURL = ""   // keeps the debounced re-fetch off the network
+        store.reconnect()
         #expect(store.lastReading == nil)
         #expect(store.previousReading == nil)
         #expect(store.lastError == nil)
         #expect(store.readings.isEmpty)
+        #expect(store.historyWindowStart == nil)
+        #expect(!ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-3600)))
     }
 
-    @Test func startTimerSetsTimer() {
-        let store = ReadingStore(settings: Self.makeSettings())
-        #expect(store.timer == nil)      // inert until started
-        store.startTimer()
-        #expect(store.timer != nil)
-        store.timer?.invalidate()
-    }
-
-    /// `start()` is where the store subscribes to the settings changes it has to
-    /// react to. Without this the app would keep polling a stale URL, ignore a
-    /// new refresh interval, and leave a widened chart range unfilled.
-    @Test func startSubscribesToTheSettingsItReactsTo() {
+    /// Without this the app would keep polling a site that was replaced, ignore a new refresh
+    /// interval and leave a widened chart range unfilled.
+    @Test func startPollsAndFollowsTheSettings() async throws {
+        let server = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 300_000)}]
+            """)
         let settings = Self.makeSettings()
-        let store = ReadingStore(settings: settings)
-        #expect(settings.onConnectionChanged == nil)   // inert until started
+        let store = server.store(settings)
+
         store.start()
-        defer { store.timer?.invalidate() }
-        #expect(settings.onConnectionChanged != nil)
-        #expect(settings.onPollIntervalChanged != nil)
-        #expect(settings.onRangeHoursChanged != nil)
-
-        // The connection hook really runs reconnect(). Whitespace keeps the site
-        // unconfigured, so the debounced re-fetch can't reach the network.
-        store.readings = [reading(100, minutesAgo: 0)]
-        settings.baseURL = "   "
-        #expect(store.readings.isEmpty)
-
-        // …and the interval hook rebuilds the timer rather than waiting a cycle.
-        let first = store.timer
+        try await waitUntil("the first poll") { store.lastReading != nil }
+        let polls = server.requests.count
         settings.pollIntervalSeconds = 30
-        #expect(store.timer !== first)
+        try await waitUntil("polling restarted at the new interval") { server.requests.count > polls }
+
+        settings.rangeHours = 24
+        try await waitUntil("the widened history") {
+            ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-24 * 3600))
+        }
+
+        // Whitespace leaves the site unconfigured, so the debounced re-fetch stays off the network.
+        settings.baseURL = "   "
+        try await waitUntil("the reconnect") { store.lastReading == nil && store.readings.isEmpty }
     }
 }

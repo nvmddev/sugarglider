@@ -1,20 +1,19 @@
 #!/bin/bash
-# Wrap Sugarglider.app in a drag-to-Applications disk image.
+# Wraps Sugarglider.app in a drag-to-Applications disk image.
 #
-#   VERSION        names the image and its volume. Default: the app's own
+#   VERSION        names the image and its volume. Default: the app's
 #                  CFBundleShortVersionString.
-#   SIGN_IDENTITY  codesign identity for the image itself ("-" = skip). A DMG
-#                  carrying a Developer ID app should be signed too, otherwise
-#                  Gatekeeper evaluates the container as unsigned.
+#   SIGN_IDENTITY  codesign identity for the image ("-" = skip). A DMG carrying
+#                  a Developer ID app needs its own signature, or Gatekeeper
+#                  evaluates the container as unsigned.
 #
-# Deliberately no Finder/AppleScript window styling (background image, icon
-# positions): it drives Finder over Apple Events, which is unreliable on a
-# headless CI runner. A plain UDZO image installs identically.
+# No Finder window styling: scripting Finder over Apple Events is unreliable on
+# a headless CI runner, and a plain UDZO image installs the same.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP="Sugarglider.app"
-[[ -d "${APP}" ]] || { echo "error: ${APP} not found — run ./build.sh first" >&2; exit 1; }
+[[ -d "${APP}" ]] || { echo "error: ${APP} not found. Run ./build.sh first." >&2; exit 1; }
 
 VERSION="${VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${APP}/Contents/Info.plist")}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"

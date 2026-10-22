@@ -1,0 +1,6 @@
+# No actionlint release knows the xcode-27 preview image yet (checked up to
+# 1.7.12). Despite the key's name, this only adds labels runs-on may use; drop it
+# once a pinned actionlint knows the label.
+self-hosted-runner:
+  labels:
+    - xcode-27

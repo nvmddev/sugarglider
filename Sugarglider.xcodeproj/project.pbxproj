@@ -1,0 +1,371 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		5C1C0000000000000000A001 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 5C1C0000000000000000F003 /* AppIcon.icon */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5C1C0000000000000000C001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5C1C00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5C1C0000000000000000B001;
+			remoteInfo = Sugarglider;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		5C1C0000000000000000F001 /* Sugarglider.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sugarglider.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C1C0000000000000000F002 /* SugargliderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SugargliderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C1C0000000000000000F003 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		5C1C0000000000000000F004 /* Sugarglider.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Sugarglider.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		5C1C0000000000000000D001 /* Sugarglider */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Sources/Sugarglider;
+			sourceTree = "<group>";
+		};
+		5C1C0000000000000000D002 /* SugargliderTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Tests/SugargliderTests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5C1C0000000000000000E002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5C1C0000000000000000E012 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		5C1C00000000000000006001 = {
+			isa = PBXGroup;
+			children = (
+				5C1C0000000000000000D001 /* Sugarglider */,
+				5C1C00000000000000006003 /* Resources */,
+				5C1C0000000000000000D002 /* SugargliderTests */,
+				5C1C00000000000000006002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5C1C00000000000000006002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5C1C0000000000000000F001 /* Sugarglider.app */,
+				5C1C0000000000000000F002 /* SugargliderTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5C1C00000000000000006003 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				5C1C0000000000000000F003 /* AppIcon.icon */,
+				5C1C0000000000000000F004 /* Sugarglider.entitlements */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5C1C0000000000000000B001 /* Sugarglider */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5C1C00000000000000008002 /* Build configuration list for PBXNativeTarget "Sugarglider" */;
+			buildPhases = (
+				5C1C0000000000000000E001 /* Sources */,
+				5C1C0000000000000000E002 /* Frameworks */,
+				5C1C0000000000000000E003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5C1C0000000000000000D001 /* Sugarglider */,
+			);
+			name = Sugarglider;
+			packageProductDependencies = (
+			);
+			productName = Sugarglider;
+			productReference = 5C1C0000000000000000F001 /* Sugarglider.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5C1C0000000000000000B002 /* SugargliderTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5C1C00000000000000008003 /* Build configuration list for PBXNativeTarget "SugargliderTests" */;
+			buildPhases = (
+				5C1C0000000000000000E011 /* Sources */,
+				5C1C0000000000000000E012 /* Frameworks */,
+				5C1C0000000000000000E013 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5C1C0000000000000000C002 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5C1C0000000000000000D002 /* SugargliderTests */,
+			);
+			name = SugargliderTests;
+			packageProductDependencies = (
+			);
+			productName = SugargliderTests;
+			productReference = 5C1C0000000000000000F002 /* SugargliderTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5C1C00000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					5C1C0000000000000000B001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					5C1C0000000000000000B002 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 5C1C0000000000000000B001;
+					};
+				};
+			};
+			buildConfigurationList = 5C1C00000000000000008001 /* Build configuration list for PBXProject "Sugarglider" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 5C1C00000000000000006001;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5C1C00000000000000006002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5C1C0000000000000000B001 /* Sugarglider */,
+				5C1C0000000000000000B002 /* SugargliderTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5C1C0000000000000000E003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5C1C0000000000000000A001 /* AppIcon.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5C1C0000000000000000E013 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5C1C0000000000000000E001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5C1C0000000000000000E011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5C1C0000000000000000C002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5C1C0000000000000000B001 /* Sugarglider */;
+			targetProxy = 5C1C0000000000000000C001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5C1C00000000000000007001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		5C1C00000000000000007002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
+				SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		5C1C00000000000000007011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 nevermind.dev";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.nevermind.sugarglider;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		5C1C00000000000000007012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 nevermind.dev";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.nevermind.sugarglider;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+		5C1C00000000000000007021 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.nevermind.sugarglider.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Sugarglider.app/Contents/MacOS/Sugarglider";
+			};
+			name = Debug;
+		};
+		5C1C00000000000000007022 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.nevermind.sugarglider.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Sugarglider.app/Contents/MacOS/Sugarglider";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5C1C00000000000000008001 /* Build configuration list for PBXProject "Sugarglider" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5C1C00000000000000007001 /* Debug */,
+				5C1C00000000000000007002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5C1C00000000000000008002 /* Build configuration list for PBXNativeTarget "Sugarglider" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5C1C00000000000000007011 /* Debug */,
+				5C1C00000000000000007012 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5C1C00000000000000008003 /* Build configuration list for PBXNativeTarget "SugargliderTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5C1C00000000000000007021 /* Debug */,
+				5C1C00000000000000007022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 5C1C00000000000000000001 /* Project object */;
+}

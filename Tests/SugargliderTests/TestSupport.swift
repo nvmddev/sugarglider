@@ -1,43 +1,51 @@
 import Testing
 import Foundation
-import Darwin
+import Synchronization
 @testable import Sugarglider
 
-/// Root suite for the whole bundle. `@MainActor` because `AppSettings`,
-/// `ReadingStore` and the views all are. There's no shared mutable state to
-/// reset between tests, so they can run in any order and concurrently.
-@Suite @MainActor
+@Suite(.defaultsCleanup) @MainActor
 struct SugargliderTests {
-    /// A fresh `AppSettings` on its own throwaway `UserDefaults` suite and an
-    /// in-memory token store. Never the real Keychain, which an unsigned test
-    /// binary would prompt for.
     static func makeSettings(defaults: UserDefaults? = nil,
                              tokens: any TokenStorage = InMemoryTokenStore()) -> AppSettings {
         AppSettings(defaults: defaults ?? makeDefaults(), tokens: tokens)
     }
 
-    /// For the tests that inspect the store itself rather than only the
-    /// settings sitting on top of it.
     static func makeDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "SugargliderTests-\(UUID().uuidString)")!
+        UserDefaults(suiteName: DefaultsCleanup.directory.appending(path: UUID().uuidString).path)!
     }
 }
 
-/// Stands in for the Keychain, which the tests would otherwise write items to
-/// and be prompted by, since the test binary's signature changes every build.
+/// A suite named by a path keeps its plist at that path, so the tests' suites live in a temporary directory
+/// that goes once all tests have run. A plainly named suite is a plist in ~/Library/Preferences that no API
+/// removes: dropping the domain leaves an empty file, and cfprefsd rewrites a deleted one seconds later.
+struct DefaultsCleanup: SuiteTrait, TestScoping {
+    static let directory: URL = {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "SugargliderTests-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }()
+
+    func provideScope(for test: Test, testCase: Test.Case?,
+                      performing function: @concurrent @Sendable () async throws -> Void) async throws {
+        defer { try? FileManager.default.removeItem(at: Self.directory) }
+        try await function()
+    }
+}
+
+extension Trait where Self == DefaultsCleanup {
+    static var defaultsCleanup: Self { Self() }
+}
+
+/// The real Keychain would prompt, because the test binary's signature changes with every build.
 @MainActor
 final class InMemoryTokenStore: TokenStorage {
     private(set) var stored: String
-
-    /// Makes `save` report failure, which is the only way to reach
-    /// `AppSettings.tokenStorageFailed`.
     var refuseWrites = false
 
     init(_ stored: String = "") { self.stored = stored }
 
     func load() -> String { stored }
 
-    @discardableResult
     func save(_ token: String) -> Bool {
         guard !refuseWrites else { return false }
         stored = token
@@ -45,122 +53,75 @@ final class InMemoryTokenStore: TokenStorage {
     }
 }
 
-/// A throwaway HTTP/1.1 server for exercising `Nightscout.fetchEntries` end to
-/// end. `Nightscout` builds its own private `URLSession`, so a `URLProtocol`
-/// stub can't intercept it, but a real socket can.
-///
-/// Binding to `127.0.0.1` is deliberate: it never triggers the macOS incoming
-/// connection firewall prompt that an all-interfaces bind can. Every accepted
-/// connection gets the same canned response, then is closed.
-final class LocalHTTPServer {
-    let port: UInt16
-    private let fd: Int32
-    private var stopped = false
+/// A Nightscout site that answers every request with the same canned response. Each has a host of
+/// its own, so tests running side by side never see each other's responses or requests.
+final class StubbedSite: Sendable {
+    /// Answers for every stubbed site, by host.
+    static var session: URLSession { SiteProtocol.session }
 
-    /// Request lines as received, so a test can assert on what the client
-    /// actually asked for. Written from the serving thread and read from the
-    /// test's, hence the lock.
-    private static let requestsLock = NSLock()
-    nonisolated(unsafe) private static var requestsByPort: [UInt16: [String]] = [:]
+    let baseURL: String
+    private let host = "\(UUID().uuidString.lowercased()).example"
 
-    var requestLines: [String] {
-        Self.requestsLock.withLock { Self.requestsByPort[port] ?? [] }
+    /// Path and query of every request, as sent.
+    var requests: [String] { SiteProtocol.sites.withLock { $0[host]?.requests ?? [] } }
+
+    init(status: Int = 200, json: String) {
+        baseURL = "https://\(host)"
+        SiteProtocol.sites.withLock { $0[host] = .init(status: status, body: Data(json.utf8)) }
     }
 
-    enum ServerError: Error { case socketFailed, bindFailed, listenFailed }
+    deinit { SiteProtocol.sites.withLock { $0[host] = nil } }
 
-    init(status: Int = 200, json: String) throws {
-        let body = Data(json.utf8)
-        let sock = socket(AF_INET, SOCK_STREAM, 0)
-        guard sock >= 0 else { throw ServerError.socketFailed }
-
-        var yes: Int32 = 1
-        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
-
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_addr.s_addr = inet_addr("127.0.0.1")   // loopback only
-        addr.sin_port = 0                                // OS picks a free port
-
-        let bound = withUnsafePointer(to: &addr) { p in
-            p.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                bind(sock, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard bound == 0 else { close(sock); throw ServerError.bindFailed }
-        guard listen(sock, 8) == 0 else { close(sock); throw ServerError.listenFailed }
-
-        // Read back the OS-assigned ephemeral port.
-        var len = socklen_t(MemoryLayout<sockaddr_in>.size)
-        _ = withUnsafeMutablePointer(to: &addr) { p in
-            p.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(sock, $0, &len) }
-        }
-        self.port = UInt16(bigEndian: addr.sin_port)
-        self.fd = sock
-
-        // The closure captures only value types, so there's no reference back
-        // to `self` and no init-order trouble.
-        let serverFD = sock
-        let statusCode = status
-        let servedPort = self.port
-        Thread.detachNewThread {
-            while true {
-                let client = accept(serverFD, nil, nil)
-                if client < 0 { break }              // socket closed by stop() → exit
-                var buf = [UInt8](repeating: 0, count: 4096)
-                let read_ = read(client, &buf, buf.count)
-                if read_ > 0,
-                   let request = String(bytes: buf[0..<read_], encoding: .utf8),
-                   let line = request.split(separator: "\r\n").first {
-                    Self.requestsLock.withLock {
-                        Self.requestsByPort[servedPort, default: []].append(String(line))
-                    }
-                }
-                let reason = statusCode == 200 ? "OK"
-                    : (statusCode == 500 ? "Internal Server Error" : "Status")
-                let head = "HTTP/1.1 \(statusCode) \(reason)\r\n"
-                    + "Content-Length: \(body.count)\r\n"
-                    + "Content-Type: application/json\r\n"
-                    + "Connection: close\r\n\r\n"
-                var out = Data(head.utf8); out.append(body)
-                out.withUnsafeBytes { raw in
-                    var sent = 0
-                    while sent < raw.count {
-                        let n = write(client, raw.baseAddress!.advanced(by: sent), raw.count - sent)
-                        if n <= 0 { break }
-                        sent += n
-                    }
-                }
-                close(client)
-            }
-        }
+    @MainActor func nightscout(token: String = "", baseURL: String? = nil) -> Nightscout {
+        Nightscout(baseURL: baseURL ?? self.baseURL, token: token, session: Self.session)
     }
 
-    /// The base URL a fetch should point at to reach this server.
-    var baseURL: String { "http://127.0.0.1:\(port)" }
-
-    func stop() {
-        guard !stopped else { return }
-        stopped = true
-        close(fd)   // unblocks accept() so the serving thread exits
-        Self.requestsLock.withLock { Self.requestsByPort[port] = nil }
+    /// Points `settings` at this site and returns a store that reads from it.
+    @MainActor func store(_ settings: AppSettings) -> ReadingStore {
+        settings.baseURL = baseURL
+        return ReadingStore(settings: settings, session: Self.session)
     }
-
-    deinit { stop() }
 }
 
-/// Bridge `Nightscout`'s throwing async API to `Result` for concise tests.
-func fetchEntriesAsync(count: Int, since: Date? = nil, baseURL: String,
-                       token: String = "") async -> Result<[Reading], Error> {
-    do {
-        return .success(try await Nightscout.fetchEntries(count: count, since: since,
-                                                         baseURL: baseURL, token: token))
-    } catch { return .failure(error) }
+private final class SiteProtocol: URLProtocol {
+    struct Site {
+        var status: Int
+        var body: Data
+        var requests: [String] = []
+    }
+
+    static let sites = Mutex<[String: Site]>([:])
+
+    static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SiteProtocol.self]
+        return URLSession(configuration: configuration)
+    }()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url, let host = url.host(), let site = Self.sites.withLock({ sites in
+            let request = url.path(percentEncoded: true) + (url.query(percentEncoded: true).map { "?\($0)" } ?? "")
+            sites[host]?.requests.append(request)
+            return sites[host]
+        }) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
+            return
+        }
+        let response = HTTPURLResponse(url: url, statusCode: site.status, httpVersion: "HTTP/1.1",
+                                       headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: site.body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
 
-/// Polls `condition` until it holds, recording an issue after ~2s.
-/// `ReadingStore`'s fetches run in `Task`s with no handle to await, so an
-/// integration test has to observe the resulting state instead.
+/// `ReadingStore` fetches in `Task`s nothing can await, so tests poll for the effect.
 @MainActor
 func waitUntil(_ what: String, _ condition: () -> Bool) async throws {
     for _ in 0..<200 {
@@ -170,13 +131,12 @@ func waitUntil(_ what: String, _ condition: () -> Bool) async throws {
     Issue.record("timed out waiting for \(what)")
 }
 
-/// Epoch milliseconds, rounded the way `Nightscout.fetchEntries` rounds them.
+/// Rounded the way `Nightscout.entries` rounds its date filter.
 func epochMillis(_ date: Date) -> Int64 {
     Int64((date.timeIntervalSince1970 * 1000).rounded())
 }
 
-/// A `Reading` at a fixed offset before a shared "now", for deterministic tests.
-func reading(_ sgv: Int, direction: String = "Flat", minutesAgo: Double = 0,
-             from now: Date = Date()) -> Reading {
+func reading(_ sgv: Int, direction: Reading.Direction? = .flat, minutesAgo: Double = 0,
+             from now: Date = .now) -> Reading {
     Reading(sgv: sgv, direction: direction, date: now.addingTimeInterval(-minutesAgo * 60))
 }

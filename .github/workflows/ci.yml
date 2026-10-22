@@ -6,7 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A newer push to the same branch makes the in-flight run pointless.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -17,9 +16,11 @@ permissions:
 jobs:
   test:
     name: Build & test
-    # Pinned rather than macos-latest so a runner-image rollover can't turn a
-    # green branch red overnight. Bump deliberately.
-    runs-on: macos-15
+    # The oldest supported toolchain. Image and Xcode are pinned so a runner
+    # update can't turn a green branch red overnight; bump them deliberately.
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
     steps:
       - uses: actions/checkout@v7
 
@@ -28,33 +29,24 @@ jobs:
           swift --version
           xcodebuild -version
 
-      # The icon artifacts are generated but committed, because compiling them
-      # needs a full Xcode 26+ that this runner doesn't have. This is the guard
-      # against the artwork being edited without a recompile: the check itself
-      # is just a hash, no Xcode involved.
-      - name: Check icon artifacts are current
-        run: ./scripts/make-icon.sh verify
-
-      - name: Build (debug)
-        run: swift build
-
+      # Builds the app in Debug and runs the suite inside it.
       - name: Test
-        run: swift test
+        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64
 
-      - name: Assemble app bundle (universal)
-        env:
-          UNIVERSAL: "1"
+      - name: Assemble app bundle
         run: ./build.sh
 
+      # macOS gives an app its current design only when it records a current SDK.
       - name: Verify bundle
         run: |
           set -euo pipefail
-          lipo -info Sugarglider.app/Contents/MacOS/Sugarglider
-          lipo -info Sugarglider.app/Contents/MacOS/Sugarglider | grep -q 'arm64'
-          lipo -info Sugarglider.app/Contents/MacOS/Sugarglider | grep -q 'x86_64'
+          binary=Sugarglider.app/Contents/MacOS/Sugarglider
+          [[ "$(lipo -archs "${binary}")" == "arm64" ]]
+          vtool -show-build "${binary}"
           codesign --verify --strict --verbose=2 Sugarglider.app
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Sugarglider.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Sugarglider.app/Contents/Info.plist
+          for key in CFBundleIdentifier CFBundleShortVersionString LSMinimumSystemVersion; do
+            /usr/libexec/PlistBuddy -c "Print :${key}" Sugarglider.app/Contents/Info.plist
+          done
 
       - name: Package for download
         run: |
@@ -70,27 +62,55 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  # The two toolchains reject different code, in both directions. A separate job
+  # rather than a matrix, because the ruleset requires "Build & test" by that
+  # exact name. Not required itself while the image is a preview without an SLA.
+  test-newest:
+    name: Build & test (newest Xcode)
+    runs-on: xcode-27
+    env:
+      # The image's default Xcode lags the newest release. Bump together with
+      # the runner label.
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Test
+        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64
+
+      - name: Assemble app bundle
+        run: ./build.sh
+
   lint:
     name: Lint shell scripts & workflows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      # shellcheck ships with the Ubuntu runner image; actionlint does not.
+      # Preinstalled on the runner image, unlike actionlint.
       - name: shellcheck
         run: shellcheck build.sh scripts/*.sh
 
-      # Pinned: an unpinned installer would let an upstream change break CI, and
-      # this one is piped straight into bash.
+      # Version and checksum pinned, so an upstream release can neither break
+      # nor tamper with this job.
       - name: actionlint
         env:
-          ACTIONLINT_VERSION: "1.7.7"
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
         run: |
           set -euo pipefail
-          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
-            | tar xz actionlint
+          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
+          echo "${ACTIONLINT_SHA256}  ${tarball}" | sha256sum --check --strict
+          tar xzf "${tarball}" actionlint
           ./actionlint -color
 
+  # A broken version or changelog script should fail here, not mid-release.
   release-scripts:
     name: Smoke-test release scripts
     runs-on: ubuntu-latest
@@ -99,15 +119,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The version/changelog logic decides what a release is *called* and what
-      # it *says*, so a broken script must fail here rather than mid-release.
       - name: Exercise version + changelog generation
         run: |
           set -euo pipefail
           echo "latest tag:   $(scripts/version.sh latest)"
           echo "next (auto):  $(scripts/version.sh next auto)"
           echo "next (major): $(scripts/version.sh next major)"
-          # Informational here — the release workflow is where this gates.
+          # Informational; release.yml is where this gates.
           echo "app:          $(scripts/version.sh app-changed || true)"
           echo "--- release notes preview ---"
           scripts/release-notes.sh "$(scripts/version.sh next auto)" | tee -a "$GITHUB_STEP_SUMMARY"

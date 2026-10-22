@@ -4,15 +4,15 @@ The Nightscout access token lives in the Keychain, and macOS decides *which*
 Keychain an app may use from its code signature. That turns signing into a
 user-visible thing here rather than a release detail:
 
-| Signed with                            | Keychain used             | Access prompts                                      |
-| -------------------------------------- | ------------------------- | --------------------------------------------------- |
-| Ad-hoc (`./build.sh` with no identity)  | file-based login Keychain | on every rebuild — the signature changes each time   |
-| Developer ID                            | file-based login Keychain | once, then "Always Allow" sticks                     |
-| Developer ID + provisioning profile     | data-protection Keychain  | none                                                 |
+| Signed with                            | Keychain used             | Access prompts                              |
+| -------------------------------------- | ------------------------- | ------------------------------------------- |
+| Ad-hoc (Xcode, or plain `./build.sh`)  | file-based login Keychain | on every rebuild, as the signature changes  |
+| Developer ID                           | file-based login Keychain | once per update, then "Always Allow" sticks |
+| Developer ID + provisioning profile    | data-protection Keychain  | none                                        |
 
 Nothing in the app hardcodes which one it gets. `TokenStore.swift` probes once
 whether the data-protection Keychain accepts a write, uses that answer for every
-call afterwards, and reads the *other* Keychain as a fallback — so a release that
+call afterwards, and reads the *other* Keychain as a fallback. So a release that
 starts (or stops) shipping the profile migrates the item across instead of
 looking at an empty Keychain and appearing to have lost the token. Improving the
 signature is a build-time change only, and it is reversible.
@@ -22,21 +22,22 @@ signature is a build-time change only, and it is reversible.
 `keychain-access-groups` is the entitlement that lets the app own its Keychain
 item outright. Signing with it is not enough: it is a *restricted* entitlement,
 so AMFI kills the app at launch unless an embedded provisioning profile
-authorises it — the failure looks like `Launch failed … Code=163`, or an
+authorizes it. The failure looks like `Launch failed … Code=163`, or an
 immediate exit 137 when the binary is started directly. Three one-time steps:
 
 1. An **Identifier** (App ID) for `dev.nevermind.sugarglider`, at
    [developer.apple.com → Identifiers](https://developer.apple.com/account/resources/identifiers/list)
    → `+` → App IDs → App. The description is free text; the Bundle ID must match
    exactly and be **Explicit**, not a wildcard. Nothing under Capabilities needs
-   ticking — the access group `TEAMID.dev.nevermind.sugarglider` follows from the
+   checking: the access group `TEAMID.dev.nevermind.sugarglider` follows from the
    App ID itself, and Keychain Sharing is an Xcode-side switch rather than a
    portal capability.
 2. A **Developer ID provisioning profile** for that App ID: Profiles → `+` →
    Distribution → **Developer ID** → pick the App ID → pick the *Developer ID
    Application* certificate → download.
 3. The downloaded file saved as `Resources/embedded.provisionprofile`
-   (gitignored), and `TEAM_ID` set when building:
+   (gitignored), and `TEAM_ID` set when building. `build.sh` then installs the
+   profile where Xcode looks for one and signs with `Resources/Sugarglider.entitlements`:
 
    ```sh
    TEAM_ID=TEAMID \
@@ -45,16 +46,17 @@ immediate exit 137 when the binary is started directly. Three one-time steps:
    ```
 
 Apple grants the profile `keychain-access-groups` as the team wildcard
-`TEAMID.*`, which covers the concrete group `build.sh` writes into the
-entitlements. Worth checking before building, because a profile that lacks it
+`TEAMID.*`, which covers the concrete group in
+`Resources/Sugarglider.entitlements`. Worth checking before building, because a profile that lacks it
 yields an app that signs cleanly and then refuses to launch:
 
 ```sh
 security cms -D -i Resources/embedded.provisionprofile | plutil -p -
 ```
 
-With no profile (or no `TEAM_ID`) `build.sh` says so and signs without
-entitlements, which is what forks, CI and every ad-hoc local build get.
+Without a profile or `TEAM_ID`, `build.sh` signs without entitlements, and says
+so when it signs with a Developer ID. That's what forks, CI and every ad-hoc
+local build get.
 
 ## In CI
 
@@ -75,7 +77,7 @@ after each update.
 
 `codesign` may itself ask for permission to use the signing key the first time.
 That one is about your login keychain, not the app's, and is settled with
-"Always Allow" — or permanently:
+"Always Allow", or permanently:
 
 ```sh
 security set-key-partition-list -S apple-tool:,apple:,codesign: \
@@ -96,5 +98,5 @@ And the giveaway that the *data-protection* Keychain is really in use: after the
 app has stored a token, `security find-generic-password -s dev.nevermind.sugarglider`
 finds nothing. The `security` tool only sees the file-based Keychain.
 
-The profile is gitignored, so a fresh clone builds without it — download it
-again from the Apple portal, since a repository secret cannot be read back.
+The profile is gitignored, so a fresh clone builds without it. Download it again
+from the Apple portal, since a repository secret can't be read back.
