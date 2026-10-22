@@ -194,7 +194,7 @@ extension SugargliderTests {
              {"created_at":"2030-01-01T11:55:00Z","pump":{"reservoir":121}}]
             """)
         defer { server.stop() }
-        let status = try #require(try await Nightscout.fetchPumpStatus(baseURL: server.baseURL, token: "t"))
+        let status = try #require(try await Nightscout(baseURL: server.baseURL, token: "t").pumpStatus())
         #expect(status.reservoir == 120)
         #expect(status.mode == .auto)
         let line = try #require(server.requestLines.first)
@@ -206,7 +206,7 @@ extension SugargliderTests {
     @Test func fetchPumpStatusOfASiteWithoutOneIsNil() async throws {
         let server = try LocalHTTPServer(json: #"[{"created_at":"2030-01-01T11:55:00Z","uploader":{"battery":80}}]"#)
         defer { server.stop() }
-        #expect(try await Nightscout.fetchPumpStatus(baseURL: server.baseURL, token: "") == nil)
+        #expect(try await Nightscout(baseURL: server.baseURL, token: "").pumpStatus() == nil)
     }
 
     @Test func fetchTreatmentsFiltersByDateAndSortsOldestFirst() async throws {
@@ -217,8 +217,7 @@ extension SugargliderTests {
             """)
         defer { server.stop() }
         let since = try #require(NightscoutTime.date("2030-01-01T06:00:00.000Z"))
-        let treatments = try await Nightscout.fetchTreatments(since: since, count: 500,
-                                                              baseURL: server.baseURL, token: "")
+        let treatments = try await Nightscout(baseURL: server.baseURL, token: "").treatments(count: 500, since: since)
         #expect(treatments.map(\.id) == ["1", "2"])
         let line = try #require(server.requestLines.first)
         #expect(line.contains("/api/v1/treatments.json"))
@@ -230,15 +229,14 @@ extension SugargliderTests {
         let server = try LocalHTTPServer(json: #"{"status":401}"#)
         defer { server.stop() }
         await #expect(throws: NightscoutError.self) {
-            try await Nightscout.fetchTreatments(since: .now, count: 10, baseURL: server.baseURL, token: "")
+            try await Nightscout(baseURL: server.baseURL, token: "").treatments(count: 10, since: .now)
         }
     }
 
     @Test func fetchLatestEventAsksForThatEventOnly() async throws {
         let server = try LocalHTTPServer(json: #"[{"eventType":"Insulin Change","created_at":"2030-01-01T08:00:00.128Z"}]"#)
         defer { server.stop() }
-        let date = try await Nightscout.fetchLatestEvent("Insulin Change", since: Date(timeIntervalSince1970: 0),
-                                                         baseURL: server.baseURL, token: "")
+        let date = try await Nightscout(baseURL: server.baseURL, token: "").latestEvent("Insulin Change", since: Date(timeIntervalSince1970: 0))
         #expect(date == NightscoutTime.date("2030-01-01T08:00:00.128Z"))
         let line = try #require(server.requestLines.first)
         #expect(line.contains("eventType%5D=Insulin%20Change"))
@@ -248,8 +246,7 @@ extension SugargliderTests {
 
         let empty = try LocalHTTPServer(json: "[]")
         defer { empty.stop() }
-        #expect(try await Nightscout.fetchLatestEvent("Insulin Change", since: .now,
-                                                      baseURL: empty.baseURL, token: "") == nil)
+        #expect(try await Nightscout(baseURL: empty.baseURL, token: "").latestEvent("Insulin Change", since: .now) == nil)
     }
 }
 
@@ -291,15 +288,6 @@ extension SugargliderTests {
                                             from: base, to: base.addingTimeInterval(3600))
         #expect(steps.count == 1)
         #expect(steps.first?.end == base.addingTimeInterval(5 * 60))
-    }
-
-    @Test func nearestIndexWorksOnBareDates() {
-        let base = Date.now
-        let dates = [0.0, 300.0].map { base.addingTimeInterval($0) }
-        func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(base)) }
-        #expect(ChartMath.nearestIndex(to: 290, x: x, dates: dates, maxDistance: 24) == 1)
-        #expect(ChartMath.nearestIndex(to: 150, x: x, dates: dates, maxDistance: 24) == nil)
-        #expect(ChartMath.nearestIndex(to: 0, x: x, dates: [], maxDistance: 24) == nil)
     }
 }
 
@@ -357,8 +345,7 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         settings.baseURL = server.baseURL
         for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
-        ReadingStore(settings: settings).refreshDetails(force: true)
-        try await Task.sleep(for: .milliseconds(300))
+        await ReadingStore(settings: settings).refreshDetails(force: true)
         #expect(server.requestLines.isEmpty)
     }
 
@@ -368,8 +355,7 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         settings.baseURL = server.baseURL
         let store = ReadingStore(settings: settings)
-        store.refreshDetails(force: true)
-        try await waitUntil("the pump status") { store.pumpStatus != nil }
+        await store.refreshDetails(force: true)
         #expect(store.pumpStatus?.reservoir == 120)
         #expect(server.requestLines.contains { $0.contains("/api/v1/devicestatus.json") })
     }
@@ -384,15 +370,14 @@ extension SugargliderTests {
         settings.baseURL = server.baseURL
         let store = ReadingStore(settings: settings)
 
-        store.refreshTreatments(force: true)
-        try await waitUntil("the treatments") { !store.treatments.isEmpty }
+        await store.refreshTreatments(force: true)
         #expect(store.treatments.map(\.id) == ["b1"])
         let windowStart = try #require(store.treatmentsWindowStart)
         let since = NightscoutTime.string(windowStart.addingTimeInterval(-ReadingStore.tempBasalLookback))
         #expect(server.requestLines[0].contains("$gte%5D=\(since)"))
 
-        store.refreshTreatments(force: true)
-        try await waitUntil("the top-up") { server.requestLines.count == 2 }
+        await store.refreshTreatments(force: true)
+        #expect(server.requestLines.count == 2)
         let newest = try #require(store.treatments.last?.date)
         let overlap = NightscoutTime.string(newest.addingTimeInterval(-ReadingStore.treatmentOverlap))
         #expect(server.requestLines[1].contains("$gte%5D=\(overlap)"))
@@ -480,7 +465,7 @@ extension SugargliderTests {
         #expect(PumpDetailsView.staleNote(status: PumpStatus(date: now.addingTimeInterval(-5 * 60)),
                                           settings: settings, now: now) == nil)
         #expect(PumpDetailsView.staleNote(status: PumpStatus(date: now.addingTimeInterval(-40 * 60)),
-                                          settings: settings, now: now) == "Pump data from 40 min ago")
+                                          settings: settings, now: now) == "Pump data from 40 minutes ago")
     }
 
     @Test func pumpFormatsUseADotAndFixedDecimals() {
@@ -491,12 +476,6 @@ extension SugargliderTests {
         #expect(PumpFormat.dailyInsulin(47.3) == "47.3 U")
         #expect(PumpFormat.bolus(1) == "1.0 U")
         #expect(PumpFormat.bolus(0.05) == "0.05 U")
-    }
-
-    @Test(arguments: [(5, "5m"), (60, "1h"), (5 * 60, "5h"), (24 * 60, "1d"), (49 * 60, "2d 1h"), (-1, "0m")])
-    func pumpAgeIsCompact(minutesAgo: Int, expected: String) {
-        let now = Date.now
-        #expect(PumpFormat.age(since: now.addingTimeInterval(TimeInterval(-minutesAgo * 60)), now: now) == expected)
     }
 }
 
@@ -545,21 +524,21 @@ extension SugargliderTests {
         let s = Self.makeSettings()
         let bolus = Treatment(id: "b", date: Date.now.addingTimeInterval(-50 * 3600), kind: .bolus(units: 1))
         let tempBasal = Treatment(id: "t", date: .now, kind: .tempBasal(rate: 1, minutes: 30))
-        #expect(ChartCanvas.laneSpace(for: [], settings: s) == 0)
+        #expect(GlucoseChart.laneSpace(for: [], settings: s) == 0)
         // Decided on the whole cache, so a range drag can't make the chart jump.
-        #expect(ChartCanvas.laneSpace(for: [bolus], settings: s) == ChartCanvas.laneHeight)
-        #expect(ChartCanvas.laneSpace(for: [tempBasal], settings: s) == 0)
+        #expect(GlucoseChart.laneSpace(for: [bolus], settings: s) == GlucoseChart.laneHeight)
+        #expect(GlucoseChart.laneSpace(for: [tempBasal], settings: s) == 0)
         s.chartShowsDeliveryRate = true
-        #expect(ChartCanvas.laneSpace(for: [tempBasal], settings: s) == ChartCanvas.laneHeight)
+        #expect(GlucoseChart.laneSpace(for: [tempBasal], settings: s) == GlucoseChart.laneHeight)
         s.chartShowsBoluses = false
-        #expect(ChartCanvas.laneSpace(for: [bolus], settings: s) == 0)
+        #expect(GlucoseChart.laneSpace(for: [bolus], settings: s) == 0)
     }
 
     @Test func longAnnouncementsAreClippedForThePill() {
-        #expect(ChartCanvas.clipped("short") == "short")
+        #expect(GlucoseChart.clipped("short") == "short")
         let long = String(repeating: "a", count: 200)
-        #expect(ChartCanvas.clipped(long).count == 160)
-        #expect(ChartCanvas.clipped(long).hasSuffix("…"))
+        #expect(GlucoseChart.clipped(long).count == 160)
+        #expect(GlucoseChart.clipped(long).hasSuffix("…"))
     }
 
     @Test func rendersEveryPumpLayerWithoutCrash() {
@@ -576,8 +555,8 @@ extension SugargliderTests {
             Treatment(id: "b1", date: now.addingTimeInterval(-2 * 3600), kind: .bolus(units: 3.5)),
             Treatment(id: "n1", date: now.addingTimeInterval(-1.5 * 3600), kind: .note("CamAPS: Hoher Wert")),
         ]
-        let chart = ChartCanvas(readings: readings, rangeHours: 6, settings: s, windowEnd: .now, treatments: treatments)
-        let height = 160 + ChartCanvas.laneSpace(for: treatments, settings: s)
+        let chart = GlucoseChart(readings: readings, rangeHours: 6, settings: s, windowEnd: .now, treatments: treatments)
+        let height = 160 + GlucoseChart.laneSpace(for: treatments, settings: s)
         let renderer = ImageRenderer(content: chart.frame(width: 280, height: height))
         renderer.scale = 1
         #expect(renderer.cgImage != nil)

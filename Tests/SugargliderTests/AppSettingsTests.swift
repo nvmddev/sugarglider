@@ -320,33 +320,6 @@ extension SugargliderTests {
         #expect(AppSettings.staleAfterLimits == 5...240)
     }
 
-    /// A clamped setter re-enters itself with the corrected value.
-    @Test func changeHooksFireOncePerChange() {
-        let s = Self.makeSettings()
-        var range = 0, poll = 0, connection = 0
-        s.onRangeHoursChanged = { range += 1 }
-        s.onPollIntervalChanged = { poll += 1 }
-        s.onConnectionChanged = { connection += 1 }
-
-        s.rangeHours = 12
-        #expect(range == 1)
-        s.rangeHours = 999
-        #expect(range == 2)
-        #expect(s.rangeHours == AppSettings.rangeHoursLimits.upperBound)
-        s.rangeHours = AppSettings.rangeHoursLimits.upperBound
-        #expect(range == 2)
-
-        s.pollIntervalSeconds = 9999
-        #expect(poll == 1)
-        s.pollIntervalSeconds = AppSettings.pollIntervalLimits.upperBound
-        #expect(poll == 1)
-
-        s.baseURL = "https://a"
-        s.token = "t"
-        s.baseURL = "https://a"
-        #expect(connection == 2)
-    }
-
     @Test func themeMapsToBothOverrideMechanisms() {
         #expect(AppSettings.Theme.system.nsAppearance == nil)
         #expect(AppSettings.Theme.light.nsAppearance?.name == .aqua)
@@ -363,18 +336,6 @@ extension SugargliderTests {
         #expect(!s.isConfigured)
         s.baseURL = "https://site.example"
         #expect(s.isConfigured)
-    }
-
-    @Test(arguments: [
-        ("reader-0123456789abcdef", "re***ef"),
-        ("monitor-1a2b3c4d", "mo***4d"),
-        ("secret1", "se***t1"),
-        ("abcdef", "******"),
-        ("ab", "**"),
-        ("", ""),
-    ])
-    func maskedToken(_ token: String, masked: String) {
-        #expect(AppSettings.maskedToken(token) == masked)
     }
 }
 

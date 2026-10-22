@@ -3,7 +3,6 @@ import SwiftUI
 struct PumpDetailsView: View {
     var settings: AppSettings
     var store: ReadingStore
-    var width: CGFloat
 
     struct Row: Equatable {
         var label: String
@@ -45,7 +44,6 @@ struct PumpDetailsView: View {
             }
             .font(.system(size: 11))
             .monospacedDigit()
-            .frame(width: width)
         }
     }
 
@@ -96,12 +94,12 @@ struct PumpDetailsView: View {
 
         let ages = settings.showChangeAge
         if settings.showReservoir, let units = status.reservoir {
-            let age = ages ? reservoirChanged.map { PumpFormat.age(since: $0, now: now) } : nil
+            let age = ages ? reservoirChanged?.age(at: now, units: 2) : nil
             rows.append(Row(label: "Reservoir", value: PumpFormat.reservoir(units), note: age,
                             help: age.map { "Reservoir changed \($0) ago" }))
         }
         if settings.showPumpBattery, let percent = status.batteryPercent {
-            let age = ages ? batteryChanged.map { PumpFormat.age(since: $0, now: now) } : nil
+            let age = ages ? batteryChanged?.age(at: now, units: 2) : nil
             rows.append(Row(label: "Pump battery", value: PumpFormat.battery(percent), note: age,
                             help: age.map { "Battery changed \($0) ago" }))
         }
@@ -130,6 +128,6 @@ struct PumpDetailsView: View {
     /// would show it.
     static func staleNote(status: PumpStatus?, settings: AppSettings, now: Date) -> String? {
         guard let status, now.timeIntervalSince(status.date) > settings.staleThreshold else { return nil }
-        return "Pump data from \(ReadingStore.relative(status.date, now: now))"
+        return "Pump data from \(status.date.relative(to: now))"
     }
 }

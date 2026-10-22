@@ -4,9 +4,6 @@ struct MenuBarContentView: View {
     var settings: AppSettings
     var store: ReadingStore
     @Environment(\.openSettings) private var openSettings
-    @FocusState private var rangeFieldFocused: Bool
-    @FocusState private var rangeCellFocused: Bool
-    @State private var rangeFieldEditing = false
 
     private let contentWidth: CGFloat = 280
     private static let spacing: CGFloat = 10
@@ -17,16 +14,19 @@ struct MenuBarContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Self.spacing) {
-            ChartCanvas(readings: store.readings, rangeHours: settings.rangeHours, settings: settings,
+            GlucoseChart(readings: store.readings, rangeHours: settings.rangeHours, settings: settings,
                         windowEnd: store.now, treatments: store.treatments)
-                .frame(height: 135 + ChartCanvas.laneSpace(for: store.treatments, settings: settings))
+                .frame(height: 135 + GlucoseChart.laneSpace(for: store.treatments, settings: settings))
 
-            HStack(spacing: 6) {
-                TintedSlider(value: rangeBinding, range: Self.rangeSliderBounds, step: 2,
+            HStack(spacing: 8) {
+                TintedSlider(value: rangeBinding, range: Self.rangeSliderBounds, step: 1,
                              tint: settings.sliderColor,
                              accessibilityValueText: "\(settings.rangeHours) hours")
                     .accessibilityLabel("Chart range")
-                rangeField
+                Text("\(settings.rangeHours) h")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 30, alignment: .trailing)
             }
 
             Divider()
@@ -37,7 +37,7 @@ struct MenuBarContentView: View {
             }
 
             // No modifiers: without pump data this renders nothing, but a wrapper would still take a gap.
-            PumpDetailsView(settings: settings, store: store, width: contentWidth)
+            PumpDetailsView(settings: settings, store: store)
 
             Divider()
 
@@ -45,31 +45,20 @@ struct MenuBarContentView: View {
         }
         .frame(width: contentWidth)
         .padding(Self.insets)
-        .background(defocusBackdrop)
         .dropdownBackground(settings.dropdownBackground)
-        .onAppear {
-            store.refreshHistory(force: false)
-            store.refreshDetails(force: false)
-        }
+        .task { await store.refreshHistory(force: false) }
+        .task { await store.refreshDetails(force: false) }
         .windowTheme(settings.theme)
         .windowShowsToolTipsWhenInactive()
-    }
-
-    // The panel has nothing else focusable, so clicking anywhere must release the hours field. A background,
-    // because an overlay or a gesture on the stack competes with the slider drag and the buttons.
-    private var defocusBackdrop: some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture { endRangeEditing() }
     }
 
     // Not .glass: the panel is glass already, and Apple advises against glass on glass.
     private var actionButtons: some View {
         HStack(spacing: 8) {
             actionButton("Refresh", systemImage: "arrow.clockwise", shortcut: "r") {
-                store.refresh()
-                store.refreshHistory(force: true)
-                store.refreshDetails(force: true)
+                Task { await store.refresh() }
+                Task { await store.refreshHistory(force: true) }
+                Task { await store.refreshDetails(force: true) }
             }
             actionButton("Settings…", systemImage: "gearshape", shortcut: ",") { showSettings() }
             Spacer()
@@ -91,80 +80,10 @@ struct MenuBarContentView: View {
         .help(title)
     }
 
-    // A click-to-edit cell, not a live TextField: the MenuBarExtra panel focuses the first focusable control
-    // as it opens, which lit the field up every time. Both states share one bezel so nothing jumps.
-    private var rangeField: some View {
-        HStack(spacing: 3) {
-            ZStack {
-                let bezel = RoundedRectangle(cornerRadius: 5, style: .continuous)
-                bezel.fill(Color(nsColor: .textBackgroundColor))
-                bezel.strokeBorder(rangeFieldEditing ? Color.accentColor : Color(nsColor: .separatorColor),
-                                   lineWidth: rangeFieldEditing ? 1.5 : 1)
-                if rangeFieldEditing {
-                    TextField("Chart range", value: Bindable(settings).rangeHours,
-                              format: AppSettings.wholeNumberFormat)
-                        .textFieldStyle(.plain)
-                        .labelsHidden()
-                        .multilineTextAlignment(.trailing)
-                        .font(rangeFont)
-                        .padding(.trailing, 5)
-                        .accessibilityLabel("Chart range in hours")
-                        .focused($rangeFieldFocused)
-                        .onAppear { rangeFieldFocused = true }
-                        .onSubmit { endRangeEditing() }
-                        .onExitCommand { endRangeEditing() }
-                        .onChange(of: rangeFieldFocused) { _, focused in
-                            if !focused { rangeFieldEditing = false }
-                        }
-                } else {
-                    // A button so keyboard navigation reaches the cell. On the inert side only, not the ZStack,
-                    // where it would steal the live field's clicks.
-                    Button(action: beginRangeEditing) {
-                        Text("\(settings.rangeHours)")
-                            .font(rangeFont)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                            .padding(.trailing, 5)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .focused($rangeCellFocused)
-                    .accessibilityLabel("Chart range in hours")
-                    .accessibilityValue("\(settings.rangeHours)")
-                    .accessibilityHint("Click to type an exact number of hours")
-                }
-            }
-            .frame(width: 32, height: 20)
-            Text("h")
-                .font(rangeFont)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var rangeFont: Font { .system(size: 11, design: .monospaced) }
-
-    // The cell lets go of the keyboard focus before the field replaces it: a field swapped in under a focused
-    // button lost its focus to the button's cleanup, and with keyboard navigation on, the cell has it on open.
-    private func beginRangeEditing() {
-        rangeCellFocused = false
-        Task { rangeFieldEditing = true }
-    }
-
-    // The field goes a turn after its focus: dropping both in one update left SwiftUI's focus state stale,
-    // and every other click into the cell went nowhere. Not left to the focus change: if the field never
-    // took focus, none fires and the cell stays editable.
-    private func endRangeEditing() {
-        rangeFieldFocused = false
-        Task { rangeFieldEditing = false }
-    }
-
-    // Ends editing first: a focused TextField(value:) would go on showing its own half-typed buffer.
     private var rangeBinding: Binding<Double> {
         Binding(
             get: { Double(settings.rangeHours) },
-            set: { newValue in
-                if rangeFieldEditing { endRangeEditing() }
-                settings.rangeHours = Int(newValue)
-            }
+            set: { settings.rangeHours = Int($0) }
         )
     }
 
@@ -205,9 +124,8 @@ struct MenuBarContentView: View {
         let text = reading.text(in: settings.units)
         let value = Text(reading.outOfRange == nil ? "\(text) \(settings.units.label)" : text)
             .font(.system(size: 15, weight: .medium))
-        let arrow = reading.trendArrow.isEmpty
-            ? Text("")
-            : Text(" \(reading.trendArrow)").font(.system(size: 17, weight: .semibold))
+        let arrow = reading.direction.map { Text(" \($0.arrow)").font(.system(size: 17, weight: .semibold)) }
+            ?? Text("")
         let note: String? = switch reading.outOfRange {
         case .low: "below the sensor's range"
         case .high: "above the sensor's range"
@@ -220,7 +138,7 @@ struct MenuBarContentView: View {
     private var ageText: String {
         guard settings.isConfigured else { return "Open Settings to add your Nightscout URL" }
         guard let reading = store.lastReading else { return store.lastError ?? "" }
-        var text = "Reading \(ReadingStore.relative(reading.date, now: store.now))"
+        var text = "Reading from \(reading.date.relative(to: store.now))"
         if store.isStale { text += " (stale)" }
         if let error = store.lastError { text += " — \(error)" }
         return text
