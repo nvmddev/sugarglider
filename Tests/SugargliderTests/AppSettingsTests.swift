@@ -6,7 +6,7 @@ import SwiftUI
 /// each value off its default so a skipped key can't pass unnoticed.
 private enum StoredSettings {
     static let strings: [String: String] = [
-        "baseURL": "https://site.example", "units": "mgdl", "theme": "dark", "dropdownBackground": "solid",
+        "baseURL": "https://site.example", "units": "mgdl", "dropdownBackground": "solid",
     ]
     static let doubles: [String: Double] = [
         "targetLow": 80, "targetHigh": 190, "extremeLow": 50, "extremeHigh": 260,
@@ -51,7 +51,6 @@ extension SugargliderTests {
         #expect(s.baseURL == "")
         #expect(s.token == "")
         #expect(s.units == .mmol)
-        #expect(s.theme == .system)
         #expect(s.dropdownBackground == .glass)
         #expect(s.deltaDisplay == .menu)
         #expect(s.targetLow == 70)
@@ -97,7 +96,6 @@ extension SugargliderTests {
         let s = Self.makeSettings(defaults: defaults)
         #expect(s.baseURL == "https://site.example")
         #expect(s.units == .mgdl)
-        #expect(s.theme == .dark)
         #expect(s.dropdownBackground == .solid)
         #expect(s.targetLow == 80)
         #expect(s.targetHigh == 190)
@@ -147,7 +145,6 @@ extension SugargliderTests {
         let s = Self.makeSettings(defaults: defaults)
         s.baseURL = "https://site.example"
         s.units = .mgdl
-        s.theme = .dark
         s.dropdownBackground = .solid
         s.targetLow = 80
         s.targetHigh = 190
@@ -199,13 +196,11 @@ extension SugargliderTests {
     @Test func unreadableStoredValuesKeepTheDefaults() {
         let defaults = Self.makeDefaults()
         defaults.set("metric", forKey: "units")
-        defaults.set("sepia", forKey: "theme")
         defaults.set("frosted", forKey: "dropdownBackground")
         defaults.set(7, forKey: "deltaDisplay")
         defaults.set("lots", forKey: "rangeHours")
         let s = Self.makeSettings(defaults: defaults)
         #expect(s.units == .mmol)
-        #expect(s.theme == .system)
         #expect(s.dropdownBackground == .glass)
         #expect(s.deltaDisplay == .menu)
         #expect(s.rangeHours == 6)
@@ -318,15 +313,6 @@ extension SugargliderTests {
         #expect(AppSettings.dotHaloRadiusLimits == 0...24)
         #expect(AppSettings.pollIntervalLimits == 3...300)
         #expect(AppSettings.staleAfterLimits == 5...240)
-    }
-
-    @Test func themeMapsToBothOverrideMechanisms() {
-        #expect(AppSettings.Theme.system.nsAppearance == nil)
-        #expect(AppSettings.Theme.light.nsAppearance?.name == .aqua)
-        #expect(AppSettings.Theme.dark.nsAppearance?.name == .darkAqua)
-        #expect(AppSettings.Theme.system.colorScheme == nil)
-        #expect(AppSettings.Theme.light.colorScheme == .light)
-        #expect(AppSettings.Theme.dark.colorScheme == .dark)
     }
 
     @Test func isConfiguredNeedsANonBlankURL() {
