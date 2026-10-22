@@ -468,7 +468,7 @@ extension SugargliderTests {
                                           settings: settings, now: now) == "Pump data from 40 minutes ago")
     }
 
-    @Test func pumpFormatsUseADotAndFixedDecimals() {
+    @Test func pumpFormatsUseFixedDecimals() {
         #expect(PumpFormat.insulin(0) == "0.00 U")
         #expect(PumpFormat.rate(2.4) == "2.40 U/h")
         #expect(PumpFormat.reservoir(150) == "150 U")

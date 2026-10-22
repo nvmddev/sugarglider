@@ -73,7 +73,7 @@ struct GeneralTab: View {
                                unit: String, limits: ClosedRange<Int>) -> some View {
         HStack(spacing: 4) {
             Text(prefix)
-            TextField("", value: value, format: AppSettings.wholeNumberFormat)
+            TextField("", value: value, format: .number)
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 .frame(width: 36)

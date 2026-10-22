@@ -44,7 +44,7 @@ struct TintedSlider: View {
         }
         .frame(height: Self.knobHeight)
         .accessibilityElement()
-        .accessibilityValue(accessibilityValueText ?? String(format: "%g", value))
+        .accessibilityValue(accessibilityValueText ?? value.formatted())
         .accessibilityAdjustableAction { direction in
             let delta = step > 0 ? step : (range.upperBound - range.lowerBound) / 20
             switch direction {

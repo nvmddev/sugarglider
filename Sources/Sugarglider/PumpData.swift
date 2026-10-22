@@ -182,21 +182,23 @@ enum NightscoutTime {
     private static let withoutFraction = Date.ISO8601FormatStyle()
 }
 
-/// `String(format:)` rather than a `FormatStyle`, so the decimal separator is a dot in every region.
+/// Insulin in units (U), rates in U/h.
 enum PumpFormat {
-    static func insulin(_ units: Double) -> String { String(format: "%.2f U", units) }
-    static func dailyInsulin(_ units: Double) -> String { String(format: "%.1f U", units) }
-    static func rate(_ unitsPerHour: Double) -> String { String(format: "%.2f U/h", unitsPerHour) }
-    static func battery(_ percent: Double) -> String { String(format: "%.0f%%", percent) }
+    static func insulin(_ units: Double) -> String { "\(units.formatted(digits(2))) U" }
+    static func dailyInsulin(_ units: Double) -> String { "\(units.formatted(digits(1))) U" }
+    static func rate(_ unitsPerHour: Double) -> String { "\(unitsPerHour.formatted(digits(2))) U/h" }
+    static func battery(_ percent: Double) -> String { (percent / 100).formatted(.percent.precision(.fractionLength(0))) }
 
     /// Two decimals only for the finer doses some loops give ("0.05 U").
     static func bolus(_ units: Double) -> String {
         let tenths = units * 10
-        return String(format: abs(tenths - tenths.rounded()) < 0.001 ? "%.1f U" : "%.2f U", units)
+        return "\(units.formatted(digits(abs(tenths - tenths.rounded()) < 0.001 ? 1 : 2))) U"
     }
 
-    static func reservoir(_ units: Double) -> String {
-        String(format: units >= 10 ? "%.0f U" : "%.1f U", units)
+    static func reservoir(_ units: Double) -> String { "\(units.formatted(digits(units >= 10 ? 0 : 1))) U" }
+
+    private static func digits(_ count: Int) -> FloatingPointFormatStyle<Double> {
+        .number.precision(.fractionLength(count))
     }
 }
 

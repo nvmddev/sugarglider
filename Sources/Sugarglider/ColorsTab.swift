@@ -241,7 +241,7 @@ struct ColorsTab: View {
         return LabeledContent(label) {
             HStack(spacing: 8) {
                 Slider(value: halfPoints, in: range)
-                Text(String(format: "%g", value.wrappedValue))
+                Text(value.wrappedValue.formatted())
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .frame(width: 24, alignment: .trailing)
