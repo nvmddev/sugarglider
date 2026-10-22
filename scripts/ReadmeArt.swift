@@ -41,15 +41,15 @@ func interpolate(hoursAgo h: Double) -> Double {
 }
 
 // The slope thresholds the uploaders use for Nightscout's trend names.
-func direction(slopePerMinute s: Double) -> String {
+func direction(slopePerMinute s: Double) -> Reading.Direction {
     switch s {
-    case ..<(-3): "DoubleDown"
-    case ..<(-2): "SingleDown"
-    case ..<(-1): "FortyFiveDown"
-    case ..<1: "Flat"
-    case ..<2: "FortyFiveUp"
-    case ..<3: "SingleUp"
-    default: "DoubleUp"
+    case ..<(-3): .doubleDown
+    case ..<(-2): .singleDown
+    case ..<(-1): .fortyFiveDown
+    case ..<1: .flat
+    case ..<2: .fortyFiveUp
+    case ..<3: .singleUp
+    default: .doubleUp
     }
 }
 
@@ -111,14 +111,14 @@ struct MenuBarStrip: View {
 
     var body: some View {
         HStack(spacing: 28) {
-            label(sgv: 101, direction: "FortyFiveUp", minutesAgo: 2)
-            label(sgv: 101, direction: "FortyFiveUp", minutesAgo: 2, showDelta: true, previous: 99)
-            label(sgv: 223, direction: "SingleUp", minutesAgo: 23)
+            label(sgv: 101, direction: .fortyFiveUp, minutesAgo: 2)
+            label(sgv: 101, direction: .fortyFiveUp, minutesAgo: 2, showDelta: true, previous: 99)
+            label(sgv: 223, direction: .singleUp, minutesAgo: 23)
         }
         .padding(.horizontal, 4)
     }
 
-    private func label(sgv: Int, direction: String, minutesAgo: Double,
+    private func label(sgv: Int, direction: Reading.Direction, minutesAgo: Double,
                        showDelta: Bool = false, previous: Int? = nil) -> some View {
         let settings = makeSettings { if showDelta { $0.deltaDisplay = .menuAndStatusBar } }
         let store = ReadingStore(settings: settings)

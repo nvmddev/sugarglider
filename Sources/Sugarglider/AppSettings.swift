@@ -8,18 +8,9 @@ final class AppSettings {
     private let defaults: UserDefaults
     private let tokens: any TokenStorage
 
-    @ObservationIgnored var onConnectionChanged: (() -> Void)?
-    @ObservationIgnored var onPollIntervalChanged: (() -> Void)?
-    @ObservationIgnored var onRangeHoursChanged: (() -> Void)?
-
     // MARK: - Connection
 
-    var baseURL: String = "" {
-        didSet {
-            persist(baseURL, "baseURL")
-            if oldValue != baseURL { onConnectionChanged?() }
-        }
-    }
+    var baseURL: String = "" { didSet { persist(baseURL, "baseURL") } }
 
     /// Empty for a site that allows unauthenticated reads. Lives in the Keychain,
     /// not in `defaults`: a preferences plist is readable by any process running
@@ -28,7 +19,6 @@ final class AppSettings {
         didSet {
             guard !isLoading, oldValue != token else { return }
             tokenStorageFailed = !tokens.save(token)
-            onConnectionChanged?()
         }
     }
 
@@ -36,12 +26,9 @@ final class AppSettings {
     /// No plist fallback on purpose: that is what the Keychain replaced.
     var tokenStorageFailed = false
 
-    var isConfigured: Bool { !baseURL.trimmingCharacters(in: .whitespaces).isEmpty }
+    var isConfigured: Bool { !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-    static func maskedToken(_ token: String) -> String {
-        guard token.count > 6 else { return String(repeating: "*", count: token.count) }
-        return "\(token.prefix(2))***\(token.suffix(2))"
-    }
+    var nightscout: Nightscout { Nightscout(baseURL: baseURL, token: token) }
 
     // MARK: - Glucose and display
 
@@ -49,16 +36,15 @@ final class AppSettings {
     enum Units: String {
         case mmol, mgdl
 
-        private static let mgdlPerMmol = 18.0
+        static let mgdlPerMmol = 18.0
 
         var label: String { self == .mmol ? "mmol/L" : "mg/dL" }
 
-        func display(_ mgdl: Double) -> Double { self == .mmol ? mgdl / Self.mgdlPerMmol : mgdl }
-        func value(fromMgdl sgv: Int) -> Double { display(Double(sgv)) }
+        func value(fromMgdl mgdl: Double) -> Double { self == .mmol ? mgdl / Self.mgdlPerMmol : mgdl }
+        func mgdl(from value: Double) -> Double { self == .mmol ? value * Self.mgdlPerMmol : value }
         func text(fromMgdl sgv: Int) -> String {
-            self == .mmol ? String(format: "%.1f", value(fromMgdl: sgv)) : String(sgv)
+            self == .mmol ? String(format: "%.1f", value(fromMgdl: Double(sgv))) : String(sgv)
         }
-        func toMgdl(_ value: Double) -> Double { self == .mmol ? value * Self.mgdlPerMmol : value }
     }
 
     var units: Units = .mmol { didSet { persist(units.rawValue, "units") } }
@@ -129,10 +115,7 @@ final class AppSettings {
     static let rangeHoursLimits: ClosedRange<Int> = 2...72
 
     var rangeHours: Int = 6 {
-        didSet {
-            guard writeThrough(\.rangeHours, key: "rangeHours", limits: Self.rangeHoursLimits) else { return }
-            if oldValue != rangeHours { onRangeHoursChanged?() }
-        }
+        didSet { writeThrough(\.rangeHours, key: "rangeHours", limits: Self.rangeHoursLimits) }
     }
 
     static let defaultStaleAfterMinutes = 11
@@ -147,11 +130,7 @@ final class AppSettings {
     static let pollIntervalLimits: ClosedRange<Int> = 3...300
 
     var pollIntervalSeconds: Int = 60 {
-        didSet {
-            guard writeThrough(\.pollIntervalSeconds, key: "pollIntervalSeconds",
-                               limits: Self.pollIntervalLimits) else { return }
-            if oldValue != pollIntervalSeconds { onPollIntervalChanged?() }
-        }
+        didSet { writeThrough(\.pollIntervalSeconds, key: "pollIntervalSeconds", limits: Self.pollIntervalLimits) }
     }
 
     // MARK: - Chart look
@@ -473,7 +452,7 @@ final class AppSettings {
         guard !defaults.bool(forKey: "thresholdsMgdl") else { return }
         for key in ["targetLow", "targetHigh", "extremeLow", "extremeHigh"] {
             if let value = defaults.object(forKey: key) as? Double, value > 0, value < 40 {
-                defaults.set(Units.mmol.toMgdl(value).rounded(), forKey: key)
+                defaults.set(Units.mmol.mgdl(from: value).rounded(), forKey: key)
             }
         }
         defaults.set(true, forKey: "thresholdsMgdl")
@@ -500,20 +479,13 @@ final class AppSettings {
         defaults.set(value, forKey: key)
     }
 
-    /// Clamps and persists a bounded setting from its `didSet`. An out-of-range value
-    /// is reassigned clamped, which re-enters here; `false` tells the outer pass to
-    /// skip its change hook, which the inner pass has already run.
-    @discardableResult
+    /// Clamps and persists a bounded setting from its `didSet`. An out-of-range value is
+    /// reassigned clamped, which runs the `didSet` again.
     private func writeThrough<Value: Comparable>(_ keyPath: ReferenceWritableKeyPath<AppSettings, Value>,
-                                                 key: String, limits: ClosedRange<Value>) -> Bool {
+                                                 key: String, limits: ClosedRange<Value>) {
         let value = self[keyPath: keyPath]
         let clamped = min(max(value, limits.lowerBound), limits.upperBound)
-        guard clamped == value else {
-            self[keyPath: keyPath] = clamped
-            return false
-        }
-        persist(value, key)
-        return true
+        if clamped == value { persist(value, key) } else { self[keyPath: keyPath] = clamped }
     }
 
     private func persistColor(_ color: Color, _ key: String) {
