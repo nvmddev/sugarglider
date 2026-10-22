@@ -10,7 +10,7 @@ struct MenuBarLabel: View {
         Text(title)
     }
 
-    private var title: String {
+    var title: String {
         guard settings.isConfigured else { return "CGM ⚙" }
         guard let reading = store.lastReading else { return store.lastError == nil ? "CGM …" : "CGM ⚠" }
         let arrow = reading.direction.map { " \($0.arrow)" } ?? ""

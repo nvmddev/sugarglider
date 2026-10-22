@@ -98,6 +98,60 @@ extension SugargliderTests {
         #expect(store.deltaText() == nil)
     }
 
+    @Test func titleBeforeTheFirstReading() {
+        let settings = Self.makeSettings()
+        let store = ReadingStore(settings: settings)
+        let label = MenuBarLabel(settings: settings, store: store)
+        #expect(label.title == "CGM ⚙")
+        settings.baseURL = "https://ns.example"
+        #expect(label.title == "CGM …")
+        store.lastError = "HTTP 500"
+        #expect(label.title == "CGM ⚠")
+    }
+
+    @Test(arguments: [
+        (.mmol, 120, .flat, "6.7 →"),
+        (.mgdl, 120, .doubleDown, "120 ↓↓"),
+        (.mmol, 120, nil, "6.7"),
+        (.mmol, 39, nil, "LOW"),
+        (.mgdl, 401, .doubleUp, "HIGH ↑↑"),
+    ] as [(AppSettings.Units, Int, Reading.Direction?, String)])
+    func titleShowsTheValueAndArrow(units: AppSettings.Units, sgv: Int, direction: Reading.Direction?,
+                                    expected: String) {
+        let settings = Self.makeSettings()
+        settings.baseURL = "https://ns.example"
+        settings.units = units
+        let store = ReadingStore(settings: settings)
+        store.lastReading = reading(sgv, direction: direction, from: store.now)
+        #expect(MenuBarLabel(settings: settings, store: store).title == expected)
+    }
+
+    @Test func titleShowsTheDeltaOnlyWhenSetToTheStatusBar() {
+        let settings = Self.makeSettings()
+        settings.baseURL = "https://ns.example"
+        let store = ReadingStore(settings: settings)
+        store.lastReading = reading(120, from: store.now)
+        store.previousReading = reading(118, minutesAgo: 5, from: store.now)
+        let label = MenuBarLabel(settings: settings, store: store)
+        #expect(label.title == "6.7 →")   // the default shows it in the dropdown only
+        settings.deltaDisplay = .menuAndStatusBar
+        #expect(label.title == "6.7 →  (+0.1)")
+    }
+
+    /// A failed poll leaves the last reading up, so its age is what shows that it's old.
+    @Test func titleShowsTheAgeOnceStale() {
+        let settings = Self.makeSettings()
+        settings.baseURL = "https://ns.example"
+        let store = ReadingStore(settings: settings)
+        let label = MenuBarLabel(settings: settings, store: store)
+        store.lastReading = reading(120, minutesAgo: 10, from: store.now)
+        #expect(label.title == "6.7 →")
+        store.lastReading = reading(120, minutesAgo: 23, from: store.now)
+        #expect(label.title == "6.7 → ⚠ 23m")
+        store.lastError = "HTTP 500"
+        #expect(label.title == "6.7 → ⚠ 23m")
+    }
+
     @Test func historyCountFollowsTheSelectedRange() {
         #expect(ReadingStore.historyCount(forRangeHours: 6) == 420)
         #expect(ReadingStore.historyCount(forRangeHours: 24) == 1500)
