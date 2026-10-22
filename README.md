@@ -82,7 +82,7 @@ straight away whether the connection works.
 - Color by zone: very low, below, in range, above, very high. Pick every
   color yourself, or blend them smoothly, or save a look as a preset and
   switch back to it later. The stock palette is monochrome and follows
-  light and dark mode.
+  light and dark mode. The dropdown itself can be see-through glass or solid.
 - mmol/L or mg/dL, switchable any time. Your target range and the very
   low/high bounds are yours to set.
 - Pump data, if your site has it: active insulin, reservoir and battery under

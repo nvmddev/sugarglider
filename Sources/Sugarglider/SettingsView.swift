@@ -12,8 +12,9 @@ struct SettingsView: View {
             Tab("Pump", systemImage: "syringe") { PumpTab(settings: settings) }
             Tab("About", systemImage: "info.circle") { AboutTab(settings: settings) }
         }
-        // Every tab is a .grouped Form: unlike a plain one, it scrolls instead of clipping at this size.
-        .frame(width: 500, height: 480)
+        // Every tab is a .grouped Form, which scrolls where a plain one would clip.
+        .frame(minWidth: 500, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
+        .windowResizable(defaultSize: CGSize(width: 500, height: 700), autosaveName: "SettingsWindow")
         // Not .windowTheme(_:): SwiftUI resets a manual NSWindow.appearance on this window within milliseconds.
         .preferredColorScheme(settings.theme.colorScheme)
     }
@@ -55,6 +56,10 @@ private struct GeneralTab: View {
                     Text("Automatic").tag(AppSettings.Theme.system)
                     Text("Light").tag(AppSettings.Theme.light)
                     Text("Dark").tag(AppSettings.Theme.dark)
+                }
+                Picker("Dropdown background", selection: $settings.dropdownBackground) {
+                    Text("Glass").tag(AppSettings.DropdownBackground.glass)
+                    Text("Solid").tag(AppSettings.DropdownBackground.solid)
                 }
                 Picker("Units", selection: $settings.units) {
                     Text("mmol/L").tag(AppSettings.Units.mmol)
@@ -184,8 +189,12 @@ private struct ColorsTab: View {
                 .padding(.horizontal, 10)
         }
         .padding([.horizontal, .top], 20)
+        // Lined up with the form below, whose grouped sections stop growing at this width (measured).
+        .frame(maxWidth: Self.formSectionMaxWidth + 40)
         .onAppear { sampleEnd = .now }
     }
+
+    private static let formSectionMaxWidth: CGFloat = 704
 
     private static let previewHoursBounds =
         Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
@@ -214,63 +223,80 @@ private struct ColorsTab: View {
 
     private var form: some View {
         Form {
-            Section("Color preset") {
-                Picker("Preset", selection: presetSelection) {
-                    Text("Custom").tag(String?.none)
-                    ForEach(settings.colorPresets, id: \.name) { preset in
-                        Text(preset.name).tag(String?(preset.name))
+            Section {
+                LabeledContent("Preset") {
+                    HStack(spacing: 8) {
+                        Picker("Preset", selection: presetSelection) {
+                            Text("Custom").tag(String?.none)
+                            ForEach(settings.colorPresets, id: \.name) { preset in
+                                Text(preset.name).tag(String?(preset.name))
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        Button("Save…") {
+                            newPresetName = settings.matchingPreset()?.name ?? settings.defaultPresetName()
+                            showingSavePreset = true
+                        }
+                        Button("Delete", role: .destructive) {
+                            if let name = settings.matchingPreset()?.name { settings.deleteColorPreset(named: name) }
+                        }
+                        .disabled(settings.matchingPreset() == nil)
                     }
                 }
-                HStack {
-                    Button("Save Current…") {
-                        newPresetName = settings.matchingPreset()?.name ?? settings.defaultPresetName()
-                        showingSavePreset = true
-                    }
-                    Button("Delete", role: .destructive) {
-                        if let name = settings.matchingPreset()?.name { settings.deleteColorPreset(named: name) }
-                    }
-                    .disabled(settings.matchingPreset() == nil)
+            }
+            Section("Line") {
+                // Low to high, the way the zones stack up on the chart's axis.
+                swatchRow("Zones", [
+                    Swatch("Very low", help: "Very low", color: $settings.extremeLowColor),
+                    Swatch("Low", help: "Below the optimal range", color: $settings.belowColor),
+                    Swatch("In range", help: "In the optimal range", color: $settings.inRangeColor),
+                    Swatch("High", help: "Above the optimal range", color: $settings.aboveColor),
+                    Swatch("Very high", help: "Very high", color: $settings.extremeHighColor),
+                ])
+                Toggle("Blend zone colors", isOn: $settings.blendLineColors)
+                choiceRow("Shading", selection: $settings.lineShading, color: $settings.lineShadingColor,
+                          customEnabled: settings.lineShading == .custom) {
+                    Text("Off").tag(AppSettings.LineShading.off)
+                    Text("Line color").tag(AppSettings.LineShading.lineColor)
+                    Text("Custom").tag(AppSettings.LineShading.custom)
                 }
-            }
-            Section("Zone colors") {
-                ColorPicker("Very high", selection: $settings.extremeHighColor)
-                ColorPicker("Above optimal", selection: $settings.aboveColor)
-                ColorPicker("In range", selection: $settings.inRangeColor)
-                ColorPicker("Below optimal", selection: $settings.belowColor)
-                ColorPicker("Very low", selection: $settings.extremeLowColor)
-                Toggle("Blend line colors", isOn: $settings.blendLineColors)
-            }
-            Section("Line shading") {
-                Toggle("Shade below the line", isOn: $settings.lineShadingEnabled)
-                Toggle("Match line color", isOn: $settings.lineShadingUsesLineColor)
-                    .disabled(!settings.lineShadingEnabled)
-                ColorPicker("Shading color", selection: $settings.lineShadingColor)
-                    .disabled(!settings.lineShadingEnabled || settings.lineShadingUsesLineColor)
             }
             Section("Latest reading dot") {
-                sizeRow("Dot size", value: $settings.dotRadius, range: AppSettings.dotRadiusLimits)
-                sizeRow("Halo size", value: $settings.dotHaloRadius, range: AppSettings.dotHaloRadiusLimits)
-                Toggle("Match zone color", isOn: $settings.dotUsesZoneColor)
-                ColorPicker("Dot color", selection: $settings.dotColor)
-                    .disabled(settings.dotUsesZoneColor)
-            }
-            Section("Chart") {
-                ColorPicker("Range band", selection: $settings.bandColor)
-                ColorPicker("Range slider", selection: $settings.sliderColor)
-                Toggle("Graph background", isOn: $settings.chartBackgroundEnabled)
-                ColorPicker("Background color", selection: $settings.chartBackgroundColor)
+                sizeRow("Size", value: $settings.dotRadius, range: AppSettings.dotRadiusLimits)
+                sizeRow("Halo", value: $settings.dotHaloRadius, range: AppSettings.dotHaloRadiusLimits)
+                choiceRow("Color", selection: $settings.dotUsesZoneColor, color: $settings.dotColor,
+                          customEnabled: !settings.dotUsesZoneColor) {
+                    Text("Zone color").tag(true)
+                    Text("Custom").tag(false)
+                }
             }
             Section {
-                ColorPicker("Boluses", selection: $settings.bolusColor)
-                    .disabled(!settings.chartShowsBoluses)
-                ColorPicker("Delivery rate", selection: $settings.deliveryRateColor)
-                    .disabled(!settings.chartShowsDeliveryRate)
-                ColorPicker("Announcements", selection: $settings.announcementColor)
-                    .disabled(!settings.chartShowsAnnouncements)
+                swatchRow("Colors", [
+                    Swatch("Range band", help: "The optimal range behind the line", color: $settings.bandColor),
+                    Swatch("Slider", help: "The dropdown's range slider", color: $settings.sliderColor),
+                ])
+                // Two options, so a switch rather than a menu.
+                wellRow("Background", color: $settings.chartBackgroundColor,
+                        enabled: settings.chartBackgroundEnabled) {
+                    // Explicit: nested in a row's content, a toggle falls back to a checkbox.
+                    Toggle("Background", isOn: $settings.chartBackgroundEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+                // Top of the chart to bottom; also keeps the widest caption away from the trailing edge.
+                swatchRow("Pump data", [
+                    Swatch("Announcements", help: "Announcement marks along the top",
+                           color: $settings.announcementColor, enabled: settings.chartShowsAnnouncements),
+                    Swatch("Delivery rate", help: "The delivery rate under the chart",
+                           color: $settings.deliveryRateColor, enabled: settings.chartShowsDeliveryRate),
+                    Swatch("Boluses", help: "Bolus bars under the chart", color: $settings.bolusColor,
+                           enabled: settings.chartShowsBoluses),
+                ])
             } header: {
-                Text("Pump data")
+                Text("Chart")
             } footer: {
-                Text("Switch an item on in the Pump tab to color it.")
+                Text("A pump color applies once its item is switched on in the Pump tab.")
                     .foregroundStyle(.secondary)
             }
             Button("Reset Colors to Default") { settings.resetColors() }
@@ -279,6 +305,74 @@ private struct ColorsTab: View {
         // A sheet, not an .alert: macOS alerts render only text fields and buttons.
         .sheet(isPresented: $showingSavePreset) {
             SavePresetSheet(settings: settings, name: $newPresetName)
+        }
+    }
+
+    private struct Swatch: Identifiable {
+        var caption: String
+        var help: String
+        var color: Binding<Color>
+        var enabled = true
+        var id: String { caption }
+
+        init(_ caption: String, help: String, color: Binding<Color>, enabled: Bool = true) {
+            self.caption = caption; self.help = help; self.color = color; self.enabled = enabled
+        }
+    }
+
+    // One row of wells instead of a row per color; a common column width lines them up across rows.
+    // Not LabeledContent: that pins its label to the top of a two-line row instead of centering it.
+    private func swatchRow(_ label: String, _ swatches: [Swatch]) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            HStack(alignment: .top, spacing: Self.swatchSpacing) {
+                ForEach(swatches) { swatch in
+                    VStack(spacing: 3) {
+                        ColorPicker(swatch.help, selection: swatch.color)
+                            .labelsHidden()
+                        // Zero-width, so the column is as wide as the well and the last well ends flush
+                        // with the row like every other control; the caption overhangs it, centered.
+                        Text(swatch.caption)
+                            .font(.caption2)
+                            .foregroundStyle(swatch.enabled ? .secondary : .tertiary)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(width: 0)
+                    }
+                    .disabled(!swatch.enabled)
+                    .help(swatch.help)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(label)
+    }
+
+    // Room for two neighboring captions' overhang ("Announcements" next to "Delivery rate").
+    private static let swatchSpacing: CGFloat = 34
+
+    // A mode menu plus the well it unlocks, in place of a switch row followed by a color row.
+    private func choiceRow<Value: Hashable>(_ label: String, selection: Binding<Value>, color: Binding<Color>,
+                                            customEnabled: Bool,
+                                            @ViewBuilder options: () -> some View) -> some View {
+        wellRow(label, color: color, enabled: customEnabled) {
+            Picker(label, selection: selection, content: options)
+                .labelsHidden()
+                .fixedSize()
+        }
+    }
+
+    // A control and the well it unlocks, flush with the trailing edge like the swatch rows' last well.
+    private func wellRow(_ label: String, color: Binding<Color>, enabled: Bool,
+                         @ViewBuilder control: () -> some View) -> some View {
+        LabeledContent(label) {
+            HStack(spacing: 8) {
+                control()
+                ColorPicker("\(label) color", selection: color)
+                    .labelsHidden()
+                    .disabled(!enabled)
+            }
         }
     }
 

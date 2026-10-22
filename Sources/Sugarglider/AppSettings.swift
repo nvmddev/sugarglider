@@ -116,6 +116,12 @@ final class AppSettings {
 
     var theme: Theme = .system { didSet { persist(theme.rawValue, "theme") } }
 
+    enum DropdownBackground: String { case glass, solid }
+
+    var dropdownBackground: DropdownBackground = .glass {
+        didSet { persist(dropdownBackground.rawValue, "dropdownBackground") }
+    }
+
     enum DeltaDisplay: Int { case off = 0, menu = 1, menuAndStatusBar = 2 }
 
     var deltaDisplay: DeltaDisplay = .menu { didSet { persist(deltaDisplay.rawValue, "deltaDisplay") } }
@@ -199,6 +205,21 @@ final class AppSettings {
         didSet { persist(lineShadingUsesLineColor, "lineShadingUsesLineColor") }
     }
     var dotUsesZoneColor: Bool = true { didSet { persist(dotUsesZoneColor, "dotUsesZoneColor") } }
+
+    enum LineShading: Hashable { case off, lineColor, custom }
+
+    /// The two shading switches as the Colors tab's one menu. Off leaves `lineShadingUsesLineColor`
+    /// alone, so switching shading back on returns to the color it had.
+    var lineShading: LineShading {
+        get {
+            guard lineShadingEnabled else { return .off }
+            return lineShadingUsesLineColor ? .lineColor : .custom
+        }
+        set {
+            lineShadingEnabled = newValue != .off
+            if newValue != .off { lineShadingUsesLineColor = newValue == .lineColor }
+        }
+    }
 
     // In points; 0 hides that part of the dot.
     static let defaultDotRadius: Double = 4
@@ -395,6 +416,7 @@ final class AppSettings {
         load(\.extremeLow, "extremeLow")
         load(\.extremeHigh, "extremeHigh")
         load(\.theme, "theme")
+        load(\.dropdownBackground, "dropdownBackground")
         load(\.deltaDisplay, "deltaDisplay")
         load(\.rangeHours, "rangeHours")
         load(\.staleAfterMinutes, "staleAfterMinutes")
