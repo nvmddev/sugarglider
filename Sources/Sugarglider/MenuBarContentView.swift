@@ -19,9 +19,11 @@ struct MenuBarContentView: View {
                 .frame(height: 135 + GlucoseChart.laneSpace(for: store.treatments, settings: settings))
 
             HStack(spacing: 8) {
-                Slider(value: rangeBinding, in: Self.rangeSliderBounds, step: 1)
+                // Steps by the hour without drawing a tick for each.
+                Slider(value: rangeBinding, in: Self.rangeSliderBounds, step: 1,
+                       label: { Text("Chart range") }, tick: { _ in nil })
+                    .labelsHidden()
                     .tint(settings.sliderColor)
-                    .accessibilityLabel("Chart range")
                     .accessibilityValue("\(settings.rangeHours) hours")
                 Text("\(settings.rangeHours) h")
                     .font(.subheadline.monospacedDigit())

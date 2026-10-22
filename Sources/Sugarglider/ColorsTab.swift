@@ -26,9 +26,10 @@ struct ColorsTab: View {
                                 settings: settings, windowEnd: sampleEnd, treatments: treatments)
                         .frame(height: 95 + GlucoseChart.laneSpace(for: treatments, settings: settings))
                     HStack(spacing: 8) {
-                        Slider(value: $previewHours, in: Self.previewHoursBounds, step: 1)
+                        Slider(value: $previewHours, in: Self.previewHoursBounds, step: 1,
+                               label: { Text("Preview chart range") }, tick: { _ in nil })
+                            .labelsHidden()
                             .tint(settings.sliderColor)
-                            .accessibilityLabel("Preview chart range")
                             .accessibilityValue("\(Int(previewHours)) hours, preview only")
                         Text("\(Int(previewHours)) h")
                             .font(.subheadline.monospacedDigit())

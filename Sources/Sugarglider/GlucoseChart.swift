@@ -395,6 +395,9 @@ private struct HoverPill: View {
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
-        .glassEffect(.regular, in: .rect(cornerRadius: 8))
+        // Solid, not glass: it annotates content, and a backdrop inside the plot's clip renders garbage.
+        .background(Color(nsColor: .windowBackgroundColor), in: .rect(cornerRadius: 8))
+        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator) }
+        .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
     }
 }
