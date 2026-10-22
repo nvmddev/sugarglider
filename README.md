@@ -92,6 +92,11 @@ straight away whether the connection works.
 - No notifications, ever. Sugarglider only sees your Nightscout site, so it
   can't tell a sensor gap from a flat uploader, and it won't pretend otherwise.
 
+Sugarglider misses or misreads something your uploader sends, or you'd like an
+option it doesn't have? [Open an issue](https://github.com/nvmddev/sugarglider/issues/new/choose)
+or a pull request. For pump values, paste a record from your site's
+`/api/v1/devicestatus.json` and take out anything personal, like the device name.
+
 ## Trend arrows
 
 | Arrow | Nightscout direction |
