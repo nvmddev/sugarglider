@@ -7,13 +7,13 @@ private let oneReading = #"[{"sgv":100,"direction":"Flat","date":1700000400000}]
 extension SugargliderTests {
     @Test func fetchWithoutASiteURLIsNotConfigured() async {
         await #expect(throws: NightscoutError.notConfigured) {
-            try await Nightscout.fetchEntries(count: 1, baseURL: "", token: "")
+            try await Nightscout(baseURL: "", token: "").entries(count: 1)
         }
     }
 
     @Test func fetchRejectsAnInvalidSiteURL() async {
         await #expect(throws: NightscoutError.badURL) {
-            try await Nightscout.fetchEntries(count: 1, baseURL: "http://exa mple.com", token: "")
+            try await Nightscout(baseURL: "http://exa mple.com", token: "").entries(count: 1)
         }
     }
 
@@ -24,7 +24,7 @@ extension SugargliderTests {
             """)
         defer { server.stop() }
 
-        let readings = try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+        let readings = try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10)
         #expect(readings.map(\.sgv) == [100, 150])
         #expect(readings.first?.direction == "FortyFiveUp")
         #expect(readings.first?.date == Date(timeIntervalSince1970: 1_700_000_000))
@@ -41,7 +41,7 @@ extension SugargliderTests {
             """)
         defer { server.stop() }
 
-        let readings = try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+        let readings = try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10)
         #expect(readings.map(\.sgv) == [100, 110])
         #expect(readings.last?.direction == "")
     }
@@ -53,7 +53,7 @@ extension SugargliderTests {
             """)
         defer { server.stop() }
 
-        #expect(try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+        #expect(try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10)
             .map(\.sgv) == [100, 101])
     }
 
@@ -62,7 +62,7 @@ extension SugargliderTests {
         defer { server.stop() }
 
         await #expect(throws: NightscoutError.empty) {
-            try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+            try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10)
         }
     }
 
@@ -70,7 +70,7 @@ extension SugargliderTests {
         let server = try LocalHTTPServer(json: "[]")
         defer { server.stop() }
 
-        #expect(try await Nightscout.fetchEntries(count: 10, since: .now, baseURL: server.baseURL, token: "")
+        #expect(try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10, since: .now)
             .isEmpty)
     }
 
@@ -78,8 +78,7 @@ extension SugargliderTests {
         let server = try LocalHTTPServer(json: oneReading)
         defer { server.stop() }
 
-        _ = try await Nightscout.fetchEntries(count: 10, since: Date(timeIntervalSince1970: 1_700_000_000),
-                                              baseURL: server.baseURL, token: "")
+        _ = try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10, since: Date(timeIntervalSince1970: 1_700_000_000))
         #expect(server.requestLines == [
             "GET /api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$gt%5D=1700000000000 HTTP/1.1",
         ])
@@ -90,7 +89,7 @@ extension SugargliderTests {
         let server = try LocalHTTPServer(json: oneReading)
         defer { server.stop() }
 
-        _ = try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL + "///", token: token)
+        _ = try await Nightscout(baseURL: server.baseURL + "///", token: token).entries(count: 10)
         #expect(server.requestLines == ["GET /api/v1/entries/sgv.json?count=10\(tokenQuery) HTTP/1.1"])
     }
 
@@ -100,7 +99,7 @@ extension SugargliderTests {
         defer { server.stop() }
 
         await #expect(throws: NightscoutError.decode) {
-            try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+            try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10)
         }
     }
 
@@ -109,7 +108,7 @@ extension SugargliderTests {
         defer { server.stop() }
 
         await #expect(throws: NightscoutError.http(500)) {
-            try await Nightscout.fetchEntries(count: 10, baseURL: server.baseURL, token: "")
+            try await Nightscout(baseURL: server.baseURL, token: "").entries(count: 10)
         }
     }
 }
@@ -120,7 +119,7 @@ extension SugargliderTests {
         let server = try LocalHTTPServer(json: body)
         defer { server.stop() }
 
-        #expect(await Nightscout.probe(baseURL: server.baseURL, token: "") == .connected)
+        #expect(await Nightscout(baseURL: server.baseURL, token: "").probe() == .connected)
     }
 
     @Test(arguments: [401, 403])
@@ -128,7 +127,7 @@ extension SugargliderTests {
         let server = try LocalHTTPServer(status: status, json: "[]")
         defer { server.stop() }
 
-        #expect(await Nightscout.probe(baseURL: server.baseURL, token: "wrong")
+        #expect(await Nightscout(baseURL: server.baseURL, token: "wrong").probe()
             == .failed("Authentication failed — check the token"))
     }
 
@@ -136,10 +135,10 @@ extension SugargliderTests {
         let server = try LocalHTTPServer(status: 500, json: "[]")
         defer { server.stop() }
 
-        #expect(await Nightscout.probe(baseURL: server.baseURL, token: "") == .failed("HTTP 500"))
+        #expect(await Nightscout(baseURL: server.baseURL, token: "").probe() == .failed("HTTP 500"))
     }
 
     @Test func probeReportsAnInvalidURL() async {
-        #expect(await Nightscout.probe(baseURL: "http://exa mple.com", token: "") == .failed("Invalid URL"))
+        #expect(await Nightscout(baseURL: "http://exa mple.com", token: "").probe() == .failed("Invalid URL"))
     }
 }

@@ -58,8 +58,12 @@ nonisolated enum NightscoutError: LocalizedError, Equatable {
     }
 }
 
-enum Nightscout {
-    /// The 15 s timeout keeps a stalled request from pinning the poll timer.
+/// A Nightscout site. `token` is empty for a site that allows unauthenticated reads.
+struct Nightscout {
+    var baseURL: String
+    var token: String
+
+    /// The 15 s timeout keeps a stalled request from holding up the next poll.
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 15
@@ -93,19 +97,18 @@ enum Nightscout {
         }
     }
 
-    static func fetchEntries(count: Int, since: Date? = nil,
-                             baseURL: String, token: String) async throws -> [Reading] {
+    /// Oldest first. With `since` set this is a top-up, where nothing new is a valid answer.
+    func entries(count: Int, since: Date? = nil) async throws -> [Reading] {
         var query = [URLQueryItem(name: "count", value: String(count))]
         if let since {
             let millis = Int64((since.timeIntervalSince1970 * 1000).rounded())
             query.append(URLQueryItem(name: "find[date][$gt]", value: String(millis)))
         }
-        let data = try await get("/api/v1/entries/sgv.json", query: query, baseURL: baseURL, token: token)
-        guard let entries = try? decoder.decode([Entry].self, from: data) else {
+        let data = try await get("api/v1/entries/sgv.json", query: query)
+        guard let entries = try? Self.decoder.decode([Entry].self, from: data) else {
             throw NightscoutError.decode
         }
         let readings = entries.compactMap(\.reading).sorted { $0.date < $1.date }
-        // With `since` set this is a top-up, where nothing new is the normal answer.
         guard !readings.isEmpty || since != nil else { throw NightscoutError.empty }
         return readings
     }
@@ -115,31 +118,29 @@ enum Nightscout {
     static let deviceStatusCount = 10
 
     /// Nil rather than an error for a site without pump data: most only have a CGM uploading.
-    static func fetchPumpStatus(baseURL: String, token: String) async throws -> PumpStatus? {
-        let data = try await get("/api/v1/devicestatus.json",
-                                 query: [URLQueryItem(name: "count", value: String(deviceStatusCount))],
-                                 baseURL: baseURL, token: token)
-        return PumpStatus.merged(try records(in: data).compactMap(PumpStatus.init(record:)))
+    func pumpStatus() async throws -> PumpStatus? {
+        let data = try await get("api/v1/devicestatus.json",
+                                 query: [URLQueryItem(name: "count", value: String(Self.deviceStatusCount))])
+        return PumpStatus.merged(try Self.records(in: data).compactMap(PumpStatus.init(record:)))
     }
 
-    static func fetchTreatments(since: Date, count: Int,
-                                baseURL: String, token: String) async throws -> [Treatment] {
-        let data = try await get("/api/v1/treatments.json", query: [
-            URLQueryItem(name: "find[created_at][$gte]", value: NightscoutTime.string(since)),
+    /// Oldest first.
+    func treatments(count: Int, since: Date) async throws -> [Treatment] {
+        let data = try await get("api/v1/treatments.json", query: [
             URLQueryItem(name: "count", value: String(count)),
-        ], baseURL: baseURL, token: token)
-        return try records(in: data).compactMap(Treatment.init(record:)).sorted { $0.date < $1.date }
+            URLQueryItem(name: "find[created_at][$gte]", value: NightscoutTime.string(since)),
+        ])
+        return try Self.records(in: data).compactMap(Treatment.init(record:)).sorted { $0.date < $1.date }
     }
 
     /// `since` is required: without a date filter, Nightscout searches only the last two days.
-    static func fetchLatestEvent(_ eventType: String, since: Date,
-                                 baseURL: String, token: String) async throws -> Date? {
-        let data = try await get("/api/v1/treatments.json", query: [
+    func latestEvent(_ eventType: String, since: Date) async throws -> Date? {
+        let data = try await get("api/v1/treatments.json", query: [
+            URLQueryItem(name: "count", value: "1"),
             URLQueryItem(name: "find[eventType]", value: eventType),
             URLQueryItem(name: "find[created_at][$gte]", value: NightscoutTime.string(since)),
-            URLQueryItem(name: "count", value: "1"),
-        ], baseURL: baseURL, token: token)
-        return try records(in: data).compactMap { NightscoutTime.date($0["created_at"]) }.max()
+        ])
+        return try Self.records(in: data).compactMap { NightscoutTime.date($0["created_at"]) }.max()
     }
 
     private static func records(in data: Data) throws -> [[String: Any]] {
@@ -149,18 +150,16 @@ enum Nightscout {
         return array.compactMap { $0 as? [String: Any] }
     }
 
-    private static func get(_ path: String, query: [URLQueryItem],
-                            baseURL: String, token: String) async throws -> Data {
-        var base = baseURL.trimmingCharacters(in: .whitespaces)
+    private func get(_ path: String, query: [URLQueryItem]) async throws -> Data {
+        let base = baseURL.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(["/"]))
         guard !base.isEmpty else { throw NightscoutError.notConfigured }
-        while base.hasSuffix("/") { base.removeLast() }
-        guard var components = URLComponents(string: base + path) else { throw NightscoutError.badURL }
+        let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = token.isEmpty ? query : query + [URLQueryItem(name: "token", value: token)]
+        guard let url = URL(string: base)?.appending(path: path).appending(queryItems: items) else {
+            throw NightscoutError.badURL
+        }
 
-        let token = token.trimmingCharacters(in: .whitespaces)
-        components.queryItems = token.isEmpty ? query : query + [URLQueryItem(name: "token", value: token)]
-        guard let url = components.url else { throw NightscoutError.badURL }
-
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await Self.session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw NightscoutError.http(http.statusCode)
         }
@@ -172,9 +171,9 @@ enum Nightscout {
         case failed(String)
     }
 
-    static func probe(baseURL: String, token: String) async -> ProbeResult {
+    func probe() async -> ProbeResult {
         do {
-            _ = try await fetchEntries(count: 1, baseURL: baseURL, token: token)
+            _ = try await entries(count: 1)
             return .connected
         } catch NightscoutError.empty {
             return .connected  // the credentials work, the site just has no readings yet

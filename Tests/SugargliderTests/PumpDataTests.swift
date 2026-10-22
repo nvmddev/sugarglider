@@ -194,7 +194,7 @@ extension SugargliderTests {
              {"created_at":"2030-01-01T11:55:00Z","pump":{"reservoir":121}}]
             """)
         defer { server.stop() }
-        let status = try #require(try await Nightscout.fetchPumpStatus(baseURL: server.baseURL, token: "t"))
+        let status = try #require(try await Nightscout(baseURL: server.baseURL, token: "t").pumpStatus())
         #expect(status.reservoir == 120)
         #expect(status.mode == .auto)
         let line = try #require(server.requestLines.first)
@@ -206,7 +206,7 @@ extension SugargliderTests {
     @Test func fetchPumpStatusOfASiteWithoutOneIsNil() async throws {
         let server = try LocalHTTPServer(json: #"[{"created_at":"2030-01-01T11:55:00Z","uploader":{"battery":80}}]"#)
         defer { server.stop() }
-        #expect(try await Nightscout.fetchPumpStatus(baseURL: server.baseURL, token: "") == nil)
+        #expect(try await Nightscout(baseURL: server.baseURL, token: "").pumpStatus() == nil)
     }
 
     @Test func fetchTreatmentsFiltersByDateAndSortsOldestFirst() async throws {
@@ -217,8 +217,7 @@ extension SugargliderTests {
             """)
         defer { server.stop() }
         let since = try #require(NightscoutTime.date("2030-01-01T06:00:00.000Z"))
-        let treatments = try await Nightscout.fetchTreatments(since: since, count: 500,
-                                                              baseURL: server.baseURL, token: "")
+        let treatments = try await Nightscout(baseURL: server.baseURL, token: "").treatments(count: 500, since: since)
         #expect(treatments.map(\.id) == ["1", "2"])
         let line = try #require(server.requestLines.first)
         #expect(line.contains("/api/v1/treatments.json"))
@@ -230,15 +229,14 @@ extension SugargliderTests {
         let server = try LocalHTTPServer(json: #"{"status":401}"#)
         defer { server.stop() }
         await #expect(throws: NightscoutError.self) {
-            try await Nightscout.fetchTreatments(since: .now, count: 10, baseURL: server.baseURL, token: "")
+            try await Nightscout(baseURL: server.baseURL, token: "").treatments(count: 10, since: .now)
         }
     }
 
     @Test func fetchLatestEventAsksForThatEventOnly() async throws {
         let server = try LocalHTTPServer(json: #"[{"eventType":"Insulin Change","created_at":"2030-01-01T08:00:00.128Z"}]"#)
         defer { server.stop() }
-        let date = try await Nightscout.fetchLatestEvent("Insulin Change", since: Date(timeIntervalSince1970: 0),
-                                                         baseURL: server.baseURL, token: "")
+        let date = try await Nightscout(baseURL: server.baseURL, token: "").latestEvent("Insulin Change", since: Date(timeIntervalSince1970: 0))
         #expect(date == NightscoutTime.date("2030-01-01T08:00:00.128Z"))
         let line = try #require(server.requestLines.first)
         #expect(line.contains("eventType%5D=Insulin%20Change"))
@@ -248,8 +246,7 @@ extension SugargliderTests {
 
         let empty = try LocalHTTPServer(json: "[]")
         defer { empty.stop() }
-        #expect(try await Nightscout.fetchLatestEvent("Insulin Change", since: .now,
-                                                      baseURL: empty.baseURL, token: "") == nil)
+        #expect(try await Nightscout(baseURL: empty.baseURL, token: "").latestEvent("Insulin Change", since: .now) == nil)
     }
 }
 

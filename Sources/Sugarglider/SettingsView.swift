@@ -126,7 +126,7 @@ private struct GeneralTab: View {
         status = .checking
         try? await Task.sleep(for: .milliseconds(600))
         guard !Task.isCancelled else { return }
-        let result = await Nightscout.probe(baseURL: settings.baseURL, token: settings.token)
+        let result = await settings.nightscout.probe()
         guard !Task.isCancelled else { return }
         status = .probed(result)
     }

@@ -87,10 +87,10 @@ final class ReadingStore {
     /// Fetches the two newest entries: the older one is what the delta is taken against.
     func refresh() {
         guard settings.isConfigured else { return }
-        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
+        let (site, generation) = (settings.nightscout, generation)
         Task {
             do {
-                let latest = try await Nightscout.fetchEntries(count: 2, baseURL: baseURL, token: token)
+                let latest = try await site.entries(count: 2)
                 guard generation == self.generation else { return }
                 showNewest(of: latest)
                 if Self.joinsUp(latest, with: readings) { merge(latest) }
@@ -117,10 +117,9 @@ final class ReadingStore {
         // Never nil, not even for a covered but empty cache: that would be an unfiltered request.
         let since = (covered ? readings.last?.date : nil) ?? start
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
+        let (site, generation) = (settings.nightscout, generation)
         Task {
-            guard let fetched = try? await Nightscout.fetchEntries(
-                    count: count, since: since, baseURL: baseURL, token: token),
+            guard let fetched = try? await site.entries(count: count, since: since),
                   generation == self.generation else { return }
             fetchedAt[.history] = .now
             if !covered { historyWindowStart = start }
@@ -174,12 +173,12 @@ final class ReadingStore {
     private func refreshPumpStatus(force: Bool) {
         guard settings.isConfigured, settings.needsPumpStatus,
               force || !fetchedRecently(.pumpStatus) else { return }
-        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
+        let (site, generation) = (settings.nightscout, generation)
         Task {
             // Not `try?`, which would flatten the two: nil is an answer (no pump on the site),
             // a failure keeps the old status.
             let status: PumpStatus?
-            do { status = try await Nightscout.fetchPumpStatus(baseURL: baseURL, token: token) } catch { return }
+            do { status = try await site.pumpStatus() } catch { return }
             guard generation == self.generation else { return }
             fetchedAt[.pumpStatus] = .now
             pumpStatus = status
@@ -194,10 +193,9 @@ final class ReadingStore {
         let since = Self.treatmentsSince(windowStart: start, covered: covered,
                                          newestCached: treatments.last?.date)
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
+        let (site, generation) = (settings.nightscout, generation)
         Task {
-            guard let fetched = try? await Nightscout.fetchTreatments(
-                    since: since, count: count, baseURL: baseURL, token: token),
+            guard let fetched = try? await site.treatments(count: count, since: since),
                   generation == self.generation else { return }
             fetchedAt[.treatments] = .now
             if !covered { treatmentsWindowStart = start }
@@ -216,12 +214,11 @@ final class ReadingStore {
               force || !fetchedRecently(.changeDates) else { return }
         let since = Date.now.addingTimeInterval(-Self.changeLookback)
         let (showsReservoir, showsBattery) = (settings.showReservoir, settings.showPumpBattery)
-        let (baseURL, token, generation) = (settings.baseURL, settings.token, generation)
+        let (site, generation) = (settings.nightscout, generation)
         Task {
             func latest(_ eventType: String, if shown: Bool) async throws -> Date? {
                 guard shown else { return nil }
-                return try await Nightscout.fetchLatestEvent(eventType, since: since,
-                                                             baseURL: baseURL, token: token)
+                return try await site.latestEvent(eventType, since: since)
             }
             // Like the status: nil is an answer (no change on record), a failure keeps the old dates.
             let dates: (reservoir: Date?, battery: Date?)

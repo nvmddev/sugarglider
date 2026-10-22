@@ -154,7 +154,7 @@ func waitUntil(_ what: String, _ condition: () -> Bool) async throws {
     Issue.record("timed out waiting for \(what)")
 }
 
-/// Rounded the way `Nightscout.fetchEntries` rounds its date filter.
+/// Rounded the way `Nightscout.entries` rounds its date filter.
 func epochMillis(_ date: Date) -> Int64 {
     Int64((date.timeIntervalSince1970 * 1000).rounded())
 }

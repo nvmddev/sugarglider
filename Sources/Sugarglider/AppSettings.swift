@@ -36,7 +36,9 @@ final class AppSettings {
     /// No plist fallback on purpose: that is what the Keychain replaced.
     var tokenStorageFailed = false
 
-    var isConfigured: Bool { !baseURL.trimmingCharacters(in: .whitespaces).isEmpty }
+    var isConfigured: Bool { !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var nightscout: Nightscout { Nightscout(baseURL: baseURL, token: token) }
 
     // MARK: - Glucose and display
 
