@@ -70,30 +70,6 @@ final class AppSettings {
         .number.precision(.fractionLength(0...(units == .mmol ? 1 : 0))).grouping(.never)
     }
 
-    enum Theme: String {
-        case system, light, dark
-
-        /// For the dropdown panel, which ignores `preferredColorScheme`.
-        var nsAppearance: NSAppearance? {
-            switch self {
-            case .system: nil
-            case .light: NSAppearance(named: .aqua)
-            case .dark: NSAppearance(named: .darkAqua)
-            }
-        }
-
-        /// For the Settings window, where SwiftUI resets a manually set window appearance.
-        var colorScheme: ColorScheme? {
-            switch self {
-            case .system: nil
-            case .light: .light
-            case .dark: .dark
-            }
-        }
-    }
-
-    var theme: Theme = .system { didSet { persist(theme.rawValue, "theme") } }
-
     enum DropdownBackground: String { case glass, solid }
 
     var dropdownBackground: DropdownBackground = .glass {
@@ -386,7 +362,6 @@ final class AppSettings {
         load(\.targetHigh, "targetHigh")
         load(\.extremeLow, "extremeLow")
         load(\.extremeHigh, "extremeHigh")
-        load(\.theme, "theme")
         load(\.dropdownBackground, "dropdownBackground")
         load(\.deltaDisplay, "deltaDisplay")
         load(\.rangeHours, "rangeHours")

@@ -48,7 +48,6 @@ struct MenuBarContentView: View {
         .dropdownBackground(settings.dropdownBackground)
         .task { await store.refreshHistory(force: false) }
         .task { await store.refreshDetails(force: false) }
-        .windowTheme(settings.theme)
         .windowShowsToolTipsWhenInactive()
     }
 

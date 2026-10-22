@@ -2,17 +2,6 @@ import SwiftUI
 import AppKit
 
 extension View {
-    /// Applies the theme to the hosting `NSWindow`, which retints AppKit dynamic colors too. Only for
-    /// the dropdown: its panel ignores `preferredColorScheme`, while SwiftUI resets a manual appearance
-    /// on the Settings window. `NSApp.appearance` would also retint the status item, which has to
-    /// follow the menu bar.
-    func windowTheme(_ theme: AppSettings.Theme) -> some View {
-        let appearance = theme.nsAppearance
-        return hostingWindow { window in
-            if window.appearance?.name != appearance?.name { window.appearance = appearance }
-        }
-    }
-
     /// Glass, or the window color over the glass. The glass clips its content to its own shape, so the solid
     /// color keeps the round corners. `containerBackground(_:for: .window)` has no effect on this panel.
     func dropdownBackground(_ background: AppSettings.DropdownBackground) -> some View {
