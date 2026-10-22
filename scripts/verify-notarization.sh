@@ -37,7 +37,7 @@ echo "==> Verifying $(basename "${ZIP}")"
 ditto -x -k "${ZIP}" "${STAGING}"
 [[ -d "${STAGING}/${APP}" ]] || fail "${ZIP} does not contain ${APP}."
 xcrun stapler validate "${STAGING}/${APP}" \
-    || fail "The app inside ${ZIP} has no ticket — it was zipped before stapling."
+    || fail "The app inside ${ZIP} has no ticket. It was zipped before stapling."
 
 echo "==> Verifying $(basename "${DMG}")"
 xcrun stapler validate "${DMG}" || fail "${DMG} carries no stapled notarization ticket."

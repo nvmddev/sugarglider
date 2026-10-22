@@ -113,7 +113,7 @@ done < <(git log --no-merges --format='%H%x1f%s%x1f%b%x1e' "${RANGE}")
 
 render() {
     local section
-    printf '## [%s](%s) — %s\n' "${VERSION}" "${REPO_URL}/releases/tag/v${VERSION}" "${DATE}"
+    printf '## [%s](%s) (%s)\n' "${VERSION}" "${REPO_URL}/releases/tag/v${VERSION}" "${DATE}"
 
     if [[ "${count}" -eq 0 ]]; then
         printf '\nNo code changes since %s.\n' "${FROM:-the initial commit}"
@@ -143,7 +143,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are generated
 from [Conventional Commits](https://www.conventionalcommits.org/) by
-`scripts/changelog.sh` — edit commit messages, not this file.
+`scripts/changelog.sh`, so edit commit messages, not this file.
 
 HEADER
     render >> "${NEW}"

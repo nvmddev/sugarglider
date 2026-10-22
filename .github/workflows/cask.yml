@@ -45,7 +45,7 @@ jobs:
           if [[ -z "${version}" ]]; then
             version="$(gh release view --repo "${GITHUB_REPOSITORY}" --json tagName --jq '.tagName')"
             version="${version#v}"
-            echo "No version given — using the latest release: ${version}"
+            echo "No version given. Using the latest release: ${version}"
           fi
 
           # Read from the release itself, so the cask describes what is published.
@@ -72,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${GH_TOKEN}" ]]; then
-            echo "::notice::HOMEBREW_TAP_TOKEN not set — skipping the cask update."
+            echo "::notice::HOMEBREW_TAP_TOKEN not set, so the cask update is skipped."
             exit 0
           fi
           TAP_REPO="${TAP_REPO:-${GITHUB_REPOSITORY_OWNER}/homebrew-tap}"
