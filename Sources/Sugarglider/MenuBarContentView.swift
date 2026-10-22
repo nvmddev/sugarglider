@@ -19,10 +19,10 @@ struct MenuBarContentView: View {
                 .frame(height: 135 + GlucoseChart.laneSpace(for: store.treatments, settings: settings))
 
             HStack(spacing: 8) {
-                TintedSlider(value: rangeBinding, range: Self.rangeSliderBounds, step: 1,
-                             tint: settings.sliderColor,
-                             accessibilityValueText: "\(settings.rangeHours) hours")
+                Slider(value: rangeBinding, in: Self.rangeSliderBounds, step: 1)
+                    .tint(settings.sliderColor)
                     .accessibilityLabel("Chart range")
+                    .accessibilityValue("\(settings.rangeHours) hours")
                 Text("\(settings.rangeHours) h")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
