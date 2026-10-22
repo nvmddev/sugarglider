@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Synchronization
 @testable import Sugarglider
 
 extension SugargliderTests {
@@ -36,6 +37,18 @@ extension SugargliderTests {
         #expect(!store.isStale)
         settings.staleAfterMinutes = 5
         #expect(store.isStale)
+    }
+
+    /// The menu bar label redraws only when something it reads changes, and while polls fail nothing
+    /// else does.
+    @Test func clockTicksReachWhatTheStaleCheckReads() {
+        let store = ReadingStore(settings: Self.makeSettings())
+        store.lastReading = reading(100, minutesAgo: 5)
+        let redrawn = Atomic(false)
+        withObservationTracking { _ = store.isStale } onChange: { redrawn.store(true, ordering: .relaxed) }
+        store.tick()
+        let didRedraw = redrawn.load(ordering: .relaxed)
+        #expect(didRedraw)
     }
 
     @Test(arguments: [

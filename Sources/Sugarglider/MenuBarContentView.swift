@@ -18,7 +18,7 @@ struct MenuBarContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Self.spacing) {
             ChartCanvas(readings: store.readings, rangeHours: settings.rangeHours, settings: settings,
-                        treatments: store.treatments)
+                        windowEnd: store.now, treatments: store.treatments)
                 .frame(height: 135 + ChartCanvas.laneSpace(for: store.treatments, settings: settings))
 
             HStack(spacing: 6) {
@@ -220,7 +220,7 @@ struct MenuBarContentView: View {
     private var ageText: String {
         guard settings.isConfigured else { return "Open Settings to add your Nightscout URL" }
         guard let reading = store.lastReading else { return store.lastError ?? "" }
-        var text = "Reading \(ReadingStore.relative(reading.date))"
+        var text = "Reading \(ReadingStore.relative(reading.date, now: store.now))"
         if store.isStale { text += " (stale)" }
         if let error = store.lastError { text += " — \(error)" }
         return text

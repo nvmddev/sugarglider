@@ -17,7 +17,7 @@ struct MenuBarLabel: View {
         let delta = settings.deltaDisplay == .menuAndStatusBar ? store.deltaText().map { "  (\($0))" } : nil
         // The age is the only escalation, by design: the app can't tell a sensor gap from a
         // network one, so it never notifies.
-        let age = store.isStale ? " ⚠ \(ReadingStore.compactAge(reading.date))" : ""
+        let age = store.isStale ? " ⚠ \(ReadingStore.compactAge(reading.date, now: store.now))" : ""
         return "\(reading.text(in: settings.units))\(arrow)\(delta ?? "")\(age)"
     }
 }

@@ -20,7 +20,7 @@ struct PumpDetailsView: View {
 
     var body: some View {
         let rows = Self.rows(status: store.pumpStatus, reservoirChanged: store.reservoirChanged,
-                             batteryChanged: store.batteryChanged, settings: settings)
+                             batteryChanged: store.batteryChanged, settings: settings, now: store.now)
         let daily = Self.dailyRows(status: store.pumpStatus, settings: settings)
         if !rows.isEmpty || !daily.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -39,7 +39,7 @@ struct PumpDetailsView: View {
                     }
                 }
                 if !daily.isEmpty { dailyTable(daily) }
-                if let stale = Self.staleNote(status: store.pumpStatus, settings: settings) {
+                if let stale = Self.staleNote(status: store.pumpStatus, settings: settings, now: store.now) {
                     Text(stale).font(.system(size: 10)).foregroundStyle(.tertiary)
                 }
             }
@@ -76,7 +76,7 @@ struct PumpDetailsView: View {
     }
 
     static func rows(status: PumpStatus?, reservoirChanged: Date?, batteryChanged: Date?,
-                     settings: AppSettings, now: Date = .now) -> [Row] {
+                     settings: AppSettings, now: Date) -> [Row] {
         guard let status else { return [] }
         var rows: [Row] = []
         if settings.showActiveInsulin, let iob = status.insulinOnBoard {
@@ -128,8 +128,8 @@ struct PumpDetailsView: View {
 
     /// The uploader can stop sending device statuses while glucose keeps flowing, and nothing else
     /// would show it.
-    static func staleNote(status: PumpStatus?, settings: AppSettings, now: Date = .now) -> String? {
+    static func staleNote(status: PumpStatus?, settings: AppSettings, now: Date) -> String? {
         guard let status, now.timeIntervalSince(status.date) > settings.staleThreshold else { return nil }
-        return "Pump data from \(ReadingStore.relative(status.date))"
+        return "Pump data from \(ReadingStore.relative(status.date, now: now))"
     }
 }
