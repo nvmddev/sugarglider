@@ -70,7 +70,7 @@ struct GeneralTab: View {
             Section {
                 Toggle("Open at Login", isOn: Binding(
                     get: { loginItem == .enabled || loginItem == .requiresApproval },
-                    set: setOpensAtLogin))
+                    set: { setOpensAtLogin($0) }))
             } footer: {
                 if loginItem == .requiresApproval {
                     HStack {
