@@ -1,8 +1,12 @@
+import ServiceManagement
 import SwiftUI
 
 struct GeneralTab: View {
     @Bindable var settings: AppSettings
     @State private var status = ConnectionStatus.unconfigured
+    // SMAppService's status isn't observable, so it's mirrored here and re-read after every change.
+    @State private var loginItem = SMAppService.mainApp.status
+    @State private var loginItemError: String?
 
     private enum ConnectionStatus {
         case unconfigured
@@ -63,10 +67,42 @@ struct GeneralTab: View {
                 Text("A reading with no successor for the stale delay is marked with ⚠ and its age in the menu bar.")
                     .foregroundStyle(.secondary)
             }
+            Section {
+                Toggle("Open at Login", isOn: Binding(
+                    get: { loginItem == .enabled || loginItem == .requiresApproval },
+                    set: setOpensAtLogin))
+            } footer: {
+                if loginItem == .requiresApproval {
+                    HStack {
+                        Text("Allow Sugarglider under Login Items to finish.")
+                            .foregroundStyle(.secondary)
+                        Button("Open Login Items…") { SMAppService.openSystemSettingsLoginItems() }
+                            .buttonStyle(.link)
+                    }
+                }
+                if let loginItemError {
+                    Text(loginItemError).foregroundStyle(.red)
+                }
+            }
         }
         .formStyle(.grouped)
         .autocorrectionDisabled()
         .task(id: [settings.baseURL, settings.token]) { await checkConnection() }
+        .onAppear { loginItem = SMAppService.mainApp.status }
+    }
+
+    private func setOpensAtLogin(_ isOn: Bool) {
+        do {
+            if isOn {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            loginItemError = nil
+        } catch {
+            loginItemError = error.localizedDescription
+        }
+        loginItem = SMAppService.mainApp.status
     }
 
     private func intervalField(_ prefix: String, value: Binding<Int>,

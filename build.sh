@@ -127,4 +127,3 @@ fi
 echo "Built ${APP} (${VERSION}, build ${BUILD_NUMBER})"
 echo "  Run it:     open ${APP}"
 echo "  Install:    cp -r ${APP} /Applications/"
-echo "  Login item: System Settings > General > Login Items & Extensions > Open at Login"

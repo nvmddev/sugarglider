@@ -44,8 +44,7 @@ Or grab the `.dmg` from the [latest release](https://github.com/nvmddev/sugargli
 and drag **Sugarglider.app** into `/Applications`. Signed and notarized, so it
 opens without a Gatekeeper detour.
 
-Want it running after a restart? Add it under **Open at Login** in **System
-Settings → General → Login Items & Extensions**.
+Want it running after a restart? Turn on **Open at Login** in its settings.
 
 ## Set up
 
