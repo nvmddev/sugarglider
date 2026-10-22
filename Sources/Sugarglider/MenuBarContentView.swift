@@ -37,7 +37,7 @@ struct MenuBarContentView: View {
             }
 
             // No modifiers: without pump data this renders nothing, but a wrapper would still take a gap.
-            PumpDetailsView(settings: settings, store: store, width: contentWidth)
+            PumpDetailsView(settings: settings, store: store)
 
             Divider()
 

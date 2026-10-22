@@ -3,7 +3,6 @@ import SwiftUI
 struct PumpDetailsView: View {
     var settings: AppSettings
     var store: ReadingStore
-    var width: CGFloat
 
     struct Row: Equatable {
         var label: String
@@ -45,7 +44,6 @@ struct PumpDetailsView: View {
             }
             .font(.system(size: 11))
             .monospacedDigit()
-            .frame(width: width)
         }
     }
 
