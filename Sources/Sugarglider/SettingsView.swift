@@ -189,8 +189,12 @@ private struct ColorsTab: View {
                 .padding(.horizontal, 10)
         }
         .padding([.horizontal, .top], 20)
+        // Lined up with the form below, whose grouped sections stop growing at this width (measured).
+        .frame(maxWidth: Self.formSectionMaxWidth + 40)
         .onAppear { sampleEnd = .now }
     }
+
+    private static let formSectionMaxWidth: CGFloat = 704
 
     private static let previewHoursBounds =
         Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
@@ -272,11 +276,13 @@ private struct ColorsTab: View {
                     Swatch("Range band", help: "The optimal range behind the line", color: $settings.bandColor),
                     Swatch("Slider", help: "The dropdown's range slider", color: $settings.sliderColor),
                 ])
-                choiceRow("Background", selection: $settings.chartBackgroundEnabled,
-                          color: $settings.chartBackgroundColor,
-                          customEnabled: settings.chartBackgroundEnabled) {
-                    Text("None").tag(false)
-                    Text("Custom").tag(true)
+                // Two options, so a switch rather than a menu.
+                wellRow("Background", color: $settings.chartBackgroundColor,
+                        enabled: settings.chartBackgroundEnabled) {
+                    // Explicit: nested in a row's content, a toggle falls back to a checkbox.
+                    Toggle("Background", isOn: $settings.chartBackgroundEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
                 }
                 swatchRow("Pump data", [
                     Swatch("Boluses", help: "Bolus bars under the chart", color: $settings.bolusColor,
@@ -314,8 +320,11 @@ private struct ColorsTab: View {
     }
 
     // One row of wells instead of a row per color; a common column width lines them up across rows.
+    // Not LabeledContent: that pins its label to the top of a two-line row instead of centering it.
     private func swatchRow(_ label: String, _ swatches: [Swatch]) -> some View {
-        LabeledContent(label) {
+        HStack {
+            Text(label)
+            Spacer()
             HStack(alignment: .top, spacing: 4) {
                 ForEach(swatches) { swatch in
                     VStack(spacing: 3) {
@@ -334,6 +343,8 @@ private struct ColorsTab: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(label)
     }
 
     private static let swatchWidth: CGFloat = 70
@@ -342,14 +353,22 @@ private struct ColorsTab: View {
     private func choiceRow<Value: Hashable>(_ label: String, selection: Binding<Value>, color: Binding<Color>,
                                             customEnabled: Bool,
                                             @ViewBuilder options: () -> some View) -> some View {
+        wellRow(label, color: color, enabled: customEnabled) {
+            Picker(label, selection: selection, content: options)
+                .labelsHidden()
+                .fixedSize()
+        }
+    }
+
+    // A control and the well it unlocks, the well in the swatch rows' last column.
+    private func wellRow(_ label: String, color: Binding<Color>, enabled: Bool,
+                         @ViewBuilder control: () -> some View) -> some View {
         LabeledContent(label) {
             HStack(spacing: 8) {
-                Picker(label, selection: selection, content: options)
-                    .labelsHidden()
-                    .fixedSize()
+                control()
                 ColorPicker("\(label) color", selection: color)
                     .labelsHidden()
-                    .disabled(!customEnabled)
+                    .disabled(!enabled)
                     .frame(width: Self.swatchWidth)
             }
         }
