@@ -322,7 +322,7 @@ struct GlucoseChart: View {
             }
         }
         .chartXScale(domain: p.start...p.end)
-        .chartYScale(domain: 0...(Self.laneHeight / (Self.laneHeight - 4)))
+        .chartYScale(domain: 0...Double(Self.laneHeight / (Self.laneHeight - 4)))
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartPlotStyle { plot in
