@@ -31,7 +31,7 @@ part with `gh workflow run cask.yml -f version=1.2.0` (no version means the
 latest release).
 
 Nothing releases on its own: landing a commit on `main` only runs CI. `bump=auto`
-also refuses when nothing under `Sources/`, `Resources/` or `Package.swift` has
+also refuses when nothing under `Sources/`, `Resources/` or `Sugarglider.xcodeproj` has
 changed since the last tag, since a run of CI-only or docs-only commits would
 otherwise ship a byte-identical app under a new number. Pass an explicit
 `bump=patch` (or push a tag) when you want that anyway.
