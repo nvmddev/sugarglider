@@ -5,7 +5,9 @@ import SwiftUI
 /// Every persisted scalar setting in the format the app has always stored it,
 /// each value off its default so a skipped key can't pass unnoticed.
 private enum StoredSettings {
-    static let strings: [String: String] = ["baseURL": "https://site.example", "units": "mgdl", "theme": "dark"]
+    static let strings: [String: String] = [
+        "baseURL": "https://site.example", "units": "mgdl", "theme": "dark", "dropdownBackground": "solid",
+    ]
     static let doubles: [String: Double] = [
         "targetLow": 80, "targetHigh": 190, "extremeLow": 50, "extremeHigh": 260,
         "dotRadius": 6.5, "dotHaloRadius": 9,
@@ -50,6 +52,7 @@ extension SugargliderTests {
         #expect(s.token == "")
         #expect(s.units == .mmol)
         #expect(s.theme == .system)
+        #expect(s.dropdownBackground == .glass)
         #expect(s.deltaDisplay == .menu)
         #expect(s.targetLow == 70)
         #expect(s.targetHigh == 180)
@@ -95,6 +98,7 @@ extension SugargliderTests {
         #expect(s.baseURL == "https://site.example")
         #expect(s.units == .mgdl)
         #expect(s.theme == .dark)
+        #expect(s.dropdownBackground == .solid)
         #expect(s.targetLow == 80)
         #expect(s.targetHigh == 190)
         #expect(s.extremeLow == 50)
@@ -123,12 +127,28 @@ extension SugargliderTests {
         #expect(s.chartShowsAnnouncements)
     }
 
+    @Test func lineShadingMenuMapsOntoBothSwitches() {
+        let s = Self.makeSettings()
+        #expect(s.lineShading == .lineColor)
+        s.lineShading = .custom
+        #expect(s.lineShadingEnabled && !s.lineShadingUsesLineColor)
+        s.lineShading = .off
+        #expect(!s.lineShadingEnabled)
+        #expect(!s.lineShadingUsesLineColor, "off keeps the color choice")
+        #expect(s.lineShading == .off)
+        s.lineShadingEnabled = true
+        #expect(s.lineShading == .custom)
+        s.lineShading = .lineColor
+        #expect(s.lineShadingEnabled && s.lineShadingUsesLineColor)
+    }
+
     @Test func everySettingPersistsUnderItsKeyInItsStoredType() {
         let defaults = Self.makeDefaults()
         let s = Self.makeSettings(defaults: defaults)
         s.baseURL = "https://site.example"
         s.units = .mgdl
         s.theme = .dark
+        s.dropdownBackground = .solid
         s.targetLow = 80
         s.targetHigh = 190
         s.extremeLow = 50
@@ -180,11 +200,13 @@ extension SugargliderTests {
         let defaults = Self.makeDefaults()
         defaults.set("metric", forKey: "units")
         defaults.set("sepia", forKey: "theme")
+        defaults.set("frosted", forKey: "dropdownBackground")
         defaults.set(7, forKey: "deltaDisplay")
         defaults.set("lots", forKey: "rangeHours")
         let s = Self.makeSettings(defaults: defaults)
         #expect(s.units == .mmol)
         #expect(s.theme == .system)
+        #expect(s.dropdownBackground == .glass)
         #expect(s.deltaDisplay == .menu)
         #expect(s.rangeHours == 6)
     }

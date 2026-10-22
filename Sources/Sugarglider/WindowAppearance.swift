@@ -13,10 +13,35 @@ extension View {
         }
     }
 
+    /// Glass, or the window color over the glass. The glass clips its content to its own shape, so the solid
+    /// color keeps the round corners. `containerBackground(_:for: .window)` has no effect on this panel.
+    func dropdownBackground(_ background: AppSettings.DropdownBackground) -> some View {
+        self.background {
+            if background == .solid { Color(nsColor: .windowBackgroundColor) }
+        }
+    }
+
     /// AppKit shows a window's tooltips only while its app is active, unless the window opts in, and the
     /// dropdown opens over whichever app is in front.
     func windowShowsToolTipsWhenInactive() -> some View {
         hostingWindow { $0.allowsToolTipsWhenApplicationIsInactive = true }
+    }
+
+    /// Lets the user resize the Settings window, which SwiftUI keeps fixed even under
+    /// `.windowResizability(.contentMinSize)` and opens 900 pt wide whatever the ideal frame says (both
+    /// measured). Deferred a turn because SwiftUI clears `.resizable` again while it sets the window up.
+    /// The frame is saved under a name of our own: SwiftUI's saves the fixed size too, so an existing one
+    /// would hold the window at the old size forever.
+    func windowResizable(defaultSize: CGSize, autosaveName: String) -> some View {
+        hostingWindow { window in
+            guard !window.styleMask.contains(.resizable) else { return }
+            Task { @MainActor in
+                guard !window.styleMask.contains(.resizable) else { return }
+                window.styleMask.insert(.resizable)
+                if !window.setFrameUsingName(autosaveName) { window.setContentSize(defaultSize) }
+                window.setFrameAutosaveName(autosaveName)
+            }
+        }
     }
 
     // Zero-sized because ImageRenderer draws an NSViewRepresentable as a yellow placeholder.

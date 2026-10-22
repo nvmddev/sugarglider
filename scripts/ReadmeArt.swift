@@ -139,9 +139,6 @@ struct DropdownShot: View {
 
     var body: some View {
         MenuBarContentView(settings: settings, store: store)
-            .overlay(alignment: .bottom) {
-                ActionRowStandIn(appearance: appearance).padding(MenuBarContentView.insets)
-            }
             .background(appearance.panelBackground)
             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay {
@@ -150,42 +147,6 @@ struct DropdownShot: View {
                                   lineWidth: 0.5)
             }
             .padding(10)
-    }
-}
-
-// Glass doesn't render off-screen, which leaves the dropdown's row of glass
-// buttons blank. Mirrors that row in MenuBarContentView, for the pictures only.
-struct ActionRowStandIn: View {
-    let appearance: Appearance
-
-    // Glass still takes part in layout, so the real button can be measured.
-    private static let diameter = NSHostingView(rootView: GlassButton()).fittingSize.height
-
-    private struct GlassButton: View {
-        var body: some View {
-            Button {} label: { Image(systemName: "power").frame(width: 18, height: 18) }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            button("arrow.clockwise")
-            button("gearshape")
-            Spacer()
-            button("power")
-        }
-    }
-
-    private func button(_ systemImage: String) -> some View {
-        Image(systemName: systemImage)
-            .frame(width: Self.diameter, height: Self.diameter)
-            .background {
-                Circle()
-                    .fill(appearance == .dark ? Color(white: 0.26) : .white)
-                    .shadow(color: .black.opacity(appearance == .dark ? 0.4 : 0.14), radius: 1.5, y: 0.5)
-            }
     }
 }
 
