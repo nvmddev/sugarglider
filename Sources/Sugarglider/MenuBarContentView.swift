@@ -46,10 +46,8 @@ struct MenuBarContentView: View {
         .frame(width: contentWidth)
         .padding(Self.insets)
         .dropdownBackground(settings.dropdownBackground)
-        .onAppear {
-            store.refreshHistory(force: false)
-            store.refreshDetails(force: false)
-        }
+        .task { await store.refreshHistory(force: false) }
+        .task { await store.refreshDetails(force: false) }
         .windowTheme(settings.theme)
         .windowShowsToolTipsWhenInactive()
     }
@@ -58,9 +56,9 @@ struct MenuBarContentView: View {
     private var actionButtons: some View {
         HStack(spacing: 8) {
             actionButton("Refresh", systemImage: "arrow.clockwise", shortcut: "r") {
-                store.refresh()
-                store.refreshHistory(force: true)
-                store.refreshDetails(force: true)
+                Task { await store.refresh() }
+                Task { await store.refreshHistory(force: true) }
+                Task { await store.refreshDetails(force: true) }
             }
             actionButton("Settings…", systemImage: "gearshape", shortcut: ",") { showSettings() }
             Spacer()

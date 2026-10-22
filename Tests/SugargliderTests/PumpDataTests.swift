@@ -354,8 +354,7 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         settings.baseURL = server.baseURL
         for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
-        ReadingStore(settings: settings).refreshDetails(force: true)
-        try await Task.sleep(for: .milliseconds(300))
+        await ReadingStore(settings: settings).refreshDetails(force: true)
         #expect(server.requestLines.isEmpty)
     }
 
@@ -365,8 +364,7 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         settings.baseURL = server.baseURL
         let store = ReadingStore(settings: settings)
-        store.refreshDetails(force: true)
-        try await waitUntil("the pump status") { store.pumpStatus != nil }
+        await store.refreshDetails(force: true)
         #expect(store.pumpStatus?.reservoir == 120)
         #expect(server.requestLines.contains { $0.contains("/api/v1/devicestatus.json") })
     }
@@ -381,15 +379,14 @@ extension SugargliderTests {
         settings.baseURL = server.baseURL
         let store = ReadingStore(settings: settings)
 
-        store.refreshTreatments(force: true)
-        try await waitUntil("the treatments") { !store.treatments.isEmpty }
+        await store.refreshTreatments(force: true)
         #expect(store.treatments.map(\.id) == ["b1"])
         let windowStart = try #require(store.treatmentsWindowStart)
         let since = NightscoutTime.string(windowStart.addingTimeInterval(-ReadingStore.tempBasalLookback))
         #expect(server.requestLines[0].contains("$gte%5D=\(since)"))
 
-        store.refreshTreatments(force: true)
-        try await waitUntil("the top-up") { server.requestLines.count == 2 }
+        await store.refreshTreatments(force: true)
+        #expect(server.requestLines.count == 2)
         let newest = try #require(store.treatments.last?.date)
         let overlap = NightscoutTime.string(newest.addingTimeInterval(-ReadingStore.treatmentOverlap))
         #expect(server.requestLines[1].contains("$gte%5D=\(overlap)"))

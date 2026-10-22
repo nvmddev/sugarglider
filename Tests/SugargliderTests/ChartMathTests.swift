@@ -51,11 +51,6 @@ extension SugargliderTests {
         #expect(ChartMath.labelsNeedDay(span: 72 * 3600))
     }
 
-    @Test func dropoutThresholdIsSharedWithTheStore() {
-        #expect(ChartMath.dropoutThreshold == 15 * 60)
-        #expect(ReadingStore.contiguityThreshold == ChartMath.dropoutThreshold)
-    }
-
     @Test func segmentsSplitOnDropouts() {
         let base = Date.now
         func oldestFirst(minutesAgo: [Double]) -> [Reading] {

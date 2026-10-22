@@ -112,12 +112,12 @@ extension SugargliderTests {
     @Test func coverageComparesAgainstTheRequestedWindow() {
         let now = Date.now
         let requested = now.addingTimeInterval(-6 * 3600)
-        #expect(!ReadingStore.historyCovers(requested: nil, from: now.addingTimeInterval(-3600)))
-        #expect(ReadingStore.historyCovers(requested: requested, from: requested))
-        #expect(ReadingStore.historyCovers(requested: requested, from: now.addingTimeInterval(-3600)))
-        #expect(!ReadingStore.historyCovers(requested: requested, from: now.addingTimeInterval(-24 * 3600)))
+        #expect(!ReadingStore.covers(nil, from: now.addingTimeInterval(-3600)))
+        #expect(ReadingStore.covers(requested, from: requested))
+        #expect(ReadingStore.covers(requested, from: now.addingTimeInterval(-3600)))
+        #expect(!ReadingStore.covers(requested, from: now.addingTimeInterval(-24 * 3600)))
         // An hour later the same window has slid forward, so it stays covered.
-        #expect(ReadingStore.historyCovers(requested: requested, from: requested.addingTimeInterval(3600)))
+        #expect(ReadingStore.covers(requested, from: requested.addingTimeInterval(3600)))
     }
 
     @Test(arguments: [
@@ -157,8 +157,7 @@ extension SugargliderTests {
         let store = ReadingStore(settings: settings)
         store.readings = [reading(100, minutesAgo: cachedMinutesAgo)]
 
-        store.refresh()
-        try await waitUntil("the poll") { store.lastReading != nil }
+        await store.refresh()
         #expect(store.lastReading?.sgv == 120)
         #expect(store.readings.map(\.sgv) == history)
     }
@@ -174,8 +173,7 @@ extension SugargliderTests {
         settings.baseURL = server.baseURL
         let store = ReadingStore(settings: settings)
 
-        store.refreshHistory(force: true)
-        try await waitUntil("the first history fetch") { !store.readings.isEmpty }
+        await store.refreshHistory(force: true)
         #expect(store.readings.count == 2)
         #expect(store.lastReading?.sgv == 120)
         #expect(store.previousReading?.sgv == 110)
@@ -183,14 +181,12 @@ extension SugargliderTests {
         #expect(server.requestLines.count == 1)
         #expect(server.requestLines[0].contains("$gt%5D=\(epochMillis(windowStart))"))
 
-        store.refreshHistory(force: true)
-        try await waitUntil("the top-up fetch") { server.requestLines.count == 2 }
+        await store.refreshHistory(force: true)
+        #expect(server.requestLines.count == 2)
         let newest = try #require(store.readings.last?.date)
         #expect(server.requestLines[1].contains("$gt%5D=\(epochMillis(newest))"))
     }
 
-    /// Waits on the recorded window rather than on the request count: the window is set only
-    /// once the response lands, so counting requests races the fetch.
     @Test func wideningTheRangeFetchesTheMissingHistory() async throws {
         let server = try LocalHTTPServer(json: """
             [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 300_000)}]
@@ -200,16 +196,14 @@ extension SugargliderTests {
         settings.baseURL = server.baseURL
         let store = ReadingStore(settings: settings)
 
-        store.refreshHistory(force: true)
-        try await waitUntil("the first history fetch") {
-            store.coversHistory(from: .now.addingTimeInterval(-6 * 3600))   // the default range
-        }
-        #expect(!store.coversHistory(from: .now.addingTimeInterval(-24 * 3600)))
+        await store.refreshHistory(force: true)
+        #expect(ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-6 * 3600)))
+        #expect(!ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-24 * 3600)))
 
         settings.rangeHours = 24
         store.ensureHistoryCoverage()
-        try await waitUntil("the widened window") {
-            store.coversHistory(from: .now.addingTimeInterval(-24 * 3600))
+        try await waitUntil("the debounced fetch of the widened window") {
+            ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-24 * 3600))
         }
         #expect(server.requestLines.count >= 2)
     }
@@ -224,8 +218,8 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         settings.baseURL = server.baseURL
         let store = ReadingStore(settings: settings)
-        store.refreshHistory(force: true)
-        try await waitUntil("the history fetch") { store.historyWindowStart != nil }
+        await store.refreshHistory(force: true)
+        #expect(store.historyWindowStart != nil)
         store.lastError = "boom"
 
         settings.baseURL = ""   // keeps the debounced re-fetch off the network
@@ -235,33 +229,33 @@ extension SugargliderTests {
         #expect(store.lastError == nil)
         #expect(store.readings.isEmpty)
         #expect(store.historyWindowStart == nil)
-        #expect(!store.coversHistory(from: .now.addingTimeInterval(-3600)))
+        #expect(!ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-3600)))
     }
 
-    /// Without these hooks the app would keep polling a stale URL, ignore a new refresh
+    /// Without this the app would keep polling a site that was replaced, ignore a new refresh
     /// interval and leave a widened chart range unfilled.
-    @Test func startSubscribesToSettingsAndPolls() throws {
+    @Test func startPollsAndFollowsTheSettings() async throws {
+        let server = try LocalHTTPServer(json: """
+            [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 300_000)}]
+            """)
+        defer { server.stop() }
         let settings = Self.makeSettings()
+        settings.baseURL = server.baseURL
         let store = ReadingStore(settings: settings)
-        #expect(settings.onConnectionChanged == nil)
-        #expect(store.timer == nil)
 
         store.start()
-        defer { store.timer?.invalidate() }
-        #expect(settings.onConnectionChanged != nil)
-        #expect(settings.onPollIntervalChanged != nil)
-        #expect(settings.onRangeHoursChanged != nil)
-        #expect(store.timer?.timeInterval == 60)
-
-        // Whitespace keeps the site unconfigured, so the debounced re-fetch stays off the network.
-        store.readings = [reading(100)]
-        settings.baseURL = "   "
-        #expect(store.readings.isEmpty)
-
-        let first = try #require(store.timer)
+        try await waitUntil("the first poll") { store.lastReading != nil }
+        let polls = server.requestLines.count
         settings.pollIntervalSeconds = 30
-        #expect(store.timer !== first)
-        #expect(store.timer?.timeInterval == 30)
-        #expect(!first.isValid)
+        try await waitUntil("polling restarted at the new interval") { server.requestLines.count > polls }
+
+        settings.rangeHours = 24
+        try await waitUntil("the widened history") {
+            ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-24 * 3600))
+        }
+
+        // Whitespace leaves the site unconfigured, so the debounced re-fetch stays off the network.
+        settings.baseURL = "   "
+        try await waitUntil("the reconnect") { store.lastReading == nil && store.readings.isEmpty }
     }
 }

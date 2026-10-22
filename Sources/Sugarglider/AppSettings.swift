@@ -8,18 +8,9 @@ final class AppSettings {
     private let defaults: UserDefaults
     private let tokens: any TokenStorage
 
-    @ObservationIgnored var onConnectionChanged: (() -> Void)?
-    @ObservationIgnored var onPollIntervalChanged: (() -> Void)?
-    @ObservationIgnored var onRangeHoursChanged: (() -> Void)?
-
     // MARK: - Connection
 
-    var baseURL: String = "" {
-        didSet {
-            persist(baseURL, "baseURL")
-            if oldValue != baseURL { onConnectionChanged?() }
-        }
-    }
+    var baseURL: String = "" { didSet { persist(baseURL, "baseURL") } }
 
     /// Empty for a site that allows unauthenticated reads. Lives in the Keychain,
     /// not in `defaults`: a preferences plist is readable by any process running
@@ -28,7 +19,6 @@ final class AppSettings {
         didSet {
             guard !isLoading, oldValue != token else { return }
             tokenStorageFailed = !tokens.save(token)
-            onConnectionChanged?()
         }
     }
 
@@ -126,10 +116,7 @@ final class AppSettings {
     static let rangeHoursLimits: ClosedRange<Int> = 2...72
 
     var rangeHours: Int = 6 {
-        didSet {
-            guard writeThrough(\.rangeHours, key: "rangeHours", limits: Self.rangeHoursLimits) else { return }
-            if oldValue != rangeHours { onRangeHoursChanged?() }
-        }
+        didSet { writeThrough(\.rangeHours, key: "rangeHours", limits: Self.rangeHoursLimits) }
     }
 
     static let defaultStaleAfterMinutes = 11
@@ -144,11 +131,7 @@ final class AppSettings {
     static let pollIntervalLimits: ClosedRange<Int> = 3...300
 
     var pollIntervalSeconds: Int = 60 {
-        didSet {
-            guard writeThrough(\.pollIntervalSeconds, key: "pollIntervalSeconds",
-                               limits: Self.pollIntervalLimits) else { return }
-            if oldValue != pollIntervalSeconds { onPollIntervalChanged?() }
-        }
+        didSet { writeThrough(\.pollIntervalSeconds, key: "pollIntervalSeconds", limits: Self.pollIntervalLimits) }
     }
 
     // MARK: - Chart look
@@ -497,20 +480,13 @@ final class AppSettings {
         defaults.set(value, forKey: key)
     }
 
-    /// Clamps and persists a bounded setting from its `didSet`. An out-of-range value
-    /// is reassigned clamped, which re-enters here; `false` tells the outer pass to
-    /// skip its change hook, which the inner pass has already run.
-    @discardableResult
+    /// Clamps and persists a bounded setting from its `didSet`. An out-of-range value is
+    /// reassigned clamped, which runs the `didSet` again.
     private func writeThrough<Value: Comparable>(_ keyPath: ReferenceWritableKeyPath<AppSettings, Value>,
-                                                 key: String, limits: ClosedRange<Value>) -> Bool {
+                                                 key: String, limits: ClosedRange<Value>) {
         let value = self[keyPath: keyPath]
         let clamped = min(max(value, limits.lowerBound), limits.upperBound)
-        guard clamped == value else {
-            self[keyPath: keyPath] = clamped
-            return false
-        }
-        persist(value, key)
-        return true
+        if clamped == value { persist(value, key) } else { self[keyPath: keyPath] = clamped }
     }
 
     private func persistColor(_ color: Color, _ key: String) {

@@ -23,20 +23,18 @@ final class ReadingStore {
     /// Start of the window the last full fetch requested, which is what the cache covers.
     @ObservationIgnored private(set) var historyWindowStart: Date?
     @ObservationIgnored private(set) var treatmentsWindowStart: Date?
-    @ObservationIgnored private(set) var timer: Timer?
 
     private enum Part { case history, pumpStatus, treatments, changeDates }
     @ObservationIgnored private var fetchedAt: [Part: Date] = [:]
     /// Bumped by `reconnect()`. Responses to earlier requests are dropped, so a slow answer
     /// from the previous site can't repopulate the store.
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var reconnectDebounce: Task<Void, Never>?
-    @ObservationIgnored private var coverageDebounce: Task<Void, Never>?
-    @ObservationIgnored private var clock: Task<Void, Never>?
+    @ObservationIgnored private var polling: Task<Void, Never>?
+    @ObservationIgnored private var reconnecting: Task<Void, Never>?
+    @ObservationIgnored private var widening: Task<Void, Never>?
 
     private let settings: AppSettings
 
-    static let contiguityThreshold = ChartMath.dropoutThreshold
     /// Treatments are fetched from this far before the window, so a temp basal already running
     /// at its left edge is drawn: loops set them for 30 minutes.
     static let tempBasalLookback: TimeInterval = 30 * 60
@@ -54,16 +52,21 @@ final class ReadingStore {
         self.settings = settings
     }
 
+    /// Polls, keeps the clock and follows the settings the fetches depend on, for the app's lifetime.
     func start() {
-        settings.onConnectionChanged = { [weak self] in self?.reconnect() }
-        settings.onPollIntervalChanged = { [weak self] in self?.schedulePolling() }
-        settings.onRangeHoursChanged = { [weak self] in self?.ensureHistoryCoverage() }
-        refresh()
-        schedulePolling()
-        clock = Task { [weak self] in
+        Task {
+            for await seconds in Observations({ self.settings.pollIntervalSeconds }) { poll(every: seconds) }
+        }
+        Task {
+            for await _ in Observations({ (self.settings.baseURL, self.settings.token) }).dropFirst() { reconnect() }
+        }
+        Task {
+            for await _ in Observations({ self.settings.rangeHours }).dropFirst() { ensureHistoryCoverage() }
+        }
+        Task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
-                self?.tick()
+                tick()
             }
         }
     }
@@ -72,32 +75,28 @@ final class ReadingStore {
         now = .now
     }
 
-    private func schedulePolling() {
-        timer?.invalidate()
-        let interval = TimeInterval(settings.pollIntervalSeconds)
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+    private func poll(every seconds: Int) {
+        polling?.cancel()
+        polling = Task {
+            while !Task.isCancelled {
+                await refresh()
+                try? await Task.sleep(for: .seconds(seconds), tolerance: .seconds(seconds) / 2)
+            }
         }
-        timer.tolerance = interval / 2
-        // In the default mode the poll would stall while the range slider is dragged.
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     /// Fetches the two newest entries: the older one is what the delta is taken against.
-    func refresh() {
+    func refresh() async {
         guard settings.isConfigured else { return }
         let (site, generation) = (settings.nightscout, generation)
-        Task {
-            do {
-                let latest = try await site.entries(count: 2)
-                guard generation == self.generation else { return }
-                showNewest(of: latest)
-                if Self.joinsUp(latest, with: readings) { merge(latest) }
-            } catch {
-                guard generation == self.generation else { return }
-                lastError = error.localizedDescription
-            }
+        do {
+            let latest = try await site.entries(count: 2)
+            guard generation == self.generation else { return }
+            showNewest(of: latest)
+            if Self.joinsUp(latest, with: readings) { merge(latest) }
+        } catch {
+            guard generation == self.generation, !Task.isCancelled else { return }
+            lastError = error.localizedDescription
         }
     }
 
@@ -106,25 +105,21 @@ final class ReadingStore {
     static func joinsUp(_ polled: [Reading], with history: [Reading]) -> Bool {
         guard let newestCached = history.last?.date,
               let firstNew = polled.first(where: { $0.date > newestCached }) else { return false }
-        return firstNew.date.timeIntervalSince(newestCached) <= contiguityThreshold
+        return firstNew.date.timeIntervalSince(newestCached) <= ChartMath.dropoutThreshold
     }
 
     /// Fetches the window once, then only what arrived after the newest cached entry.
-    func refreshHistory(force: Bool) {
+    func refreshHistory(force: Bool) async {
         guard settings.isConfigured, force || !fetchedRecently(.history) else { return }
         let start = windowStart
-        let covered = coversHistory(from: start)
+        let covered = Self.covers(historyWindowStart, from: start)
         // Never nil, not even for a covered but empty cache: that would be an unfiltered request.
         let since = (covered ? readings.last?.date : nil) ?? start
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        let (site, generation) = (settings.nightscout, generation)
-        Task {
-            guard let fetched = try? await site.entries(count: count, since: since),
-                  generation == self.generation else { return }
-            fetchedAt[.history] = .now
-            if !covered { historyWindowStart = start }
-            merge(fetched)
-        }
+        guard let fetched = await fetch({ try await $0.entries(count: count, since: since) }) else { return }
+        fetchedAt[.history] = .now
+        if !covered { historyWindowStart = start }
+        merge(fetched)
     }
 
     /// A cap, not a selector: the date filter picks the window, this only bounds a site that
@@ -135,13 +130,8 @@ final class ReadingStore {
 
     /// Goes by the window that was requested, not by the oldest reading received: a site with
     /// only a few hours of data would otherwise refetch its whole window on every call.
-    static func historyCovers(requested: Date?, from start: Date) -> Bool {
-        guard let requested else { return false }
-        return requested <= start
-    }
-
-    func coversHistory(from start: Date) -> Bool {
-        Self.historyCovers(requested: historyWindowStart, from: start)
+    static func covers(_ requested: Date?, from start: Date) -> Bool {
+        requested.map { $0 <= start } ?? false
     }
 
     /// Fetches what a widened range is missing, the treatments too once they've been fetched at
@@ -150,57 +140,47 @@ final class ReadingStore {
     func ensureHistoryCoverage() {
         guard settings.isConfigured else { return }
         let start = windowStart
-        let needsHistory = !coversHistory(from: start)
+        let needsHistory = !Self.covers(historyWindowStart, from: start)
         let needsTreatments = settings.needsTreatments && fetchedAt[.treatments] != nil
-            && !Self.historyCovers(requested: treatmentsWindowStart, from: start)
+            && !Self.covers(treatmentsWindowStart, from: start)
         guard needsHistory || needsTreatments else { return }
-        coverageDebounce?.cancel()
-        coverageDebounce = Task {
+        widening?.cancel()
+        widening = Task {
             do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
-            if needsHistory { refreshHistory(force: true) }
-            if needsTreatments { refreshTreatments(force: true) }
+            if needsHistory { await refreshHistory(force: true) }
+            if needsTreatments { await refreshTreatments(force: true) }
         }
     }
 
     /// Fetches each part only while a switch shows it. The throttle is per part, so one just
     /// switched on is fetched on the next open.
-    func refreshDetails(force: Bool) {
-        refreshPumpStatus(force: force)
-        refreshTreatments(force: force)
-        refreshChangeDates(force: force)
+    func refreshDetails(force: Bool) async {
+        async let status: Void = refreshPumpStatus(force: force)
+        async let treatments: Void = refreshTreatments(force: force)
+        async let changes: Void = refreshChangeDates(force: force)
+        _ = await (status, treatments, changes)
     }
 
-    private func refreshPumpStatus(force: Bool) {
+    private func refreshPumpStatus(force: Bool) async {
         guard settings.isConfigured, settings.needsPumpStatus,
               force || !fetchedRecently(.pumpStatus) else { return }
-        let (site, generation) = (settings.nightscout, generation)
-        Task {
-            // Not `try?`, which would flatten the two: nil is an answer (no pump on the site),
-            // a failure keeps the old status.
-            let status: PumpStatus?
-            do { status = try await site.pumpStatus() } catch { return }
-            guard generation == self.generation else { return }
-            fetchedAt[.pumpStatus] = .now
-            pumpStatus = status
-        }
+        guard let status = await fetch({ try await $0.pumpStatus() }) else { return }
+        fetchedAt[.pumpStatus] = .now
+        pumpStatus = status
     }
 
-    func refreshTreatments(force: Bool) {
+    func refreshTreatments(force: Bool) async {
         guard settings.isConfigured, settings.needsTreatments,
               force || !fetchedRecently(.treatments) else { return }
         let start = windowStart
-        let covered = Self.historyCovers(requested: treatmentsWindowStart, from: start)
+        let covered = Self.covers(treatmentsWindowStart, from: start)
         let since = Self.treatmentsSince(windowStart: start, covered: covered,
                                          newestCached: treatments.last?.date)
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        let (site, generation) = (settings.nightscout, generation)
-        Task {
-            guard let fetched = try? await site.treatments(count: count, since: since),
-                  generation == self.generation else { return }
-            fetchedAt[.treatments] = .now
-            if !covered { treatmentsWindowStart = start }
-            treatments = Self.merged(treatments, with: fetched)
-        }
+        guard let fetched = await fetch({ try await $0.treatments(count: count, since: since) }) else { return }
+        fetchedAt[.treatments] = .now
+        if !covered { treatmentsWindowStart = start }
+        treatments = Self.merged(treatments, with: fetched)
     }
 
     static func treatmentsSince(windowStart: Date, covered: Bool, newestCached: Date?) -> Date {
@@ -209,29 +189,28 @@ final class ReadingStore {
         return max(newestCached.addingTimeInterval(-treatmentOverlap), wholeWindow)
     }
 
-    private func refreshChangeDates(force: Bool) {
+    private func refreshChangeDates(force: Bool) async {
         guard settings.isConfigured, settings.needsChangeDates,
               force || !fetchedRecently(.changeDates) else { return }
         let since = Date.now.addingTimeInterval(-Self.changeLookback)
         let (showsReservoir, showsBattery) = (settings.showReservoir, settings.showPumpBattery)
-        let (site, generation) = (settings.nightscout, generation)
-        Task {
-            func latest(_ eventType: String, if shown: Bool) async throws -> Date? {
-                guard shown else { return nil }
-                return try await site.latestEvent(eventType, since: since)
-            }
-            // Like the status: nil is an answer (no change on record), a failure keeps the old dates.
-            let dates: (reservoir: Date?, battery: Date?)
-            do {
-                async let reservoir = latest(Self.reservoirChangeEvent, if: showsReservoir)
-                async let battery = latest(Self.batteryChangeEvent, if: showsBattery)
-                dates = try await (reservoir, battery)
-            } catch { return }
-            guard generation == self.generation else { return }
-            fetchedAt[.changeDates] = .now
-            reservoirChanged = dates.reservoir
-            batteryChanged = dates.battery
-        }
+        guard let dates = await fetch({ site in
+            async let reservoir = showsReservoir ? site.latestEvent(Self.reservoirChangeEvent, since: since) : nil
+            async let battery = showsBattery ? site.latestEvent(Self.batteryChangeEvent, since: since) : nil
+            return try await (reservoir: reservoir, battery: battery)
+        }) else { return }
+        fetchedAt[.changeDates] = .now
+        reservoirChanged = dates.reservoir
+        batteryChanged = dates.battery
+    }
+
+    /// The result of a request to the current site, or nil when it failed or the site changed
+    /// meanwhile; either way the values already shown stay. A nil the request returns is an
+    /// answer (no pump on the site, no change on record) and comes back as `.some(nil)`.
+    private func fetch<Value>(_ request: (Nightscout) async throws -> Value) async -> Value? {
+        let generation = generation
+        guard let value = try? await request(settings.nightscout), generation == self.generation else { return nil }
+        return value
     }
 
     /// Forgets the previous site at once but debounces the re-fetch: this runs on every
@@ -249,12 +228,12 @@ final class ReadingStore {
         historyWindowStart = nil
         treatmentsWindowStart = nil
         fetchedAt = [:]
-        coverageDebounce?.cancel()
-        reconnectDebounce?.cancel()
-        reconnectDebounce = Task {
+        widening?.cancel()
+        reconnecting?.cancel()
+        reconnecting = Task {
             do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
-            refresh()
-            refreshHistory(force: true)
+            await refresh()
+            await refreshHistory(force: true)
         }
     }
 
