@@ -135,7 +135,7 @@ This app displays medical data. Two things follow from that:
   site URLs, access tokens, names, email addresses, device names and serial
   numbers (an uploader's `device` field often carries its owner's name). Strip
   those from a captured response before it becomes a fixture. Tests never talk
-  to a real site; they run against a loopback HTTP server.
+  to a real site; a `URLProtocol` stub answers them with canned responses.
 - **Correctness beats cleverness.** A wrong or silently stale number on screen is
   worse than a visibly missing one. This is why stale readings get a `⚠`, why
   sensor gaps break the chart line instead of interpolating across them, and why

@@ -67,9 +67,10 @@ nonisolated enum NightscoutError: LocalizedError, Equatable {
 struct Nightscout {
     var baseURL: String
     var token: String
+    var session = Nightscout.sharedSession
 
     /// The 15 s timeout keeps a stalled request from holding up the next poll.
-    private static let session: URLSession = {
+    static let sharedSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 15
         configuration.waitsForConnectivity = false
@@ -164,7 +165,7 @@ struct Nightscout {
             throw NightscoutError.badURL
         }
 
-        let (data, response) = try await Self.session.data(from: url)
+        let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw NightscoutError.http(http.statusCode)
         }

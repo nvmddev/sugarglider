@@ -147,14 +147,12 @@ extension SugargliderTests {
     @Test(arguments: [(10.0, [100, 110, 120]), (40.0, [100])])
     func pollAddsToTheHistoryOnlyWithoutADropout(cachedMinutesAgo: Double, history: [Int]) async throws {
         let nowMs = epochMillis(.now)
-        let server = try LocalHTTPServer(json: """
+        let server = StubbedSite(json: """
             [{"sgv":120,"direction":"Flat","date":\(nowMs)},
              {"sgv":110,"direction":"Flat","date":\(nowMs - 300_000)}]
             """)
-        defer { server.stop() }
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        let store = ReadingStore(settings: settings)
+        let store = server.store(settings)
         store.readings = [reading(100, minutesAgo: cachedMinutesAgo)]
 
         await store.refresh()
@@ -164,37 +162,33 @@ extension SugargliderTests {
 
     @Test func historyAsksForTheWindowOnceThenOnlyForWhatIsNewer() async throws {
         let nowMs = epochMillis(.now)
-        let server = try LocalHTTPServer(json: """
+        let server = StubbedSite(json: """
             [{"sgv":120,"direction":"Flat","date":\(nowMs - 300_000)},
              {"sgv":110,"direction":"Flat","date":\(nowMs - 600_000)}]
             """)
-        defer { server.stop() }
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        let store = ReadingStore(settings: settings)
+        let store = server.store(settings)
 
         await store.refreshHistory(force: true)
         #expect(store.readings.count == 2)
         #expect(store.lastReading?.sgv == 120)
         #expect(store.previousReading?.sgv == 110)
         let windowStart = try #require(store.historyWindowStart)
-        #expect(server.requestLines.count == 1)
-        #expect(server.requestLines[0].contains("$gt%5D=\(epochMillis(windowStart))"))
+        #expect(server.requests.count == 1)
+        #expect(server.requests[0].contains("$gt%5D=\(epochMillis(windowStart))"))
 
         await store.refreshHistory(force: true)
-        #expect(server.requestLines.count == 2)
+        #expect(server.requests.count == 2)
         let newest = try #require(store.readings.last?.date)
-        #expect(server.requestLines[1].contains("$gt%5D=\(epochMillis(newest))"))
+        #expect(server.requests[1].contains("$gt%5D=\(epochMillis(newest))"))
     }
 
     @Test func wideningTheRangeFetchesTheMissingHistory() async throws {
-        let server = try LocalHTTPServer(json: """
+        let server = StubbedSite(json: """
             [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 300_000)}]
             """)
-        defer { server.stop() }
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        let store = ReadingStore(settings: settings)
+        let store = server.store(settings)
 
         await store.refreshHistory(force: true)
         #expect(ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-6 * 3600)))
@@ -205,19 +199,17 @@ extension SugargliderTests {
         try await waitUntil("the debounced fetch of the widened window") {
             ReadingStore.covers(store.historyWindowStart, from: .now.addingTimeInterval(-24 * 3600))
         }
-        #expect(server.requestLines.count >= 2)
+        #expect(server.requests.count >= 2)
     }
 
     @Test func reconnectForgetsThePreviousSite() async throws {
         let nowMs = epochMillis(.now)
-        let server = try LocalHTTPServer(json: """
+        let server = StubbedSite(json: """
             [{"sgv":120,"direction":"Flat","date":\(nowMs - 300_000)},
              {"sgv":110,"direction":"Flat","date":\(nowMs - 600_000)}]
             """)
-        defer { server.stop() }
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        let store = ReadingStore(settings: settings)
+        let store = server.store(settings)
         await store.refreshHistory(force: true)
         #expect(store.historyWindowStart != nil)
         store.lastError = "boom"
@@ -235,19 +227,17 @@ extension SugargliderTests {
     /// Without this the app would keep polling a site that was replaced, ignore a new refresh
     /// interval and leave a widened chart range unfilled.
     @Test func startPollsAndFollowsTheSettings() async throws {
-        let server = try LocalHTTPServer(json: """
+        let server = StubbedSite(json: """
             [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 300_000)}]
             """)
-        defer { server.stop() }
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        let store = ReadingStore(settings: settings)
+        let store = server.store(settings)
 
         store.start()
         try await waitUntil("the first poll") { store.lastReading != nil }
-        let polls = server.requestLines.count
+        let polls = server.requests.count
         settings.pollIntervalSeconds = 30
-        try await waitUntil("polling restarted at the new interval") { server.requestLines.count > polls }
+        try await waitUntil("polling restarted at the new interval") { server.requests.count > polls }
 
         settings.rangeHours = 24
         try await waitUntil("the widened history") {

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-import Darwin
 import Synchronization
 @testable import Sugarglider
 
@@ -55,93 +54,72 @@ final class InMemoryTokenStore: TokenStorage {
     }
 }
 
-/// Answers every connection with the same canned response. A real socket, because `Nightscout`'s
-/// private `URLSession` can't be stubbed with a `URLProtocol`. Bound to loopback only, which never
-/// triggers the firewall prompt an all-interfaces bind can.
-final class LocalHTTPServer: Sendable {
-    enum ServerError: Error { case socketFailed, bindFailed, listenFailed }
+/// A Nightscout site that answers every request with the same canned response. Each has a host of
+/// its own, so tests running side by side never see each other's responses or requests.
+final class StubbedSite: Sendable {
+    /// Answers for every stubbed site, by host.
+    static var session: URLSession { SiteProtocol.session }
 
-    let port: UInt16
-    private let listener: Int32
-    private let requests = Mutex<[String]>([])
-    private let isStopped = Atomic(false)
+    let baseURL: String
+    private let host = "\(UUID().uuidString.lowercased()).example"
 
-    var baseURL: String { "http://127.0.0.1:\(port)" }
-    var requestLines: [String] { requests.withLock { $0 } }
+    /// Path and query of every request, as sent.
+    var requests: [String] { SiteProtocol.sites.withLock { $0[host]?.requests ?? [] } }
 
-    init(status: Int = 200, json: String) throws {
-        let listener = socket(AF_INET, SOCK_STREAM, 0)
-        guard listener >= 0 else { throw ServerError.socketFailed }
+    init(status: Int = 200, json: String) {
+        baseURL = "https://\(host)"
+        SiteProtocol.sites.withLock { $0[host] = .init(status: status, body: Data(json.utf8)) }
+    }
 
-        var reuse: Int32 = 1
-        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+    deinit { SiteProtocol.sites.withLock { $0[host] = nil } }
 
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        address.sin_port = 0  // the OS picks a free port
-        let bound = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                bind(listener, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
+    @MainActor func nightscout(token: String = "", baseURL: String? = nil) -> Nightscout {
+        Nightscout(baseURL: baseURL ?? self.baseURL, token: token, session: Self.session)
+    }
+
+    /// A store reading from this site.
+    @MainActor func store(_ settings: AppSettings) -> ReadingStore {
+        settings.baseURL = baseURL
+        return ReadingStore(settings: settings, session: Self.session)
+    }
+}
+
+private final class SiteProtocol: URLProtocol {
+    struct Site {
+        var status: Int
+        var body: Data
+        var requests: [String] = []
+    }
+
+    static let sites = Mutex<[String: Site]>([:])
+
+    static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SiteProtocol.self]
+        return URLSession(configuration: configuration)
+    }()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url, let host = url.host(), let site = Self.sites.withLock({ sites in
+            let request = url.path(percentEncoded: true) + (url.query(percentEncoded: true).map { "?\($0)" } ?? "")
+            sites[host]?.requests.append(request)
+            return sites[host]
+        }) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
+            return
         }
-        guard bound == 0 else { close(listener); throw ServerError.bindFailed }
-        guard listen(listener, 8) == 0 else { close(listener); throw ServerError.listenFailed }
-
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        _ = withUnsafeMutablePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(listener, $0, &length) }
-        }
-        port = UInt16(bigEndian: address.sin_port)
-        self.listener = listener
-
-        let response = Self.response(status: status, body: Data(json.utf8))
-        Thread.detachNewThread { [weak self] in
-            while true {
-                let client = accept(listener, nil, nil)
-                guard client >= 0 else { return }
-                if let line = Self.requestLine(from: client), let self {
-                    self.requests.withLock { $0.append(line) }
-                }
-                Self.send(response, to: client)
-                close(client)
-            }
-        }
+        let response = HTTPURLResponse(url: url, statusCode: site.status, httpVersion: "HTTP/1.1",
+                                       headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: site.body)
+        client?.urlProtocolDidFinishLoading(self)
     }
 
-    func stop() {
-        guard !isStopped.exchange(true, ordering: .relaxed) else { return }
-        close(listener)  // makes the serving thread's accept() fail, which ends it
-    }
-
-    deinit { stop() }
-
-    private static func response(status: Int, body: Data) -> Data {
-        let head = "HTTP/1.1 \(status) \(status == 200 ? "OK" : "Error")\r\n"
-            + "Content-Length: \(body.count)\r\n"
-            + "Content-Type: application/json\r\n"
-            + "Connection: close\r\n\r\n"
-        return Data(head.utf8) + body
-    }
-
-    private static func requestLine(from client: Int32) -> String? {
-        var buffer = [UInt8](repeating: 0, count: 4096)
-        let count = read(client, &buffer, 4096)
-        guard count > 0 else { return nil }
-        return String(decoding: buffer.prefix(count), as: UTF8.self)
-            .split(separator: "\r\n", maxSplits: 1).first.map(String.init)
-    }
-
-    private static func send(_ response: Data, to client: Int32) {
-        response.withUnsafeBytes { bytes in
-            var offset = 0
-            while offset < bytes.count {
-                let written = write(client, bytes.baseAddress?.advanced(by: offset), bytes.count - offset)
-                guard written > 0 else { return }
-                offset += written
-            }
-        }
-    }
+    override func stopLoading() {}
 }
 
 /// `ReadingStore` fetches in `Task`s nothing can await, so tests poll for the effect.

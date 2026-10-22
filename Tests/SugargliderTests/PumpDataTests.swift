@@ -189,64 +189,58 @@ extension SugargliderTests {
 
 extension SugargliderTests {
     @Test func fetchPumpStatusMergesTheNewestRecords() async throws {
-        let server = try LocalHTTPServer(json: """
+        let server = StubbedSite(json: """
             [\(camapsRecord),
              {"created_at":"2030-01-01T11:55:00Z","pump":{"reservoir":121}}]
             """)
-        defer { server.stop() }
-        let status = try #require(try await Nightscout(baseURL: server.baseURL, token: "t").pumpStatus())
+        let status = try #require(try await server.nightscout(token: "t").pumpStatus())
         #expect(status.reservoir == 120)
         #expect(status.mode == .auto)
-        let line = try #require(server.requestLines.first)
+        let line = try #require(server.requests.first)
         #expect(line.contains("/api/v1/devicestatus.json"))
         #expect(line.contains("count=\(Nightscout.deviceStatusCount)"))
         #expect(line.contains("token=t"))
     }
 
     @Test func fetchPumpStatusOfASiteWithoutOneIsNil() async throws {
-        let server = try LocalHTTPServer(json: #"[{"created_at":"2030-01-01T11:55:00Z","uploader":{"battery":80}}]"#)
-        defer { server.stop() }
-        #expect(try await Nightscout(baseURL: server.baseURL, token: "").pumpStatus() == nil)
+        let server = StubbedSite(json: #"[{"created_at":"2030-01-01T11:55:00Z","uploader":{"battery":80}}]"#)
+        #expect(try await server.nightscout().pumpStatus() == nil)
     }
 
     @Test func fetchTreatmentsFiltersByDateAndSortsOldestFirst() async throws {
-        let server = try LocalHTTPServer(json: """
+        let server = StubbedSite(json: """
             [{"_id":"2","eventType":"Correction Bolus","created_at":"2030-01-01T11:40:00Z","insulin":2},
              {"_id":"x","eventType":"Insulin Change","created_at":"2030-01-01T11:00:00Z"},
              {"_id":"1","eventType":"Temp Basal","created_at":"2030-01-01T11:35:00Z","absolute":1,"duration":30}]
             """)
-        defer { server.stop() }
         let since = try #require(NightscoutTime.date("2030-01-01T06:00:00.000Z"))
-        let treatments = try await Nightscout(baseURL: server.baseURL, token: "").treatments(count: 500, since: since)
+        let treatments = try await server.nightscout().treatments(count: 500, since: since)
         #expect(treatments.map(\.id) == ["1", "2"])
-        let line = try #require(server.requestLines.first)
+        let line = try #require(server.requests.first)
         #expect(line.contains("/api/v1/treatments.json"))
         #expect(line.contains("created_at%5D%5B$gte%5D=2030-01-01T06:00:00.000Z"))
         #expect(line.contains("count=500"))
     }
 
     @Test func fetchTreatmentsRejectsAnythingButAnArray() async throws {
-        let server = try LocalHTTPServer(json: #"{"status":401}"#)
-        defer { server.stop() }
+        let server = StubbedSite(json: #"{"status":401}"#)
         await #expect(throws: NightscoutError.self) {
-            try await Nightscout(baseURL: server.baseURL, token: "").treatments(count: 10, since: .now)
+            try await server.nightscout().treatments(count: 10, since: .now)
         }
     }
 
     @Test func fetchLatestEventAsksForThatEventOnly() async throws {
-        let server = try LocalHTTPServer(json: #"[{"eventType":"Insulin Change","created_at":"2030-01-01T08:00:00.128Z"}]"#)
-        defer { server.stop() }
-        let date = try await Nightscout(baseURL: server.baseURL, token: "").latestEvent("Insulin Change", since: Date(timeIntervalSince1970: 0))
+        let server = StubbedSite(json: #"[{"eventType":"Insulin Change","created_at":"2030-01-01T08:00:00.128Z"}]"#)
+        let date = try await server.nightscout().latestEvent("Insulin Change", since: Date(timeIntervalSince1970: 0))
         #expect(date == NightscoutTime.date("2030-01-01T08:00:00.128Z"))
-        let line = try #require(server.requestLines.first)
+        let line = try #require(server.requests.first)
         #expect(line.contains("eventType%5D=Insulin%20Change"))
         // Without a date filter Nightscout searches only the last two days.
         #expect(line.contains("created_at%5D%5B$gte%5D=1970-01-01T00:00:00.000Z"))
         #expect(line.contains("count=1"))
 
-        let empty = try LocalHTTPServer(json: "[]")
-        defer { empty.stop() }
-        #expect(try await Nightscout(baseURL: empty.baseURL, token: "").latestEvent("Insulin Change", since: .now) == nil)
+        let empty = StubbedSite(json: "[]")
+        #expect(try await empty.nightscout().latestEvent("Insulin Change", since: .now) == nil)
     }
 }
 
@@ -340,47 +334,41 @@ extension SugargliderTests {
     }
 
     @Test func nothingIsFetchedForSwitchesThatAreOff() async throws {
-        let server = try LocalHTTPServer(json: "[]")
-        defer { server.stop() }
+        let server = StubbedSite(json: "[]")
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
-        await ReadingStore(settings: settings).refreshDetails(force: true)
-        #expect(server.requestLines.isEmpty)
+                for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
+        await server.store(settings).refreshDetails(force: true)
+        #expect(server.requests.isEmpty)
     }
 
     @Test func refreshDetailsFetchesThePumpStatus() async throws {
-        let server = try LocalHTTPServer(json: "[\(camapsRecord)]")
-        defer { server.stop() }
+        let server = StubbedSite(json: "[\(camapsRecord)]")
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        let store = ReadingStore(settings: settings)
+        let store = server.store(settings)
         await store.refreshDetails(force: true)
         #expect(store.pumpStatus?.reservoir == 120)
-        #expect(server.requestLines.contains { $0.contains("/api/v1/devicestatus.json") })
+        #expect(server.requests.contains { $0.contains("/api/v1/devicestatus.json") })
     }
 
     @Test func refreshTreatmentsFetchesTheWindowThenTopsUp() async throws {
         let created = NightscoutTime.string(Date.now.addingTimeInterval(-600))
-        let server = try LocalHTTPServer(json: """
+        let server = StubbedSite(json: """
             [{"_id":"b1","eventType":"Correction Bolus","created_at":"\(created)","insulin":2.5}]
             """)
-        defer { server.stop() }
         let settings = Self.makeSettings()
-        settings.baseURL = server.baseURL
-        let store = ReadingStore(settings: settings)
+        let store = server.store(settings)
 
         await store.refreshTreatments(force: true)
         #expect(store.treatments.map(\.id) == ["b1"])
         let windowStart = try #require(store.treatmentsWindowStart)
         let since = NightscoutTime.string(windowStart.addingTimeInterval(-ReadingStore.tempBasalLookback))
-        #expect(server.requestLines[0].contains("$gte%5D=\(since)"))
+        #expect(server.requests[0].contains("$gte%5D=\(since)"))
 
         await store.refreshTreatments(force: true)
-        #expect(server.requestLines.count == 2)
+        #expect(server.requests.count == 2)
         let newest = try #require(store.treatments.last?.date)
         let overlap = NightscoutTime.string(newest.addingTimeInterval(-ReadingStore.treatmentOverlap))
-        #expect(server.requestLines[1].contains("$gte%5D=\(overlap)"))
+        #expect(server.requests[1].contains("$gte%5D=\(overlap)"))
     }
 }
 
