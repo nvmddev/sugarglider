@@ -2,27 +2,36 @@ import SwiftUI
 
 struct PumpTab: View {
     @Bindable var settings: AppSettings
+    var store: ReadingStore
 
     var body: some View {
+        let reported = store.reportedPumpExtras
         Form {
             Section {
                 Toggle("Active insulin", isOn: $settings.showActiveInsulin)
-                toggle("Mode", detail: "Auto mode, Boost or Ease-off", isOn: $settings.showPumpMode)
-                toggle("Delivery rate", detail: "What the pump delivers right now", isOn: $settings.showDeliveryRate)
+                if reported.contains(.mode) {
+                    toggle("Mode", detail: "The pump's current mode, e.g. Auto mode or Boost", isOn: $settings.showPumpMode)
+                }
+                if reported.contains(.deliveryRate) {
+                    toggle("Delivery rate", detail: "What the pump delivers right now", isOn: $settings.showDeliveryRate)
+                }
                 Toggle("Reservoir", isOn: $settings.showReservoir)
                 Toggle("Pump battery", isOn: $settings.showPumpBattery)
                 toggle("Time since change", detail: "Next to the reservoir and the battery",
                        isOn: $settings.showChangeAge)
                     .disabled(!settings.showReservoir && !settings.showPumpBattery)
-                toggle("Total insulin", detail: "Today and yesterday", isOn: $settings.showDailyInsulin)
-                toggle("Average glucose", detail: "Today and yesterday", isOn: $settings.showAverageGlucose)
+                if reported.contains(.dailyInsulin) {
+                    toggle("Total insulin", detail: "Today and yesterday", isOn: $settings.showDailyInsulin)
+                }
+                if reported.contains(.averageGlucose) {
+                    toggle("Average glucose", detail: "Today and yesterday", isOn: $settings.showAverageGlucose)
+                }
             } header: {
                 Text("Dropdown")
             } footer: {
                 Text("""
                     Each item appears only if your Nightscout site reports it, through the \
-                    device status a pump or loop uploader sends. Mode, delivery rate and the \
-                    daily figures are CamAPS FX values, which only some uploaders pass on.
+                    device status a pump or loop uploader sends.
                     """)
                     .foregroundStyle(.secondary)
             }
@@ -42,6 +51,7 @@ struct PumpTab: View {
             }
         }
         .formStyle(.grouped)
+        .task { await store.refreshPumpStatus(force: false, evenIfSwitchedOff: true) }
     }
 
     private func toggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {

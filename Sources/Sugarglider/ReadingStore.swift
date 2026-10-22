@@ -10,7 +10,12 @@ final class ReadingStore {
     /// The chart's history, oldest first.
     var readings: [Reading] = []
 
-    var pumpStatus: PumpStatus?
+    var pumpStatus: PumpStatus? {
+        didSet { reportedPumpExtras.formUnion(pumpStatus?.extras ?? []) }
+    }
+    /// Every `PumpStatus.Extra` the site has sent, which the Pump tab offers switches for. Collected, so a
+    /// value the uploader leaves out of one status doesn't take its switch along.
+    private(set) var reportedPumpExtras: Set<PumpStatus.Extra> = []
     /// The chart's treatments, oldest first.
     var treatments: [Treatment] = []
     var reservoirChanged: Date?
@@ -167,8 +172,10 @@ final class ReadingStore {
         _ = await (status, treatments, changes)
     }
 
-    private func refreshPumpStatus(force: Bool) async {
-        guard settings.isConfigured, settings.needsPumpStatus,
+    /// The Pump tab asks `evenIfSwitchedOff`: it offers a switch for each `PumpStatus.Extra` the site
+    /// sends, so it has to know before any is on.
+    func refreshPumpStatus(force: Bool, evenIfSwitchedOff: Bool = false) async {
+        guard settings.isConfigured, evenIfSwitchedOff || settings.needsPumpStatus,
               force || !fetchedRecently(.pumpStatus) else { return }
         guard let status = await fetch({ try await $0.pumpStatus() }) else { return }
         fetchedAt[.pumpStatus] = .now
@@ -228,6 +235,7 @@ final class ReadingStore {
         lastError = nil
         readings = []
         pumpStatus = nil
+        reportedPumpExtras = []
         treatments = []
         reservoirChanged = nil
         batteryChanged = nil

@@ -2,13 +2,14 @@ import SwiftUI
 
 struct SettingsView: View {
     let settings: AppSettings
+    let store: ReadingStore
 
     var body: some View {
         TabView {
             Tab("General", systemImage: "gearshape") { GeneralTab(settings: settings) }
             Tab("Colors", systemImage: "paintpalette") { ColorsTab(settings: settings) }
             Tab("Glucose", systemImage: "drop") { GlucoseTab(settings: settings) }
-            Tab("Pump", systemImage: "syringe") { PumpTab(settings: settings) }
+            Tab("Pump", systemImage: "syringe") { PumpTab(settings: settings, store: store) }
             Tab("About", systemImage: "info.circle") { AboutTab() }
         }
         // A fixed size is fine: each tab's form is .grouped, which scrolls where a plain one would clip.

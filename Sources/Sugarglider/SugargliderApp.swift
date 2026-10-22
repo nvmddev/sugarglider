@@ -34,7 +34,7 @@ struct SugargliderApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(settings: settings)
+            SettingsView(settings: settings, store: store)
         }
     }
 }

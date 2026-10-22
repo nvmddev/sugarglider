@@ -41,6 +41,22 @@ struct PumpStatus: Equatable {
 
     var hasData: Bool { self != PumpStatus(date: date) }
 
+    /// Values only some uploaders send.
+    enum Extra: CaseIterable {
+        case mode, deliveryRate, dailyInsulin, averageGlucose
+    }
+
+    var extras: Set<Extra> {
+        Set(Extra.allCases.filter { extra in
+            switch extra {
+            case .mode: mode != nil
+            case .deliveryRate: deliveryRate != nil
+            case .dailyInsulin: insulinToday != nil || insulinYesterday != nil
+            case .averageGlucose: averageToday != nil || averageYesterday != nil
+            }
+        })
+    }
+
     /// How much older than the newest record another may be and still fill in its fields: a
     /// stopped uploader's values must not pass for current.
     static let mergeSpan: TimeInterval = 15 * 60

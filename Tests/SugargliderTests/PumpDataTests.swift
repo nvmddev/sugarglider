@@ -122,6 +122,18 @@ extension SugargliderTests {
         #expect(PumpStatus.merged([PumpStatus(date: now)]) == nil)
         #expect(PumpStatus.merged([]) == nil)
     }
+
+    @Test func extrasAreTheValuesOnlySomeUploadersSend() throws {
+        #expect(try #require(PumpStatus(record: record(camapsRecord))).extras == Set(PumpStatus.Extra.allCases))
+        let standard = try #require(PumpStatus(record: record("""
+            {"created_at":"2030-01-01T12:00:00Z","pump":{"iob":{"iob":1},"reservoir":120,"battery":{"percent":65}}}
+            """)))
+        #expect(standard.extras.isEmpty)
+        let statusText = try #require(PumpStatus(record: record(
+            #"{"created_at":"2030-01-01T12:00:00Z","pump":{"status":{"status":"normal"}}}"#)))
+        #expect(statusText.extras == [.mode])
+        #expect(PumpStatus(date: .now, insulinYesterday: 47.3, averageToday: 124).extras == [.dailyInsulin, .averageGlucose])
+    }
 }
 
 // MARK: - Treatments
@@ -321,12 +333,13 @@ extension SugargliderTests {
 
     @Test func reconnectClearsPumpData() {
         let store = ReadingStore(settings: Self.makeSettings())
-        store.pumpStatus = PumpStatus(date: .now)
+        store.pumpStatus = PumpStatus(date: .now, mode: .auto)
         store.treatments = [Treatment(id: "a", date: .now, kind: .bolus(units: 1))]
         store.reservoirChanged = .now
         store.batteryChanged = .now
         store.reconnect()
         #expect(store.pumpStatus == nil)
+        #expect(store.reportedPumpExtras.isEmpty)
         #expect(store.treatments.isEmpty)
         #expect(store.reservoirChanged == nil)
         #expect(store.batteryChanged == nil)
@@ -339,6 +352,25 @@ extension SugargliderTests {
                 for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
         await server.store(settings).refreshDetails(force: true)
         #expect(server.requests.isEmpty)
+    }
+
+    @Test func reportedExtrasOutlastAStatusWithoutThem() {
+        let store = ReadingStore(settings: Self.makeSettings())
+        store.pumpStatus = PumpStatus(date: .now, mode: .auto, insulinToday: 21.5)
+        store.pumpStatus = PumpStatus(date: .now, reservoir: 120)
+        store.pumpStatus = nil
+        #expect(store.reportedPumpExtras == [.mode, .dailyInsulin])
+    }
+
+    @Test func thePumpTabAsksTheSiteEvenWithEverySwitchOff() async throws {
+        let server = StubbedSite(json: "[\(camapsRecord)]")
+        let settings = Self.makeSettings()
+        for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
+        let store = server.store(settings)
+        await store.refreshPumpStatus(force: false)
+        #expect(server.requests.isEmpty)
+        await store.refreshPumpStatus(force: false, evenIfSwitchedOff: true)
+        #expect(store.reportedPumpExtras == Set(PumpStatus.Extra.allCases))
     }
 
     @Test func refreshDetailsFetchesThePumpStatus() async throws {
