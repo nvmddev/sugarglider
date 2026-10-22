@@ -206,6 +206,21 @@ final class AppSettings {
     }
     var dotUsesZoneColor: Bool = true { didSet { persist(dotUsesZoneColor, "dotUsesZoneColor") } }
 
+    enum LineShading: Hashable { case off, lineColor, custom }
+
+    /// The two shading switches as the Colors tab's one menu. Off leaves `lineShadingUsesLineColor`
+    /// alone, so switching shading back on returns to the color it had.
+    var lineShading: LineShading {
+        get {
+            guard lineShadingEnabled else { return .off }
+            return lineShadingUsesLineColor ? .lineColor : .custom
+        }
+        set {
+            lineShadingEnabled = newValue != .off
+            if newValue != .off { lineShadingUsesLineColor = newValue == .lineColor }
+        }
+    }
+
     // In points; 0 hides that part of the dot.
     static let defaultDotRadius: Double = 4
     static let defaultDotHaloRadius: Double = 7

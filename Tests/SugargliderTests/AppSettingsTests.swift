@@ -127,6 +127,21 @@ extension SugargliderTests {
         #expect(s.chartShowsAnnouncements)
     }
 
+    @Test func lineShadingMenuMapsOntoBothSwitches() {
+        let s = Self.makeSettings()
+        #expect(s.lineShading == .lineColor)
+        s.lineShading = .custom
+        #expect(s.lineShadingEnabled && !s.lineShadingUsesLineColor)
+        s.lineShading = .off
+        #expect(!s.lineShadingEnabled)
+        #expect(!s.lineShadingUsesLineColor, "off keeps the color choice")
+        #expect(s.lineShading == .off)
+        s.lineShadingEnabled = true
+        #expect(s.lineShading == .custom)
+        s.lineShading = .lineColor
+        #expect(s.lineShadingEnabled && s.lineShadingUsesLineColor)
+    }
+
     @Test func everySettingPersistsUnderItsKeyInItsStoredType() {
         let defaults = Self.makeDefaults()
         let s = Self.makeSettings(defaults: defaults)
