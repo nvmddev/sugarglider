@@ -118,8 +118,8 @@ can't read it. The app runs in macOS's App Sandbox, allowed to make network
 requests and nothing more.
 
 It polls your site once a minute by default, which you can change, and only
-pulls chart history and pump data when you open the dropdown. After the first
-fetch it only asks for what's new.
+pulls chart history and pump data when you open the dropdown or
+**Settings → Pump**. After the first fetch it only asks for what's new.
 
 ## Requirements
 

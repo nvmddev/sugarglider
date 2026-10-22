@@ -45,7 +45,7 @@ struct PumpTab: View {
             } footer: {
                 Text("""
                     Hover the chart for the amounts and the announcement texts. Pump data is \
-                    fetched when the dropdown opens, never in the background.
+                    fetched when you open the dropdown or this tab, never in the background.
                     """)
                     .foregroundStyle(.secondary)
             }
