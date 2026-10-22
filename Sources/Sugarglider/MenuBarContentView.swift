@@ -220,7 +220,7 @@ struct MenuBarContentView: View {
     private var ageText: String {
         guard settings.isConfigured else { return "Open Settings to add your Nightscout URL" }
         guard let reading = store.lastReading else { return store.lastError ?? "" }
-        var text = "Reading \(ReadingStore.relative(reading.date, now: store.now))"
+        var text = "Reading from \(reading.date.relative(to: store.now))"
         if store.isStale { text += " (stale)" }
         if let error = store.lastError { text += " — \(error)" }
         return text

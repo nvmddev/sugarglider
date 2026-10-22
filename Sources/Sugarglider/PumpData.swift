@@ -198,16 +198,6 @@ enum PumpFormat {
     static func reservoir(_ units: Double) -> String {
         String(format: units >= 10 ? "%.0f U" : "%.1f U", units)
     }
-
-    /// Nightscout's age-pill style, rounded down: "35m", "5h", "1d 4h".
-    static func age(since date: Date, now: Date = .now) -> String {
-        let minutes = max(0, Int(now.timeIntervalSince(date)) / 60)
-        if minutes < 60 { return "\(minutes)m" }
-        let hours = minutes / 60
-        if hours < 24 { return "\(hours)h" }
-        let (days, remainder) = hours.quotientAndRemainder(dividingBy: 24)
-        return remainder == 0 ? "\(days)d" : "\(days)d \(remainder)h"
-    }
 }
 
 private extension [String: Any] {

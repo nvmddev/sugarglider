@@ -50,17 +50,10 @@ struct ChartCanvas: View {
         message.count <= limit ? message : String(message.prefix(limit - 1)) + "…"
     }
 
-    private static let clockFormatter = dateFormatter("HH:mm")
-    private static let weekdayClockFormatter = dateFormatter("E HH:mm")
-
-    private static func dateFormatter(_ format: String) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateFormat = format
-        return formatter
-    }
-
     private static func timeLabel(_ date: Date, span: TimeInterval) -> String {
-        (ChartMath.labelsNeedDay(span: span) ? weekdayClockFormatter : clockFormatter).string(from: date)
+        date.formatted(ChartMath.labelsNeedDay(span: span)
+                       ? .dateTime.weekday().hour().minute()
+                       : .dateTime.hour().minute())
     }
 
     // MARK: - Geometry

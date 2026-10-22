@@ -325,25 +325,21 @@ extension ReadingStore {
         guard let lastReading else { return false }
         return now.timeIntervalSince(lastReading.date) > settings.staleThreshold
     }
+}
 
-    /// "13m", "2h", "3d". Rounds down: it must never claim more time has passed than has.
-    static func compactAge(_ date: Date, now: Date = .now) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(date)))
-        return switch seconds {
-        case ..<3600: "\(seconds / 60)m"
-        case ..<86_400: "\(seconds / 3600)h"
-        default: "\(seconds / 86_400)d"
-        }
+extension Date {
+    /// "13m", "1d 4h": the time from this date to `now` in at most `units` units, rounded down so an age
+    /// never overstates.
+    func age(at now: Date, units: Int = 1) -> String {
+        Duration.seconds(max(0, now.timeIntervalSince(self))).formatted(
+            .units(allowed: [.days, .hours, .minutes], width: .narrow,
+                   maximumUnitCount: units, fractionalPart: .hide(rounded: .down)))
     }
 
-    static func relative(_ date: Date, now: Date = .now) -> String {
-        let seconds = Int(now.timeIntervalSince(date))
-        return switch seconds {
-        case ..<30: "just now"
-        case ..<90: "1 min ago"
-        case ..<3600: "\(seconds / 60) min ago"
-        case ..<7200: "1 h ago"
-        default: "\(seconds / 3600) h ago"
-        }
+    /// "3 minutes ago", "this minute", "yesterday".
+    func relative(to now: Date) -> String {
+        var style = Date.AnchoredRelativeFormatStyle(anchor: self, presentation: .named, unitsStyle: .wide)
+        style.allowedFields = [.minute, .hour, .day]
+        return style.format(now)
     }
 }

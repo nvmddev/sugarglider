@@ -480,7 +480,7 @@ extension SugargliderTests {
         #expect(PumpDetailsView.staleNote(status: PumpStatus(date: now.addingTimeInterval(-5 * 60)),
                                           settings: settings, now: now) == nil)
         #expect(PumpDetailsView.staleNote(status: PumpStatus(date: now.addingTimeInterval(-40 * 60)),
-                                          settings: settings, now: now) == "Pump data from 40 min ago")
+                                          settings: settings, now: now) == "Pump data from 40 minutes ago")
     }
 
     @Test func pumpFormatsUseADotAndFixedDecimals() {
@@ -491,12 +491,6 @@ extension SugargliderTests {
         #expect(PumpFormat.dailyInsulin(47.3) == "47.3 U")
         #expect(PumpFormat.bolus(1) == "1.0 U")
         #expect(PumpFormat.bolus(0.05) == "0.05 U")
-    }
-
-    @Test(arguments: [(5, "5m"), (60, "1h"), (5 * 60, "5h"), (24 * 60, "1d"), (49 * 60, "2d 1h"), (-1, "0m")])
-    func pumpAgeIsCompact(minutesAgo: Int, expected: String) {
-        let now = Date.now
-        #expect(PumpFormat.age(since: now.addingTimeInterval(TimeInterval(-minutesAgo * 60)), now: now) == expected)
     }
 }
 

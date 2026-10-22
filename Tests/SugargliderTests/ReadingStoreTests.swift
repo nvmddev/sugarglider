@@ -4,19 +4,21 @@ import Synchronization
 @testable import Sugarglider
 
 extension SugargliderTests {
-    @Test(arguments: [(5, "just now"), (65, "1 min ago"), (200, "3 min ago"), (3660, "1 h ago"), (7320, "2 h ago")])
+    @Test(arguments: [(5, "this minute"), (65, "1 minute ago"), (200, "3 minutes ago"), (3660, "1 hour ago"),
+                      (7320, "2 hours ago")])
     func relativeTime(secondsAgo: Int, expected: String) {
         let now = Date.now
-        #expect(ReadingStore.relative(now.addingTimeInterval(-TimeInterval(secondsAgo)), now: now) == expected)
+        #expect(now.addingTimeInterval(-TimeInterval(secondsAgo)).relative(to: now) == expected)
     }
 
     @Test(arguments: [
-        (13 * 60, "13m"), (59 * 60 + 59, "59m"), (3600 + 30, "1h"), (50 * 3600, "2d"),
-        (-30, "0m"),   // clock skew
-    ] as [(Int, String)])
-    func compactAgeRoundsDown(secondsAgo: Int, expected: String) {
+        (13 * 60, 1, "13m"), (59 * 60 + 59, 1, "59m"), (3600 + 30, 1, "1h"), (50 * 3600, 1, "2d"),
+        (5 * 3600 + 12 * 60, 2, "5h 12m"), (49 * 3600 + 60, 2, "2d 1h"),
+        (-30, 1, "0m"),   // clock skew
+    ] as [(Int, Int, String)])
+    func ageRoundsDown(secondsAgo: Int, units: Int, expected: String) {
         let now = Date.now
-        #expect(ReadingStore.compactAge(now.addingTimeInterval(-TimeInterval(secondsAgo)), now: now) == expected)
+        #expect(now.addingTimeInterval(-TimeInterval(secondsAgo)).age(at: now, units: units) == expected)
     }
 
     @Test func isStaleAfterTheDefaultDelay() {
