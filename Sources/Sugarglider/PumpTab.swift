@@ -19,9 +19,11 @@ struct PumpTab: View {
             } header: {
                 Text("Dropdown")
             } footer: {
-                Text("Each item appears only if your Nightscout site reports it, through the "
-                     + "device status a pump or loop uploader sends. Mode, delivery rate and the "
-                     + "daily figures are CamAPS FX values, which only some uploaders pass on.")
+                Text("""
+                    Each item appears only if your Nightscout site reports it, through the \
+                    device status a pump or loop uploader sends. Mode, delivery rate and the \
+                    daily figures are CamAPS FX values, which only some uploaders pass on.
+                    """)
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -32,8 +34,10 @@ struct PumpTab: View {
             } header: {
                 Text("Chart")
             } footer: {
-                Text("Hover the chart for the amounts and the announcement texts. Pump data is "
-                     + "fetched when the dropdown opens, never in the background.")
+                Text("""
+                    Hover the chart for the amounts and the announcement texts. Pump data is \
+                    fetched when the dropdown opens, never in the background.
+                    """)
                     .foregroundStyle(.secondary)
             }
         }

@@ -9,7 +9,7 @@ struct SettingsView: View {
             Tab("Colors", systemImage: "paintpalette") { ColorsTab(settings: settings) }
             Tab("Glucose", systemImage: "drop") { GlucoseTab(settings: settings) }
             Tab("Pump", systemImage: "syringe") { PumpTab(settings: settings) }
-            Tab("About", systemImage: "info.circle") { AboutTab(settings: settings) }
+            Tab("About", systemImage: "info.circle") { AboutTab() }
         }
         // Every tab is a .grouped Form, which scrolls where a plain one would clip.
         .frame(minWidth: 500, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)

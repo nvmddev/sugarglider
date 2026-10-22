@@ -26,12 +26,12 @@ struct ColorsTab: View {
                                 settings: settings, windowEnd: sampleEnd, treatments: treatments)
                         .frame(height: 95 + GlucoseChart.laneSpace(for: treatments, settings: settings))
                     HStack(spacing: 8) {
-                        TintedSlider(value: $previewHours, range: Self.previewHoursBounds, step: 2,
-                                     tint: settings.sliderColor,
-                                     accessibilityValueText: "\(Int(previewHours)) hours, preview only")
+                        Slider(value: $previewHours, in: Self.previewHoursBounds, step: 1)
+                            .tint(settings.sliderColor)
                             .accessibilityLabel("Preview chart range")
+                            .accessibilityValue("\(Int(previewHours)) hours, preview only")
                         Text("\(Int(previewHours)) h")
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                             .frame(width: 30, alignment: .trailing)
                     }
@@ -241,8 +241,8 @@ struct ColorsTab: View {
         return LabeledContent(label) {
             HStack(spacing: 8) {
                 Slider(value: halfPoints, in: range)
-                Text(String(format: "%g", value.wrappedValue))
-                    .font(.system(size: 11, design: .monospaced))
+                Text(value.wrappedValue.formatted())
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .frame(width: 24, alignment: .trailing)
             }

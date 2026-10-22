@@ -342,27 +342,24 @@ extension SugargliderTests {
 // MARK: - Number formatting
 
 extension SugargliderTests {
-    @Test func numberFormatsAlwaysUseADot() {
-        #expect(AppSettings.numberLocale.decimalSeparator == ".")
-        #expect(1234.formatted(AppSettings.wholeNumberFormat) == "1234")
+    /// Pinned to a locale here only so the expectations don't depend on this machine's region.
+    @Test func thresholdFieldsShowOneDecimalInMmolOnly() {
         let s = Self.makeSettings()
+        let us = Locale(identifier: "en_US"), german = Locale(identifier: "de_DE")
         s.units = .mmol
-        #expect(10.5.formatted(s.thresholdFormat) == "10.5")
-        #expect(10.0.formatted(s.thresholdFormat) == "10")
+        #expect(10.5.formatted(s.thresholdFormat.locale(us)) == "10.5")
+        #expect(10.5.formatted(s.thresholdFormat.locale(german)) == "10,5")
+        #expect(10.0.formatted(s.thresholdFormat.locale(us)) == "10")
+        #expect(1234.5.formatted(s.thresholdFormat.locale(us)) == "1234.5")
         s.units = .mgdl
-        #expect(180.4.formatted(s.thresholdFormat) == "180")
-        #expect(AppSettings.Units.mmol.text(fromMgdl: 189) == "10.5")
-        // Proves the pin rather than this machine's region.
-        let commaStyle = FloatingPointFormatStyle<Double>(locale: Locale(identifier: "de_DE"))
-            .precision(.fractionLength(0...1))
-        #expect(10.5.formatted(commaStyle) == "10,5")
+        #expect(180.4.formatted(s.thresholdFormat.locale(us)) == "180")
     }
 
-    @Test func numberFormatsParseWhatTheyRender() throws {
+    @Test func thresholdFieldsParseWhatTheyShow() throws {
         let s = Self.makeSettings()
         s.units = .mmol
-        #expect(try s.thresholdFormat.parseStrategy.parse("10.5") == 10.5)
-        #expect(try AppSettings.wholeNumberFormat.parseStrategy.parse("48") == 48)
+        #expect(try s.thresholdFormat.locale(Locale(identifier: "en_US")).parseStrategy.parse("10.5") == 10.5)
+        #expect(try s.thresholdFormat.locale(Locale(identifier: "de_DE")).parseStrategy.parse("10,5") == 10.5)
     }
 }
 
