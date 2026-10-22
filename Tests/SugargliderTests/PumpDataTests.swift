@@ -522,13 +522,6 @@ extension SugargliderTests {
         #expect(GlucoseChart.laneSpace(for: [bolus], settings: s) == 0)
     }
 
-    @Test func longAnnouncementsAreClippedForThePill() {
-        #expect(GlucoseChart.clipped("short") == "short")
-        let long = String(repeating: "a", count: 200)
-        #expect(GlucoseChart.clipped(long).count == 160)
-        #expect(GlucoseChart.clipped(long).hasSuffix("…"))
-    }
-
     @Test func rendersEveryPumpLayerWithoutCrash() {
         let s = Self.makeSettings()
         s.chartShowsDeliveryRate = true

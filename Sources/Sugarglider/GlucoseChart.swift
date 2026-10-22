@@ -29,10 +29,6 @@ struct GlucoseChart: View {
         return bars || rate ? laneHeight : 0
     }
 
-    static func clipped(_ message: String, limit: Int = 160) -> String {
-        message.count <= limit ? message : String(message.prefix(limit - 1)) + "…"
-    }
-
     private static func timeLabel(_ date: Date, span: TimeInterval) -> String {
         date.formatted(ChartMath.labelsNeedDay(span: span)
                        ? .dateTime.weekday().hour().minute()
@@ -371,7 +367,7 @@ struct GlucoseChart: View {
                        ChartMath.rate(at: target.date, in: p.steps).map(PumpFormat.rate)].compactMap(\.self)
         return HoverPill(title: target.reading.map { "\($0.text(in: p.units)) · \(time)" } ?? time,
                          insulin: insulin.isEmpty ? nil : insulin.joined(separator: " · "),
-                         note: target.note?.noteText.map { Self.clipped($0) })
+                         note: target.note?.noteText)
             .frame(maxWidth: 240)
     }
 }
@@ -388,7 +384,7 @@ private struct HoverPill: View {
             Text(title)
             Group {
                 if let insulin { Text(insulin) }
-                if let note { Text(note) }
+                if let note { Text(note).lineLimit(4) }
             }
             .foregroundStyle(Color(nsColor: .secondaryLabelColor))
         }
