@@ -21,9 +21,10 @@ struct AboutTab: View {
             Section {
                 Label {
                     Text("""
-                        Sugarglider only displays what your Nightscout site reports. It is not a \
-                        medical device and raises no alarms — don't rely on it to catch a high, \
-                        a low, or a stopped feed, and don't use it for treatment decisions.
+                        Sugarglider only displays the data reported by your Nightscout site, which may \
+                        be outdated or inaccurate. It is not a medical device and does not provide \
+                        alarms. Never rely on it to detect high or low glucose levels or an \
+                        interruption in insulin delivery. Do not use it to make treatment decisions.
                         """)
                 } icon: {
                     Image(systemName: "info.circle")

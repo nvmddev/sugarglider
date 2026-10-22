@@ -86,7 +86,7 @@ jobs:
           if [[ -z "${CERT_P12}" ]]; then
             echo "identity=-"      >> "$GITHUB_OUTPUT"
             echo "notarize=false"  >> "$GITHUB_OUTPUT"
-            echo "::warning::No MACOS_CERTIFICATE_P12 secret — building ad-hoc signed. Downloads stay Gatekeeper-quarantined; see the release notes."
+            echo "::warning::No MACOS_CERTIFICATE_P12 secret, so the build is ad-hoc signed. Downloads stay Gatekeeper-quarantined; see the release notes."
             exit 0
           fi
 
@@ -135,7 +135,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${PROFILE}" || -z "${TEAM_ID}" ]]; then
-            echo "::warning::No MACOS_PROVISION_PROFILE/APPLE_TEAM_ID — the app will ask once for Keychain access after each update."
+            echo "::warning::No MACOS_PROVISION_PROFILE/APPLE_TEAM_ID, so the app will ask once for Keychain access after each update."
             exit 0
           fi
           printf '%s' "${PROFILE}" | base64 --decode > Resources/embedded.provisionprofile

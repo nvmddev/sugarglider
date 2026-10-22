@@ -16,9 +16,8 @@ struct SugargliderTests {
 }
 
 /// A suite named by a path keeps its plist at that path, so the tests' suites live in a temporary directory
-/// that goes once all tests have run. A named suite is a plist in ~/Library/Preferences that no API removes:
-/// dropping the domain leaves an empty file, and cfprefsd rewrites a deleted one seconds later (measured).
-/// Every test run used to leave dozens there.
+/// that goes once all tests have run. A plainly named suite is a plist in ~/Library/Preferences that no API
+/// removes: dropping the domain leaves an empty file, and cfprefsd rewrites a deleted one seconds later.
 struct DefaultsCleanup: SuiteTrait, TestScoping {
     static let directory: URL = {
         let directory = FileManager.default.temporaryDirectory.appending(path: "SugargliderTests-\(UUID().uuidString)")
@@ -77,7 +76,7 @@ final class StubbedSite: Sendable {
         Nightscout(baseURL: baseURL ?? self.baseURL, token: token, session: Self.session)
     }
 
-    /// A store reading from this site.
+    /// Points `settings` at this site and returns a store that reads from it.
     @MainActor func store(_ settings: AppSettings) -> ReadingStore {
         settings.baseURL = baseURL
         return ReadingStore(settings: settings, session: Self.session)
