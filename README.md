@@ -130,8 +130,9 @@ cd sugarglider
 open Sugarglider.app
 ```
 
-You'll need Xcode 26 or newer. Pure Swift and SwiftUI, zero dependencies, and
-the binary stays under a megabyte.
+You'll need Xcode 26 or newer. Or skip the script, open `Sugarglider.xcodeproj`
+and hit ⌘R. Pure Swift and SwiftUI, zero dependencies, and the binary stays
+under a megabyte.
 
 Pull requests welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup, how
 the code fits together, and the commit message format. Past releases are in

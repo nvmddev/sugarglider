@@ -1,6 +1,18 @@
+import AppKit
 import SwiftUI
 
+/// Unit tests run inside the app, which mustn't come up for them: no menu bar item, no polling, no Keychain.
 @main
+enum Launcher {
+    static func main() {
+        if ProcessInfo.processInfo.environment["XCTestBundlePath"] == nil {
+            SugargliderApp.main()
+        } else {
+            NSApplication.shared.run()
+        }
+    }
+}
+
 struct SugargliderApp: App {
     @State private var settings: AppSettings
     @State private var store: ReadingStore

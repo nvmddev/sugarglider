@@ -63,7 +63,7 @@ jobs:
             fi
             # Only auto is guarded: an explicit bump or a pushed tag ships regardless.
             if [[ "${BUMP}" == "auto" ]] && ! scripts/version.sh app-changed; then
-              echo "::error::Nothing under Sources/, Resources/ or Package.swift changed since ${previous}, so the built app would be byte-identical. Re-run with bump=patch (or minor/major) to release anyway."
+              echo "::error::Nothing under Sources/, Resources/ or Sugarglider.xcodeproj changed since ${previous}, so the built app would be byte-identical. Re-run with bump=patch (or minor/major) to release anyway."
               exit 1
             fi
           fi
@@ -72,7 +72,7 @@ jobs:
           echo "Releasing ${version} (previous: ${previous:-none})" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Test
-        run: swift test
+        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64
 
       - name: Import signing certificate
         id: signing
