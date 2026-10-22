@@ -201,18 +201,18 @@ extension SugargliderTests {
     }
 
     @Test func rendersEmptyStateWithoutCrash() {
-        #expect(renderedImage(ChartCanvas(readings: [], rangeHours: 6, settings: Self.makeSettings())) != nil)
+        #expect(renderedImage(ChartCanvas(readings: [], rangeHours: 6, settings: Self.makeSettings(), windowEnd: .now)) != nil)
     }
 
     @Test func rendersSinglePointAsNoData() {
-        let chart = ChartCanvas(readings: [reading(100, minutesAgo: 0)], rangeHours: 6, settings: Self.makeSettings())
+        let chart = ChartCanvas(readings: [reading(100, minutesAgo: 0)], rangeHours: 6, settings: Self.makeSettings(), windowEnd: .now)
         #expect(renderedImage(chart) != nil)
     }
 
     @Test func rendersFullChartMmolDirectColors() {
         let s = Self.makeSettings()
         s.units = .mmol
-        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s)
+        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s, windowEnd: .now)
         #expect(renderedImage(chart) != nil)
     }
 
@@ -222,7 +222,7 @@ extension SugargliderTests {
         s.blendLineColors = true
         s.chartBackgroundEnabled = true
         s.chartBackgroundColor = Color(red: 0.1, green: 0.1, blue: 0.12, opacity: 1)
-        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s)
+        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s, windowEnd: .now)
         #expect(renderedImage(chart) != nil)
     }
 
@@ -231,7 +231,7 @@ extension SugargliderTests {
         s.lineShadingEnabled = false
         s.dotRadius = 0
         s.dotHaloRadius = 0
-        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s)
+        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s, windowEnd: .now)
         #expect(renderedImage(chart) != nil)
     }
 
@@ -243,7 +243,7 @@ extension SugargliderTests {
         s.dotColor = Color(red: 0.1, green: 0.9, blue: 0.5, opacity: 1)
         s.dotRadius = 12
         s.dotHaloRadius = 24
-        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s)
+        let chart = ChartCanvas(readings: readingsCrossingEveryZone(until: .now), rangeHours: 6, settings: s, windowEnd: .now)
         #expect(renderedImage(chart) != nil)
     }
 
@@ -256,9 +256,9 @@ extension SugargliderTests {
             extremeLow: s.extremeLow, targetLow: s.targetLow,
             targetHigh: s.targetHigh, extremeHigh: s.extremeHigh, endingAt: end)
 
-        let emptyState = pixels(of: ChartCanvas(readings: [], rangeHours: 3, settings: s))
+        let emptyState = pixels(of: ChartCanvas(readings: [], rangeHours: 3, settings: s, windowEnd: .now))
         let pinned = pixels(of: ChartCanvas(readings: samples, rangeHours: 3, settings: s, windowEnd: end))
-        let wallClock = pixels(of: ChartCanvas(readings: samples, rangeHours: 3, settings: s))
+        let wallClock = pixels(of: ChartCanvas(readings: samples, rangeHours: 3, settings: s, windowEnd: .now))
 
         #expect(emptyState != nil)
         #expect(pinned != emptyState)
@@ -277,7 +277,7 @@ extension SugargliderTests {
 
         let chart = pixels(of: ChartCanvas(readings: samples, rangeHours: 72, settings: s, windowEnd: end))
         #expect(chart != nil)
-        #expect(chart != pixels(of: ChartCanvas(readings: [], rangeHours: 72, settings: s)))
+        #expect(chart != pixels(of: ChartCanvas(readings: [], rangeHours: 72, settings: s, windowEnd: .now)))
     }
 
     /// Both units, since LOW's 39 lies under the mg/dL axis' floor of 40, and both line styles.
@@ -293,14 +293,14 @@ extension SugargliderTests {
         }
         let chart = pixels(of: ChartCanvas(readings: readings, rangeHours: 2, settings: s, windowEnd: end))
         #expect(chart != nil)
-        #expect(chart != pixels(of: ChartCanvas(readings: [], rangeHours: 2, settings: s)))
+        #expect(chart != pixels(of: ChartCanvas(readings: [], rangeHours: 2, settings: s, windowEnd: .now)))
     }
 
     /// Single-reading segments take the isolated-dot branch.
     @Test func rendersWithGapsAndIsolatedPoints() {
         let base = Date.now
         let readings = [300, 100, 95, 90, 0].map { reading(120, minutesAgo: $0, from: base) }
-        let chart = ChartCanvas(readings: readings, rangeHours: 6, settings: Self.makeSettings())
+        let chart = ChartCanvas(readings: readings, rangeHours: 6, settings: Self.makeSettings(), windowEnd: .now)
         #expect(renderedImage(chart) != nil)
     }
 

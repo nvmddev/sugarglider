@@ -16,6 +16,10 @@ final class ReadingStore {
     var reservoirChanged: Date?
     var batteryChanged: Date?
 
+    /// What ages and the stale check are measured against, so the views redraw as time passes even when
+    /// no value changes. They can't keep time themselves: a `TimelineView` hangs a `MenuBarExtra` label.
+    private(set) var now = Date.now
+
     /// Start of the window the last full fetch requested, which is what the cache covers.
     @ObservationIgnored private(set) var historyWindowStart: Date?
     @ObservationIgnored private(set) var treatmentsWindowStart: Date?
@@ -28,6 +32,7 @@ final class ReadingStore {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var reconnectDebounce: Task<Void, Never>?
     @ObservationIgnored private var coverageDebounce: Task<Void, Never>?
+    @ObservationIgnored private var clock: Task<Void, Never>?
 
     private let settings: AppSettings
 
@@ -55,6 +60,16 @@ final class ReadingStore {
         settings.onRangeHoursChanged = { [weak self] in self?.ensureHistoryCoverage() }
         refresh()
         schedulePolling()
+        clock = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                self?.tick()
+            }
+        }
+    }
+
+    func tick() {
+        now = .now
     }
 
     private func schedulePolling() {
@@ -279,6 +294,7 @@ final class ReadingStore {
         lastReading = newest
         if sorted.count >= 2 { previousReading = sorted[sorted.count - 2] }
         lastError = nil
+        tick()
     }
 
     private var windowStart: Date {
@@ -307,7 +323,7 @@ extension ReadingStore {
 
     var isStale: Bool {
         guard let lastReading else { return false }
-        return Date.now.timeIntervalSince(lastReading.date) > settings.staleThreshold
+        return now.timeIntervalSince(lastReading.date) > settings.staleThreshold
     }
 
     /// "13m", "2h", "3d". Rounds down: it must never claim more time has passed than has.

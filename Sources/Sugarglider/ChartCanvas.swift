@@ -5,9 +5,7 @@ struct ChartCanvas: View {
     let readings: [Reading]
     let rangeHours: Int
     let settings: AppSettings
-    /// nil follows the wall clock. Settings' preview pins its sample data's end instead: `Canvas`
-    /// redraws on its own schedule, so samples on a wall-clock window aged out of range.
-    var windowEnd: Date?
+    let windowEnd: Date
     var treatments: [Treatment] = []
 
     static let laneHeight: CGFloat = 22
@@ -129,7 +127,7 @@ struct ChartCanvas: View {
     }
 
     private func layout(size: CGSize) -> Layout? {
-        let end = windowEnd ?? .now
+        let end = windowEnd
         let start = end.addingTimeInterval(-Double(rangeHours) * 3600)
         let visible = readings.filter { $0.date >= start }
         guard visible.count >= 2, let latest = visible.last else { return nil }

@@ -410,7 +410,7 @@ extension SugargliderTests {
 
     @Test func defaultDetailRowsLabelTheRateWithTheMode() {
         let rows = PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
-                                        settings: Self.makeSettings())
+                                        settings: Self.makeSettings(), now: .now)
         #expect(rows.map(\.label) == ["Active insulin", "Auto mode", "Reservoir", "Pump battery"])
         #expect(rows.map(\.value) == ["1.35 U", "1.15 U/h", "120 U", "65%"])
         #expect(rows.allSatisfy { $0.note == nil })
@@ -420,18 +420,18 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         settings.showDeliveryRate = false
         #expect(PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
-                                     settings: settings).contains(.init(label: "Mode", value: "Auto mode")))
+                                     settings: settings, now: .now).contains(.init(label: "Mode", value: "Auto mode")))
         settings.showDeliveryRate = true
         settings.showPumpMode = false
         #expect(PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
-                                     settings: settings).contains(.init(label: "Delivery rate", value: "1.15 U/h")))
+                                     settings: settings, now: .now).contains(.init(label: "Delivery rate", value: "1.15 U/h")))
     }
 
     @Test func statusTextModeKeepsItsOwnRow() {
         var status = fullStatus()
         status.mode = .other("normal")
         let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
-                                        settings: Self.makeSettings())
+                                        settings: Self.makeSettings(), now: .now)
         #expect(rows.contains(.init(label: "Mode", value: "normal")))
         #expect(rows.contains(.init(label: "Delivery rate", value: "1.15 U/h")))
     }
@@ -439,10 +439,10 @@ extension SugargliderTests {
     @Test func detailRowsShowOnlyWhatTheSiteReports() {
         let status = PumpStatus(date: .now, reservoir: 8.4)
         let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
-                                        settings: Self.makeSettings())
+                                        settings: Self.makeSettings(), now: .now)
         #expect(rows == [.init(label: "Reservoir", value: "8.4 U")])
         #expect(PumpDetailsView.rows(status: nil, reservoirChanged: nil, batteryChanged: nil,
-                                     settings: Self.makeSettings()).isEmpty)
+                                     settings: Self.makeSettings(), now: .now).isEmpty)
         #expect(PumpDetailsView.dailyRows(status: status, settings: Self.makeSettings()).isEmpty)
     }
 
@@ -576,7 +576,7 @@ extension SugargliderTests {
             Treatment(id: "b1", date: now.addingTimeInterval(-2 * 3600), kind: .bolus(units: 3.5)),
             Treatment(id: "n1", date: now.addingTimeInterval(-1.5 * 3600), kind: .note("CamAPS: Hoher Wert")),
         ]
-        let chart = ChartCanvas(readings: readings, rangeHours: 6, settings: s, treatments: treatments)
+        let chart = ChartCanvas(readings: readings, rangeHours: 6, settings: s, windowEnd: .now, treatments: treatments)
         let height = 160 + ChartCanvas.laneSpace(for: treatments, settings: s)
         let renderer = ImageRenderer(content: chart.frame(width: 280, height: height))
         renderer.scale = 1
