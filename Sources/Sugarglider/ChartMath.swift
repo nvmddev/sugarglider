@@ -28,15 +28,7 @@ enum ChartMath {
     }
 
     static func segments(of readings: [Reading], gapThreshold gap: TimeInterval) -> [[Reading]] {
-        var runs: [[Reading]] = []
-        for reading in readings {
-            if let previous = runs.last?.last, reading.date.timeIntervalSince(previous.date) <= gap {
-                runs[runs.count - 1].append(reading)
-            } else {
-                runs.append([reading])
-            }
-        }
-        return runs
+        readings.chunked { $1.date.timeIntervalSince($0.date) <= gap }
     }
 
     /// A segment cut where it runs beyond the sensor's range, which is drawn dotted. Such a run
@@ -64,7 +56,7 @@ enum ChartMath {
     static func zoneStops(for zones: Zones, axis: ValueAxis, units: AppSettings.Units,
                           blended: Bool) -> [Gradient.Stop] {
         func location(_ mgdl: Double) -> Double {
-            min(max((units.value(fromMgdl: mgdl) - axis.lo) / (axis.hi - axis.lo), 0), 1)
+            min(max((units.value(fromMgdl: mgdl) - axis.lower) / (axis.upper - axis.lower), 0), 1)
         }
         let edges = [0, location(zones.extremeLow), location(zones.targetLow),
                      location(zones.targetHigh), location(zones.extremeHigh), 1]
@@ -111,15 +103,7 @@ enum ChartMath {
     }
 
     static func contiguousRuns(_ steps: [DeliveryStep]) -> [[DeliveryStep]] {
-        var runs: [[DeliveryStep]] = []
-        for step in steps {
-            if let last = runs.last?.last, step.start.timeIntervalSince(last.end) < 1 {
-                runs[runs.count - 1].append(step)
-            } else {
-                runs.append([step])
-            }
-        }
-        return runs
+        steps.chunked { $1.start.timeIntervalSince($0.end) < 1 }
     }
 
     static func rate(at date: Date, in steps: [DeliveryStep]) -> Double? {
@@ -193,12 +177,12 @@ enum ChartMath {
 
     /// The glucose axis, in display units.
     struct ValueAxis: Equatable {
-        var lo: Double
-        var hi: Double
+        var lower: Double
+        var upper: Double
         var step: Double
 
         /// Where the gridlines go: every multiple of `step` on the axis.
-        var levels: [Double] { Array(stride(from: (lo / step).rounded(.up) * step, through: hi, by: step)) }
+        var levels: [Double] { Array(stride(from: (lower / step).rounded(.up) * step, through: upper, by: step)) }
     }
 
     /// Always reaches every threshold, so a quiet day keeps the scale of a wild one rather than
@@ -212,8 +196,23 @@ enum ChartMath {
         let low = max(clampLow, ends.min() ?? clampLow)
         let high = max(min(clampHigh, ends.max() ?? clampHigh), low + minSpan)
         let step = niceStep(high - low)
-        let lo = max(clampLow, (low / step).rounded(.down) * step - step / 2)
-        let hi = min(clampHigh, (high / step).rounded(.up) * step + step / 2)
-        return ValueAxis(lo: lo, hi: max(hi, lo + minSpan), step: step)
+        let lower = max(clampLow, (low / step).rounded(.down) * step - step / 2)
+        let upper = min(clampHigh, (high / step).rounded(.up) * step + step / 2)
+        return ValueAxis(lower: lower, upper: max(upper, lower + minSpan), step: step)
+    }
+}
+
+extension Array {
+    /// Runs of neighbors that `belongTogether`, as Swift Algorithms' `chunked(by:)` splits them.
+    func chunked(by belongTogether: (Element, Element) -> Bool) -> [[Element]] {
+        var chunks: [[Element]] = []
+        for element in self {
+            if let previous = chunks.last?.last, belongTogether(previous, element) {
+                chunks[chunks.count - 1].append(element)
+            } else {
+                chunks.append([element])
+            }
+        }
+        return chunks
     }
 }
