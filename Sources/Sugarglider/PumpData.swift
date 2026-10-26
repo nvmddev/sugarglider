@@ -142,7 +142,8 @@ struct Treatment: Equatable {
     enum Kind: Equatable {
         case bolus(units: Double)
         /// An absolute rate in U/h, held for `minutes` or until the next temp basal starts. A zero
-        /// duration only ends the previous one, which is how some loops cancel a temp basal.
+        /// duration only ends the previous one, which is how some loops cancel a temp basal; an
+        /// infinite one is a suspend still running.
         case tempBasal(rate: Double, minutes: Double)
         /// An announcement or note, which is also where uploaders file pump and sensor alarms.
         case note(String)
@@ -180,7 +181,9 @@ extension Treatment {
             var rate = absolute ?? record.number("rate")
             if absolute == nil, let percent = record.number("percent"), rate == percent { rate = nil }
             guard let rate = rate ?? (minutes == 0 ? 0 : nil), rate >= 0 else { return nil }
-            kind = .tempBasal(rate: rate, minutes: minutes)
+            // Loop files a suspend as a temp basal whose duration stays 0 until the pump resumes.
+            let running = minutes == 0 && record.string("reason") == "suspend"
+            kind = .tempBasal(rate: rate, minutes: running ? .infinity : minutes)
         } else if let units = record.number("insulin"), units > 0 {
             // AAPS files the insulin that fills a new cannula as a bolus.
             guard record.string("type") != "PRIMING" else { return nil }

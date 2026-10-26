@@ -316,6 +316,21 @@ extension SugargliderTests {
         #expect(steps.count == 1)
         #expect(steps.first?.end == base.addingTimeInterval(5 * 60))
     }
+
+    @Test func runningSuspendLastsUntilTheNextTempBasalOrTheWindowEnd() throws {
+        let suspend = try #require(Treatment(record: record("""
+            {"eventType":"Temp Basal","created_at":"2030-01-01T12:00:00Z","rate":0,"absolute":0,
+             "duration":0,"reason":"suspend"}
+            """)))
+        #expect(suspend.kind == .tempBasal(rate: 0, minutes: .infinity))
+        let base = suspend.date
+        let end = base.addingTimeInterval(3600)
+        #expect(ChartMath.deliverySteps([suspend], from: base, to: end)
+                == [ChartMath.DeliveryStep(start: base, end: end, rate: 0)])
+        let resumed = ChartMath.deliverySteps([suspend, temp(1, minutes: 30, at: 20, from: base)], from: base, to: end)
+        #expect(resumed.map(\.rate) == [0, 1])
+        #expect(resumed.first?.end == base.addingTimeInterval(20 * 60))
+    }
 }
 
 // MARK: - Store

@@ -77,9 +77,8 @@ extension Uploader {
                   "notes":"Set Change (fixed prime)"}]
                 """,
             pumpStatus: PumpStatus(date: noon, insulinOnBoard: -0.2345678, reservoir: 112.5, batteryPercent: 74),
-            // Misread: a suspend still running has duration 0, so it is drawn as a cancel.
             kinds: [.bolus(units: 3), .tempBasal(rate: 1.2, minutes: 30), .bolus(units: 2),
-                    .tempBasal(rate: 0, minutes: 0), .note("Battery Out Limit")])
+                    .tempBasal(rate: 0, minutes: .infinity), .note("Battery Out Limit")])
 
         // LoopKit NightscoutService with OmnipodKit: a pod sends no battery and no level above 50 U.
         case .loopOmnipod: UploaderFixture(
