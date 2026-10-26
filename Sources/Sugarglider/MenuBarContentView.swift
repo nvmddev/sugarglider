@@ -6,7 +6,7 @@ struct MenuBarContentView: View {
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
 
-    private let contentWidth: CGFloat = 280
+    private static let contentWidth: CGFloat = 280
     private static let spacing: CGFloat = 10
     /// The button row sits as far above the bottom edge as below the divider, so it reads centered between them.
     static let insets = EdgeInsets(top: 18, leading: 18, bottom: spacing, trailing: 18)
@@ -44,7 +44,7 @@ struct MenuBarContentView: View {
 
             actionButtons
         }
-        .frame(width: contentWidth)
+        .frame(width: Self.contentWidth)
         .padding(Self.insets)
         .dropdownBackground(settings.dropdownBackground)
         .task { await store.refreshHistory(force: false) }

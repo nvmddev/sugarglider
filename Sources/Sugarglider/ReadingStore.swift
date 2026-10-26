@@ -76,7 +76,7 @@ final class ReadingStore {
         }
         Task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                try? await Task.sleep(for: .seconds(30), tolerance: .seconds(5))
                 tick()
             }
         }

@@ -87,7 +87,6 @@ struct Nightscout {
     static let sharedSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 15
-        configuration.waitsForConnectivity = false
         configuration.httpAdditionalHeaders = ["Accept": "application/json"]
         return URLSession(configuration: configuration)
     }()
