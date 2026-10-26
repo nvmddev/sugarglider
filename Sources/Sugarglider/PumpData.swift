@@ -21,6 +21,7 @@ struct PumpStatus: Equatable {
         /// CamAPS FX's temporary modes. `until` is the end time the status text gives, if any.
         case boost(until: String?)
         case easeOff(until: String?)
+        case suspended
         /// An uploader's own status text, shown verbatim.
         case other(String)
 
@@ -30,6 +31,7 @@ struct PumpStatus: Equatable {
             case .off: String(localized: "Auto mode off")
             case .boost(let until): until.map { String(localized: "Boost until \($0)") } ?? String(localized: "Boost")
             case .easeOff(let until): until.map { String(localized: "Ease-off until \($0)") } ?? String(localized: "Ease-off")
+            case .suspended: String(localized: "Suspended")
             case .other(let text): text
             }
         }
@@ -82,14 +84,17 @@ struct PumpStatus: Equatable {
     }
 
     /// CamAPS FX's flags win, but the status text is still searched: it's the only place a
-    /// Boost's end time appears ("Boost bis 15:04"). Without flags, the text is the mode.
-    static func mode(autoMode: Bool?, boost: Bool?, easeOff: Bool?, statusText: String?) -> Mode? {
+    /// Boost's end time appears ("Boost bis 15:04"). Without flags, the text is the mode, except
+    /// for the pump states OpenAPS and Trio report there, of which only a suspend is worth a row.
+    static func mode(autoMode: Bool?, boost: Bool?, easeOff: Bool?, suspended: Bool = false,
+                     statusText: String?) -> Mode? {
         let text = statusText?.trimmingCharacters(in: .whitespaces) ?? ""
         let until = text.firstMatch(of: #/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/#).map { String($0.output) }
         if boost == true { return .boost(until: until) }
         if easeOff == true { return .easeOff(until: until) }
         if let autoMode { return autoMode ? .auto : .off }
-        return text.isEmpty ? nil : .other(text)
+        if suspended || text == "suspended" { return .suspended }
+        return ["", "normal", "bolusing"].contains(text) ? nil : .other(text)
     }
 }
 
@@ -111,9 +116,15 @@ extension PumpStatus {
             ?? record.object("loop")?.object("iob")?.number("iob") ?? openapsNow?.number("iob")
 
         reservoir = pump?.number("reservoir")
-        batteryPercent = pump?.object("battery")?.number("percent")
+        // Trio sends a placeholder 100 for a pump without a battery report (a pod), flagged this way.
+        let battery = pump?.object("battery")
+        batteryPercent = battery?.bool("display") == false ? nil : battery?.number("percent")
+        // Loop flags a suspend on the pump, OpenAPS and Trio in its status.
+        let status = pump?.object("status")
+        let suspended = pump?.bool("suspended") == true || status?.bool("suspended") == true
         mode = Self.mode(autoMode: camaps?.bool("auto_mode"), boost: camaps?.bool("boost"),
-                         easeOff: camaps?.bool("ease_off"), statusText: pump?.object("status")?.string("status"))
+                         easeOff: camaps?.bool("ease_off"), suspended: suspended,
+                         statusText: status?.string("status"))
         deliveryRate = camaps?.number("delivery_rate")
         insulinToday = camaps?.number("insulin_today")
         insulinYesterday = camaps?.number("insulin_yesterday")

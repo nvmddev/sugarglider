@@ -139,8 +139,7 @@ extension Uploader {
                   "duration":60,"notes":"Custom Override"},
                  {"eventType":"Insulin Change","created_at":"2030-01-01T07:00:00.000Z","enteredBy":"Trio"}]
                 """,
-            // Misread: a pod has no battery, Trio sends 100 with display false; "normal" is no mode.
-            pumpStatus: PumpStatus(date: noon, insulinOnBoard: 1.23, batteryPercent: 100, mode: .other("normal")),
+            pumpStatus: PumpStatus(date: noon, insulinOnBoard: 1.23),
             kinds: [.note(#"Alarm Optional("Occlusion") PumpAlarm"#), .tempBasal(rate: 0.8, minutes: 30),
                     .bolus(units: 2.5), .bolus(units: 0.3), .tempBasal(rate: 0, minutes: 0),
                     .note("PumpSuspend"), .note("PumpResume")])
@@ -247,8 +246,8 @@ extension Uploader {
                  {"eventType":"Insulin Change","notes":"Rewind model 723",
                   "created_at":"2030-01-01T09:00:00+01:00","enteredBy":"openaps://medtronic/723"}]
                 """,
-            // Misread: the battery comes as a voltage only, so it has no row; "normal" is no mode.
-            pumpStatus: PumpStatus(date: noon, insulinOnBoard: 0.85, reservoir: 85.3, mode: .other("normal")),
+            // Not read: the battery comes as a voltage only.
+            pumpStatus: PumpStatus(date: noon, insulinOnBoard: 0.85, reservoir: 85.3),
             // Misread: a 150 % temp basal is drawn at 150 U/h.
             kinds: [.bolus(units: 4.2), .tempBasal(rate: 0.8, minutes: 30), .bolus(units: 1.5),
                     .tempBasal(rate: 150, minutes: 30), .tempBasal(rate: 0, minutes: 0),
