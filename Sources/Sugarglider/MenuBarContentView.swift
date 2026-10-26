@@ -6,7 +6,7 @@ struct MenuBarContentView: View {
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
 
-    private let contentWidth: CGFloat = 280
+    private static let contentWidth: CGFloat = 280
     private static let spacing: CGFloat = 10
     /// The button row sits as far above the bottom edge as below the divider, so it reads centered between them.
     static let insets = EdgeInsets(top: 18, leading: 18, bottom: spacing, trailing: 18)
@@ -44,7 +44,7 @@ struct MenuBarContentView: View {
 
             actionButtons
         }
-        .frame(width: contentWidth)
+        .frame(width: Self.contentWidth)
         .padding(Self.insets)
         .dropdownBackground(settings.dropdownBackground)
         .task { await store.refreshHistory(force: false) }
@@ -68,7 +68,7 @@ struct MenuBarContentView: View {
         .buttonBorderShape(.circle)
     }
 
-    private func actionButton(_ title: String, systemImage: String, shortcut: KeyEquivalent,
+    private func actionButton(_ title: LocalizedStringKey, systemImage: String, shortcut: KeyEquivalent,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
             // A circle sizes to its label, so only equal squares give equal circles.
@@ -99,12 +99,14 @@ struct MenuBarContentView: View {
     }
 
     private func readingText(_ reading: Reading) -> Text {
-        // LOW and HIGH have no value to put a unit to, and no delta: they say where the sensor ran out instead.
-        let text = reading.text(in: settings.units)
-        let value = Text(verbatim: reading.outOfRange == nil ? "\(text) \(settings.units.label)" : text)
+        // LOW and HIGH have no delta: they say where the sensor ran out instead.
+        let value = Text(verbatim: reading.text(in: settings.units, withUnit: true))
             .font(.title3.weight(.medium))
-        let arrow = reading.direction.map { Text(verbatim: " \($0.arrow)").font(.title2.weight(.semibold)) }
-            ?? Text(verbatim: "")
+        let arrow = reading.direction.map { direction in
+            Text(verbatim: " \(direction.arrow)")
+                .font(.title2.weight(.semibold))
+                .accessibilityLabel(Text(verbatim: ", \(direction.spokenName)"))
+        } ?? Text(verbatim: "")
         let note: Text? = switch reading.outOfRange {
         case .low: Text("below the sensor's range")
         case .high: Text("above the sensor's range")

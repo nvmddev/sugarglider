@@ -22,20 +22,20 @@ extension SugargliderTests {
     @Test func valueAxisKeepsTheThresholdsInViewOnAQuietDay() {
         let axis = ChartMath.valueAxis(values: [5.6, 7.4, 6.1], thresholds: [3.0, 3.9, 10.0, 13.9], mgdl: false)
         // Gridlines 2…14, half a step past the top one; the bottom stops at the 2 mmol/L clamp.
-        #expect(axis == .init(lo: 2, hi: 15, step: 2))
+        #expect(axis == .init(lower: 2, upper: 15, step: 2))
     }
 
     @Test func valueAxisWidensForReadingsBeyondTheThresholds() {
         let axis = ChartMath.valueAxis(values: [80, 320], thresholds: [54, 70, 180, 250], mgdl: true)
-        #expect(axis == .init(lo: 40, hi: 375, step: 50))
+        #expect(axis == .init(lower: 40, upper: 375, step: 50))
     }
 
     @Test func valueAxisStaysWithinTheClampsAndAMinimumSpan() {
         let clamped = ChartMath.valueAxis(values: [39, 600], thresholds: [70, 180], mgdl: true)
-        #expect(clamped == .init(lo: 40, hi: 500, step: 100))
+        #expect(clamped == .init(lower: 40, upper: 500, step: 100))
 
         let flat = ChartMath.valueAxis(values: [6, 6], thresholds: [6, 6], mgdl: false)
-        #expect(flat.hi - flat.lo >= 2)
+        #expect(flat.upper - flat.lower >= 2)
     }
 
     @Test func labelsNeedDayOnceAWindowCanRepeatAClockTime() {
@@ -69,7 +69,7 @@ extension SugargliderTests {
 
     @Test func zoneStopsHaveHardEdgesAtTheThresholds() {
         let zones = defaultZones()
-        let axis = ChartMath.ValueAxis(lo: 40, hi: 340, step: 50)
+        let axis = ChartMath.ValueAxis(lower: 40, upper: 340, step: 50)
         let stops = ChartMath.zoneStops(for: zones, axis: axis, units: .mgdl, blended: false)
         // Thresholds 54, 70, 180 and 250 lie 14, 30, 140 and 210 into the 300 mg/dL axis.
         let edges: [Double] = [0, 14, 14, 30, 30, 140, 140, 210, 210, 300]
@@ -84,14 +84,14 @@ extension SugargliderTests {
     @Test func zoneStopsSkipZonesWithoutHeight() {
         var zones = defaultZones()
         zones.targetLow = 200
-        let stops = ChartMath.zoneStops(for: zones, axis: ChartMath.ValueAxis(lo: 40, hi: 340, step: 50),
+        let stops = ChartMath.zoneStops(for: zones, axis: ChartMath.ValueAxis(lower: 40, upper: 340, step: 50),
                                         units: .mgdl, blended: true)
         #expect(!stops.contains { AppSettings.colorsMatch($0.color, zones.inRangeColor) })
     }
 
     @Test func gridlineLevelsAreMultiplesOfTheStep() {
-        #expect(ChartMath.ValueAxis(lo: 1.5, hi: 14.5, step: 2).levels == [2, 4, 6, 8, 10, 12, 14])
-        #expect(ChartMath.ValueAxis(lo: 40, hi: 340, step: 50).levels == [50, 100, 150, 200, 250, 300])
+        #expect(ChartMath.ValueAxis(lower: 1.5, upper: 14.5, step: 2).levels == [2, 4, 6, 8, 10, 12, 14])
+        #expect(ChartMath.ValueAxis(lower: 40, upper: 340, step: 50).levels == [50, 100, 150, 200, 250, 300])
     }
 
     @Test func colorForZone() {
