@@ -183,6 +183,9 @@ extension SugargliderTests {
     @Test(arguments: [
         #"{"eventType":"Insulin Change","created_at":"2030-01-01T08:00:00Z","notes":"Reservoir 0 → 150 IE"}"#,
         #"{"eventType":"Temp Basal","created_at":"2030-01-01T08:00:00Z","percent":-50,"duration":30}"#,
+        #"{"eventType":"Temp Basal","created_at":"2030-01-01T08:00:00Z","percent":"150","rate":150,"duration":"30"}"#,
+        #"{"eventType":"Meal Bolus","created_at":"2030-01-01T08:00:00Z","insulin":0.7,"type":"PRIMING"}"#,
+        #"{"eventType":"Meal Bolus","created_at":"2030-01-01T08:00:00Z","insulin":1,"isValid":false}"#,
         #"{"eventType":"Announcement","created_at":"2030-01-01T08:00:00Z","notes":"  "}"#,
         #"{"eventType":"Correction Bolus","insulin":1}"#,
         #"{"eventType":"Correction Bolus","created_at":"2030-01-01T08:00:00Z","insulin":0}"#,

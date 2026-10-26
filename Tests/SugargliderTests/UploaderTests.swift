@@ -182,11 +182,9 @@ extension Uploader {
             // Misread: "Closed Loop" is the loop's mode in the app's language, not the pump's.
             pumpStatus: PumpStatus(date: noon, insulinOnBoard: 1.234, reservoir: 128, batteryPercent: 74,
                                    mode: .other("Closed Loop")),
-            // Misread: the priming bolus counts as insulin, the soft-deleted bolus (an older Nightscout
-            // returns it) is drawn, the extended bolus (Combo Bolus, no insulin key) is missing.
-            kinds: [.bolus(units: 0.7), .note("Pump unreachable"), .tempBasal(rate: 0.45, minutes: 30),
-                    .tempBasal(rate: 0.425, minutes: 60), .bolus(units: 1), .bolus(units: 3.5),
-                    .bolus(units: 0.3)])
+            // Not read: the extended bolus (Combo Bolus, no insulin key).
+            kinds: [.note("Pump unreachable"), .tempBasal(rate: 0.45, minutes: 30),
+                    .tempBasal(rate: 0.425, minutes: 60), .bolus(units: 3.5), .bolus(units: 0.3)])
 
         // AAPS OmnipodDashPumpPlugin: 75 U stands for "above 50 U", the battery object stays empty.
         case .aapsOmnipod: UploaderFixture(
@@ -248,9 +246,8 @@ extension Uploader {
                 """,
             // Not read: the battery comes as a voltage only.
             pumpStatus: PumpStatus(date: noon, insulinOnBoard: 0.85, reservoir: 85.3),
-            // Misread: a 150 % temp basal is drawn at 150 U/h.
             kinds: [.bolus(units: 4.2), .tempBasal(rate: 0.8, minutes: 30), .bolus(units: 1.5),
-                    .tempBasal(rate: 150, minutes: 30), .tempBasal(rate: 0, minutes: 0),
+                    .tempBasal(rate: 0, minutes: 0),
                     .note("PumpResume model 723")])
 
         // xDrip+ NightscoutUploader and NightscoutBatteryDevice: devicestatus is battery only.

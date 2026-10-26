@@ -163,9 +163,11 @@ struct Treatment: Equatable {
 
 extension Treatment {
     /// One `treatments` record, or nil for one the chart doesn't draw (a reservoir change, a
-    /// percent temp basal) or can't place in time.
+    /// percent temp basal, a priming bolus), can't place in time, or the uploader deleted (an older
+    /// Nightscout still returns those).
     init?(record: [String: Any]) {
-        guard let date = NightscoutTime.date(record["created_at"])
+        guard record.bool("isValid") != false,
+              let date = NightscoutTime.date(record["created_at"])
                 ?? NightscoutTime.date(record["mills"]) ?? NightscoutTime.date(record["date"])
         else { return nil }
         let eventType = record.string("eventType") ?? ""
@@ -173,11 +175,15 @@ extension Treatment {
         if eventType == "Temp Basal" {
             guard let minutes = record.number("duration"), minutes >= 0 else { return nil }
             // Without an absolute rate it's a cancel (zero duration) or a percent of the profile,
-            // which isn't read.
-            let rate = record.number("absolute") ?? record.number("rate")
+            // which isn't read. AAPS puts a percent temp's rate in U/h into `rate`, OpenAPS the percent.
+            let absolute = record.number("absolute")
+            var rate = absolute ?? record.number("rate")
+            if absolute == nil, let percent = record.number("percent"), rate == percent { rate = nil }
             guard let rate = rate ?? (minutes == 0 ? 0 : nil), rate >= 0 else { return nil }
             kind = .tempBasal(rate: rate, minutes: minutes)
         } else if let units = record.number("insulin"), units > 0 {
+            // AAPS files the insulin that fills a new cannula as a bolus.
+            guard record.string("type") != "PRIMING" else { return nil }
             kind = .bolus(units: units)
         } else if eventType == "Announcement" || eventType == "Note",
                   let notes = record.string("notes")?.trimmingCharacters(in: .whitespacesAndNewlines),
