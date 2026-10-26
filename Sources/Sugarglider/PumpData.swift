@@ -7,6 +7,8 @@ struct PumpStatus: Equatable {
     var date: Date
     var insulinOnBoard: Double?
     var reservoir: Double?
+    /// What Loop shows in place of the reservoir level ("Signal Loss", "No Pod"), as Nightscout does.
+    var reservoirMessage: String?
     var batteryPercent: Double?
     var mode: Mode?
     var deliveryRate: Double?
@@ -21,6 +23,7 @@ struct PumpStatus: Equatable {
         /// CamAPS FX's temporary modes. `until` is the end time the status text gives, if any.
         case boost(until: String?)
         case easeOff(until: String?)
+        case suspended
         /// An uploader's own status text, shown verbatim.
         case other(String)
 
@@ -30,6 +33,7 @@ struct PumpStatus: Equatable {
             case .off: String(localized: "Auto mode off")
             case .boost(let until): until.map { String(localized: "Boost until \($0)") } ?? String(localized: "Boost")
             case .easeOff(let until): until.map { String(localized: "Ease-off until \($0)") } ?? String(localized: "Ease-off")
+            case .suspended: String(localized: "Suspended")
             case .other(let text): text
             }
         }
@@ -62,6 +66,7 @@ struct PumpStatus: Equatable {
     static let mergeSpan: TimeInterval = 15 * 60
 
     /// Each field from the newest record within `mergeSpan` that has it; nil when no record has data.
+    /// The reservoir message only from the newest: a cleared one must not linger.
     static func merged(_ records: [PumpStatus]) -> PumpStatus? {
         let newestFirst = records.filter(\.hasData).sorted { $0.date > $1.date }
         guard let newest = newestFirst.first else { return nil }
@@ -72,6 +77,7 @@ struct PumpStatus: Equatable {
         return PumpStatus(date: newest.date,
                           insulinOnBoard: latest(\.insulinOnBoard),
                           reservoir: latest(\.reservoir),
+                          reservoirMessage: newest.reservoirMessage,
                           batteryPercent: latest(\.batteryPercent),
                           mode: latest(\.mode),
                           deliveryRate: latest(\.deliveryRate),
@@ -82,14 +88,17 @@ struct PumpStatus: Equatable {
     }
 
     /// CamAPS FX's flags win, but the status text is still searched: it's the only place a
-    /// Boost's end time appears ("Boost bis 15:04"). Without flags, the text is the mode.
-    static func mode(autoMode: Bool?, boost: Bool?, easeOff: Bool?, statusText: String?) -> Mode? {
+    /// Boost's end time appears ("Boost bis 15:04"). Without flags, the text is the mode, except
+    /// for the pump states OpenAPS and Trio report there, of which only a suspend is worth a row.
+    static func mode(autoMode: Bool?, boost: Bool?, easeOff: Bool?, suspended: Bool = false,
+                     statusText: String?) -> Mode? {
         let text = statusText?.trimmingCharacters(in: .whitespaces) ?? ""
         let until = text.firstMatch(of: #/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/#).map { String($0.output) }
         if boost == true { return .boost(until: until) }
         if easeOff == true { return .easeOff(until: until) }
         if let autoMode { return autoMode ? .auto : .off }
-        return text.isEmpty ? nil : .other(text)
+        if suspended || text == "suspended" { return .suspended }
+        return ["", "normal", "bolusing"].contains(text) ? nil : .other(text)
     }
 }
 
@@ -111,9 +120,19 @@ extension PumpStatus {
             ?? record.object("loop")?.object("iob")?.number("iob") ?? openapsNow?.number("iob")
 
         reservoir = pump?.number("reservoir")
-        batteryPercent = pump?.object("battery")?.number("percent")
+        reservoirMessage = pump?.string("reservoir_display_override")?
+            .split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        if reservoirMessage?.isEmpty == true { reservoirMessage = nil }
+        // Trio sends a placeholder 100 for a pump without a battery report (a pod), flagged this way.
+        let battery = pump?.object("battery")
+        batteryPercent = battery?.bool("display") == false ? nil : battery?.number("percent")
+        // Loop flags a suspend on the pump, OpenAPS and Trio in its status.
+        let status = pump?.object("status")
+        let suspended = pump?.bool("suspended") == true || status?.bool("suspended") == true
         mode = Self.mode(autoMode: camaps?.bool("auto_mode"), boost: camaps?.bool("boost"),
-                         easeOff: camaps?.bool("ease_off"), statusText: pump?.object("status")?.string("status"))
+                         easeOff: camaps?.bool("ease_off"), suspended: suspended,
+                         statusText: status?.string("status"))
         deliveryRate = camaps?.number("delivery_rate")
         insulinToday = camaps?.number("insulin_today")
         insulinYesterday = camaps?.number("insulin_yesterday")
@@ -131,7 +150,8 @@ struct Treatment: Equatable {
     enum Kind: Equatable {
         case bolus(units: Double)
         /// An absolute rate in U/h, held for `minutes` or until the next temp basal starts. A zero
-        /// duration only ends the previous one, which is how some loops cancel a temp basal.
+        /// duration only ends the previous one, which is how some loops cancel a temp basal; an
+        /// infinite one is a suspend still running.
         case tempBasal(rate: Double, minutes: Double)
         /// An announcement or note, which is also where uploaders file pump and sensor alarms.
         case note(String)
@@ -152,9 +172,11 @@ struct Treatment: Equatable {
 
 extension Treatment {
     /// One `treatments` record, or nil for one the chart doesn't draw (a reservoir change, a
-    /// percent temp basal) or can't place in time.
+    /// percent temp basal, a priming bolus), can't place in time, or the uploader deleted (an older
+    /// Nightscout still returns those).
     init?(record: [String: Any]) {
-        guard let date = NightscoutTime.date(record["created_at"])
+        guard record.bool("isValid") != false,
+              let date = NightscoutTime.date(record["created_at"])
                 ?? NightscoutTime.date(record["mills"]) ?? NightscoutTime.date(record["date"])
         else { return nil }
         let eventType = record.string("eventType") ?? ""
@@ -162,11 +184,17 @@ extension Treatment {
         if eventType == "Temp Basal" {
             guard let minutes = record.number("duration"), minutes >= 0 else { return nil }
             // Without an absolute rate it's a cancel (zero duration) or a percent of the profile,
-            // which isn't read.
-            let rate = record.number("absolute") ?? record.number("rate")
+            // which isn't read. AAPS puts a percent temp's rate in U/h into `rate`, OpenAPS the percent.
+            let absolute = record.number("absolute")
+            var rate = absolute ?? record.number("rate")
+            if absolute == nil, let percent = record.number("percent"), rate == percent { rate = nil }
             guard let rate = rate ?? (minutes == 0 ? 0 : nil), rate >= 0 else { return nil }
-            kind = .tempBasal(rate: rate, minutes: minutes)
+            // Loop files a suspend as a temp basal whose duration stays 0 until the pump resumes.
+            let running = minutes == 0 && record.string("reason") == "suspend"
+            kind = .tempBasal(rate: rate, minutes: running ? .infinity : minutes)
         } else if let units = record.number("insulin"), units > 0 {
+            // AAPS files the insulin that fills a new cannula as a bolus.
+            guard record.string("type") != "PRIMING" else { return nil }
             kind = .bolus(units: units)
         } else if eventType == "Announcement" || eventType == "Note",
                   let notes = record.string("notes")?.trimmingCharacters(in: .whitespacesAndNewlines),

@@ -93,9 +93,9 @@ struct PumpDetailsView: View {
         }
 
         let ages = settings.showChangeAge
-        if settings.showReservoir, let units = status.reservoir {
+        if settings.showReservoir, let value = status.reservoirMessage ?? status.reservoir.map(PumpFormat.reservoir) {
             let age = ages ? reservoirChanged?.age(at: now, units: 2) : nil
-            rows.append(Row(label: String(localized: "Reservoir"), value: PumpFormat.reservoir(units), note: age,
+            rows.append(Row(label: String(localized: "Reservoir"), value: value, note: age,
                             help: age.map { String(localized: "Reservoir changed \($0) ago") }))
         }
         if settings.showPumpBattery, let percent = status.batteryPercent {

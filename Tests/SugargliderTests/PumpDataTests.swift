@@ -60,6 +60,32 @@ extension SugargliderTests {
         #expect(status.batteryPercent == 0)
     }
 
+    @Test func pumpStatusSkipsAPlaceholderBatteryAndReadsASuspend() throws {
+        let trio = try #require(PumpStatus(record: record("""
+            {"created_at":"2030-01-01T12:00:00Z",
+             "pump":{"battery":{"percent":100,"display":false},"status":{"status":"suspended","suspended":true}}}
+            """)))
+        #expect(trio.batteryPercent == nil)
+        #expect(trio.mode == .suspended)
+        let loop = try #require(PumpStatus(record: record(
+            #"{"created_at":"2030-01-01T12:00:00Z","pump":{"suspended":true,"battery":{"percent":74,"display":true}}}"#)))
+        #expect(loop.batteryPercent == 74)
+        #expect(loop.mode == .suspended)
+    }
+
+    @Test func reservoirMessageComesOnOneLineAndOnlyFromTheNewestRecord() throws {
+        let status = try #require(PumpStatus(record: record("""
+            {"created_at":"2030-01-01T12:00:00Z",
+             "pump":{"reservoir_display_override":" Enable\\nBluetooth ","reservoir_level_override":2}}
+            """)))
+        #expect(status.reservoirMessage == "Enable Bluetooth")
+        #expect(PumpStatus(record: record(
+            #"{"created_at":"2030-01-01T12:00:00Z","pump":{"reservoir_display_override":"  "}}"#))?.hasData == false)
+
+        let cleared = PumpStatus(date: status.date.addingTimeInterval(300), insulinOnBoard: 1)
+        #expect(try #require(PumpStatus.merged([status, cleared])).reservoirMessage == nil)
+    }
+
     @Test func pumpStatusFindsInsulinOnBoardWhereLoopsPutIt() throws {
         let loop = try #require(PumpStatus(record: record(
             #"{"created_at":"2030-01-01T12:00:00Z","loop":{"iob":{"iob":2.5}}}"#)))
@@ -87,7 +113,12 @@ extension SugargliderTests {
         #expect(mode(true, true, false, "Boost bis 15:04") == .boost(until: "15:04"))
         #expect(mode(true, false, true, "Ease-off bis 8:30") == .easeOff(until: "8:30"))
         #expect(mode(true, true, false, nil) == .boost(until: nil))
-        #expect(mode(nil, nil, nil, " normal ") == .other("normal"))
+        #expect(mode(nil, nil, nil, " Closed Loop ") == .other("Closed Loop"))
+        #expect(mode(nil, nil, nil, "normal") == nil)
+        #expect(mode(nil, nil, nil, "bolusing") == nil)
+        #expect(mode(nil, nil, nil, "suspended") == .suspended)
+        #expect(PumpStatus.mode(autoMode: nil, boost: nil, easeOff: nil, suspended: true, statusText: "normal") == .suspended)
+        #expect(PumpStatus.mode(autoMode: true, boost: nil, easeOff: nil, suspended: true, statusText: nil) == .auto)
         #expect(mode(nil, nil, nil, "") == nil)
         #expect(mode(nil, nil, nil, nil) == nil)
     }
@@ -95,7 +126,7 @@ extension SugargliderTests {
     @Test(arguments: [
         (PumpStatus.Mode.auto, "Auto mode"), (.off, "Auto mode off"),
         (.boost(until: "15:04"), "Boost until 15:04"), (.easeOff(until: nil), "Ease-off"),
-        (.other("normal"), "normal"),
+        (.suspended, "Suspended"), (.other("Closed Loop"), "Closed Loop"),
     ])
     func modeLabel(mode: PumpStatus.Mode, label: String) {
         #expect(mode.label == label)
@@ -130,7 +161,7 @@ extension SugargliderTests {
             """)))
         #expect(standard.extras.isEmpty)
         let statusText = try #require(PumpStatus(record: record(
-            #"{"created_at":"2030-01-01T12:00:00Z","pump":{"status":{"status":"normal"}}}"#)))
+            #"{"created_at":"2030-01-01T12:00:00Z","pump":{"status":{"status":"Closed Loop"}}}"#)))
         #expect(statusText.extras == [.mode])
         #expect(PumpStatus(date: .now, insulinYesterday: 47.3, averageToday: 124).extras == [.dailyInsulin, .averageGlucose])
     }
@@ -165,6 +196,9 @@ extension SugargliderTests {
     @Test(arguments: [
         #"{"eventType":"Insulin Change","created_at":"2030-01-01T08:00:00Z","notes":"Reservoir 0 → 150 IE"}"#,
         #"{"eventType":"Temp Basal","created_at":"2030-01-01T08:00:00Z","percent":-50,"duration":30}"#,
+        #"{"eventType":"Temp Basal","created_at":"2030-01-01T08:00:00Z","percent":"150","rate":150,"duration":"30"}"#,
+        #"{"eventType":"Meal Bolus","created_at":"2030-01-01T08:00:00Z","insulin":0.7,"type":"PRIMING"}"#,
+        #"{"eventType":"Meal Bolus","created_at":"2030-01-01T08:00:00Z","insulin":1,"isValid":false}"#,
         #"{"eventType":"Announcement","created_at":"2030-01-01T08:00:00Z","notes":"  "}"#,
         #"{"eventType":"Correction Bolus","insulin":1}"#,
         #"{"eventType":"Correction Bolus","created_at":"2030-01-01T08:00:00Z","insulin":0}"#,
@@ -294,6 +328,21 @@ extension SugargliderTests {
                                             from: base, to: base.addingTimeInterval(3600))
         #expect(steps.count == 1)
         #expect(steps.first?.end == base.addingTimeInterval(5 * 60))
+    }
+
+    @Test func runningSuspendLastsUntilTheNextTempBasalOrTheWindowEnd() throws {
+        let suspend = try #require(Treatment(record: record("""
+            {"eventType":"Temp Basal","created_at":"2030-01-01T12:00:00Z","rate":0,"absolute":0,
+             "duration":0,"reason":"suspend"}
+            """)))
+        #expect(suspend.kind == .tempBasal(rate: 0, minutes: .infinity))
+        let base = suspend.date
+        let end = base.addingTimeInterval(3600)
+        #expect(ChartMath.deliverySteps([suspend], from: base, to: end)
+                == [ChartMath.DeliveryStep(start: base, end: end, rate: 0)])
+        let resumed = ChartMath.deliverySteps([suspend, temp(1, minutes: 30, at: 20, from: base)], from: base, to: end)
+        #expect(resumed.map(\.rate) == [0, 1])
+        #expect(resumed.first?.end == base.addingTimeInterval(20 * 60))
     }
 }
 
@@ -465,11 +514,20 @@ extension SugargliderTests {
 
     @Test func statusTextModeKeepsItsOwnRow() {
         var status = fullStatus()
-        status.mode = .other("normal")
+        status.mode = .other("Closed Loop")
         let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
                                         settings: Self.makeSettings(), now: .now)
-        #expect(rows.contains(.init(label: "Mode", value: "normal")))
+        #expect(rows.contains(.init(label: "Mode", value: "Closed Loop")))
         #expect(rows.contains(.init(label: "Delivery rate", value: "1.15 U/h")))
+    }
+
+    @Test func reservoirRowShowsTheUploadersMessageInsteadOfTheLevel() {
+        for reservoir in [42, nil] as [Double?] {
+            let status = PumpStatus(date: .now, reservoir: reservoir, reservoirMessage: "Signal Loss")
+            let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
+                                            settings: Self.makeSettings(), now: .now)
+            #expect(rows == [.init(label: "Reservoir", value: "Signal Loss")])
+        }
     }
 
     @Test func detailRowsShowOnlyWhatTheSiteReports() {
