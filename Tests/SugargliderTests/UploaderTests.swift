@@ -5,7 +5,7 @@ import Foundation
 /// The uploaders whose records Sugarglider is pinned against. Each fixture is written from that
 /// project's own upload code with invented values, in the form Nightscout returns it (newest first,
 /// `created_at` stamped where the uploader sends none). Expectations pin what Sugarglider reads
-/// today; a line marked "Misread" is a known gap, so fixing one changes its expectation here.
+/// today; a line marked "Kept" is a known gap left as it is, so changing one shows up here.
 enum Uploader: String, CaseIterable, CustomTestStringConvertible {
     case loopMedtronic = "Loop, Medtronic"
     case loopOmnipod = "Loop, Omnipod above 50 U"
@@ -179,10 +179,9 @@ extension Uploader {
                  {"date":1893484800000,"created_at":"2030-01-01T08:00:00.000Z","utcOffset":60,"isValid":true,
                   "eventType":"Insulin Change","notes":"new cartridge"}]
                 """,
-            // Misread: "Closed Loop" is the loop's mode in the app's language, not the pump's.
             pumpStatus: PumpStatus(date: noon, insulinOnBoard: 1.234, reservoir: 128, batteryPercent: 74,
                                    mode: .other("Closed Loop")),
-            // Not read: the extended bolus (Combo Bolus, no insulin key).
+            // Kept: the extended bolus (Combo Bolus) has no insulin key and is missing.
             kinds: [.note("Pump unreachable"), .tempBasal(rate: 0.45, minutes: 30),
                     .tempBasal(rate: 0.425, minutes: 60), .bolus(units: 3.5), .bolus(units: 0.3)])
 
@@ -203,7 +202,7 @@ extension Uploader {
                  {"date":1893477600000,"created_at":"2030-01-01T06:00:00.000Z","utcOffset":60,"isValid":true,
                   "eventType":"Site Change"}]
                 """,
-            // Misread: the reservoir shows 75 U, a placeholder rather than a measurement.
+            // Kept: 75 U stands for "above 50 U" but can't be told from a measured 75 U.
             pumpStatus: PumpStatus(date: noon, insulinOnBoard: 0.5, reservoir: 75, mode: .other("Closed Loop")),
             kinds: [.bolus(units: 0.15)])
 
@@ -244,7 +243,7 @@ extension Uploader {
                  {"eventType":"Insulin Change","notes":"Rewind model 723",
                   "created_at":"2030-01-01T09:00:00+01:00","enteredBy":"openaps://medtronic/723"}]
                 """,
-            // Not read: the battery comes as a voltage only.
+            // Kept: the battery comes as a voltage only, which has no reliable percent.
             pumpStatus: PumpStatus(date: noon, insulinOnBoard: 0.85, reservoir: 85.3),
             kinds: [.bolus(units: 4.2), .tempBasal(rate: 0.8, minutes: 30), .bolus(units: 1.5),
                     .tempBasal(rate: 0, minutes: 0),
@@ -303,7 +302,7 @@ extension Uploader {
                   "_dose":{"type":"INSULIN","index":7,"bolusType":"FAST","deliveredFastAmount":4.5}}]
                 """,
             pumpStatus: PumpStatus(date: noon, insulinOnBoard: 0, reservoir: 143.2, batteryPercent: 75),
-            // Misread: the square bolus comes without insulin and is missing.
+            // Kept: the square bolus comes without insulin and is missing.
             kinds: [.bolus(units: 4.5), .bolus(units: 0.6)])
 
         // nightscout-connect minimedcarelink writes no pump block for a Guardian sensor.
