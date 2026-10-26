@@ -73,6 +73,19 @@ extension SugargliderTests {
         #expect(loop.mode == .suspended)
     }
 
+    @Test func reservoirMessageComesOnOneLineAndOnlyFromTheNewestRecord() throws {
+        let status = try #require(PumpStatus(record: record("""
+            {"created_at":"2030-01-01T12:00:00Z",
+             "pump":{"reservoir_display_override":" Enable\\nBluetooth ","reservoir_level_override":2}}
+            """)))
+        #expect(status.reservoirMessage == "Enable Bluetooth")
+        #expect(PumpStatus(record: record(
+            #"{"created_at":"2030-01-01T12:00:00Z","pump":{"reservoir_display_override":"  "}}"#))?.hasData == false)
+
+        let cleared = PumpStatus(date: status.date.addingTimeInterval(300), insulinOnBoard: 1)
+        #expect(try #require(PumpStatus.merged([status, cleared])).reservoirMessage == nil)
+    }
+
     @Test func pumpStatusFindsInsulinOnBoardWhereLoopsPutIt() throws {
         let loop = try #require(PumpStatus(record: record(
             #"{"created_at":"2030-01-01T12:00:00Z","loop":{"iob":{"iob":2.5}}}"#)))
@@ -506,6 +519,15 @@ extension SugargliderTests {
                                         settings: Self.makeSettings(), now: .now)
         #expect(rows.contains(.init(label: "Mode", value: "Closed Loop")))
         #expect(rows.contains(.init(label: "Delivery rate", value: "1.15 U/h")))
+    }
+
+    @Test func reservoirRowShowsTheUploadersMessageInsteadOfTheLevel() {
+        for reservoir in [42, nil] as [Double?] {
+            let status = PumpStatus(date: .now, reservoir: reservoir, reservoirMessage: "Signal Loss")
+            let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
+                                            settings: Self.makeSettings(), now: .now)
+            #expect(rows == [.init(label: "Reservoir", value: "Signal Loss")])
+        }
     }
 
     @Test func detailRowsShowOnlyWhatTheSiteReports() {

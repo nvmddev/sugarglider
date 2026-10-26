@@ -7,6 +7,8 @@ struct PumpStatus: Equatable {
     var date: Date
     var insulinOnBoard: Double?
     var reservoir: Double?
+    /// What Loop shows in place of the reservoir level ("Signal Loss", "No Pod"), as Nightscout does.
+    var reservoirMessage: String?
     var batteryPercent: Double?
     var mode: Mode?
     var deliveryRate: Double?
@@ -64,6 +66,7 @@ struct PumpStatus: Equatable {
     static let mergeSpan: TimeInterval = 15 * 60
 
     /// Each field from the newest record within `mergeSpan` that has it; nil when no record has data.
+    /// The reservoir message only from the newest: a cleared one must not linger.
     static func merged(_ records: [PumpStatus]) -> PumpStatus? {
         let newestFirst = records.filter(\.hasData).sorted { $0.date > $1.date }
         guard let newest = newestFirst.first else { return nil }
@@ -74,6 +77,7 @@ struct PumpStatus: Equatable {
         return PumpStatus(date: newest.date,
                           insulinOnBoard: latest(\.insulinOnBoard),
                           reservoir: latest(\.reservoir),
+                          reservoirMessage: newest.reservoirMessage,
                           batteryPercent: latest(\.batteryPercent),
                           mode: latest(\.mode),
                           deliveryRate: latest(\.deliveryRate),
@@ -116,6 +120,10 @@ extension PumpStatus {
             ?? record.object("loop")?.object("iob")?.number("iob") ?? openapsNow?.number("iob")
 
         reservoir = pump?.number("reservoir")
+        reservoirMessage = pump?.string("reservoir_display_override")?
+            .split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        if reservoirMessage?.isEmpty == true { reservoirMessage = nil }
         // Trio sends a placeholder 100 for a pump without a battery report (a pod), flagged this way.
         let battery = pump?.object("battery")
         batteryPercent = battery?.bool("display") == false ? nil : battery?.number("percent")

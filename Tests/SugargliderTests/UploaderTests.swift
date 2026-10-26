@@ -85,7 +85,8 @@ extension Uploader {
             deviceStatus: """
                 [{"device":"loop://iPhone","created_at":"2030-01-01T12:00:00.000Z",
                   "pump":{"clock":"2030-01-01T12:00:00Z","manufacturer":"Insulet",
-                          "model":"Omnipod DASH","suspended":false,"bolusing":false,"secondsFromGMT":3600},
+                          "model":"Omnipod DASH","suspended":false,"bolusing":false,"secondsFromGMT":3600,
+                          "reservoir_display_override":"Signal Loss","reservoir_level_override":2},
                   "uploader":{"name":"iPhone","timestamp":"2030-01-01T12:00:00Z","battery":85,"isCharging":false},
                   "loop":{"name":"Loop","timestamp":"2030-01-01T12:00:00Z",
                           "iob":{"timestamp":"2030-01-01T12:00:00Z","iob":1.2345678}},
@@ -99,7 +100,7 @@ extension Uploader {
                  {"eventType":"Site Change","created_at":"2030-01-01T07:00:00.000Z","enteredBy":"loop://iPhone",
                   "notes":"Pod Change (Omnipod DASH)"}]
                 """,
-            pumpStatus: PumpStatus(date: noon, insulinOnBoard: 1.2345678),
+            pumpStatus: PumpStatus(date: noon, insulinOnBoard: 1.2345678, reservoirMessage: "Signal Loss"),
             kinds: [.tempBasal(rate: 0.85, minutes: 30), .bolus(units: 0.05)])
 
         // Trio NightscoutStatus and NightscoutTreatment; Trio sends no created_at, Nightscout stamps it.
