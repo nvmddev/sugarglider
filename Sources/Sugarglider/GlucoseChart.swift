@@ -29,6 +29,8 @@ struct GlucoseChart: View {
         return bars || rate ? laneHeight : 0
     }
 
+    private static func bolusText(_ units: Double) -> String { String(localized: "Bolus \(PumpFormat.bolus(units))") }
+
     private static func timeLabel(_ date: Date, span: TimeInterval) -> String {
         date.formatted(ChartMath.labelsNeedDay(span: span)
                        ? .dateTime.weekday().hour().minute()
@@ -149,10 +151,12 @@ struct GlucoseChart: View {
                 RectangleMark(xStart: .value("Start", p.start), xEnd: .value("End", p.end),
                               yStart: .value("Low", low), yEnd: .value("High", high))
                     .foregroundStyle(settings.bandColor)
+                    .accessibilityHidden(true)
                 ForEach([low, high], id: \.self) { edge in
                     RuleMark(y: .value("Target", edge))
                         .foregroundStyle(settings.bandColor.opacity(0.35))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        .accessibilityHidden(true)
                 }
             }
 
@@ -164,6 +168,8 @@ struct GlucoseChart: View {
                             .foregroundStyle(settings.announcementColor)
                     }
                     .offset(y: 3)
+                    .accessibilityLabel(Self.timeLabel(note.date, span: p.span))
+                    .accessibilityValue(note.noteText ?? "")
             }
 
             if settings.lineShadingEnabled {
@@ -175,6 +181,7 @@ struct GlucoseChart: View {
                             .foregroundStyle(LinearGradient(colors: [shade, shade.opacity(0)],
                                                             startPoint: .top, endPoint: .bottom))
                             .alignsMarkStylesWithPlotArea()
+                            .accessibilityHidden(true)
                     }
                 }
             }
@@ -188,6 +195,8 @@ struct GlucoseChart: View {
                         .foregroundStyle(line)
                         .alignsMarkStylesWithPlotArea()
                         .opacity(0.9)
+                        .accessibilityLabel(Self.timeLabel(reading.date, span: p.span))
+                        .accessibilityValue(reading.text(in: p.units, withUnit: true))
                 }
             }
 
@@ -195,12 +204,15 @@ struct GlucoseChart: View {
                 PointMark(x: .value("Time", reading.date), y: .value("Glucose", p.plotted(reading)))
                     .symbolSize(CGSize(width: 4, height: 4))
                     .foregroundStyle(ChartMath.color(for: reading.sgv, zones: p.zones))
+                    .accessibilityLabel(Self.timeLabel(reading.date, span: p.span))
+                    .accessibilityValue(reading.text(in: p.units, withUnit: true))
             }
 
             if let target {
                 RuleMark(x: .value("Time", target.date))
                     .foregroundStyle(.primary.opacity(0.25))
                     .lineStyle(StrokeStyle(lineWidth: 1))
+                    .accessibilityHidden(true)
                     .annotation(position: .top, spacing: 0,
                                 overflowResolution: .init(x: .fit(to: .plot), y: .fit(to: .plot))) {
                         pill(for: target, in: p)
@@ -244,7 +256,9 @@ struct GlucoseChart: View {
                 }
             }
             .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
+        .accessibilityLabel("Glucose")
     }
 
     /// Outside the plot's clip, so the latest reading's halo may reach past the frame.
@@ -296,25 +310,32 @@ struct GlucoseChart: View {
                              yEnd: .value("Rate", rate / topRate), series: .value("Run", index))
                         .interpolationMethod(.stepEnd)
                         .foregroundStyle(settings.deliveryRateColor.opacity(0.3))
+                        .accessibilityHidden(true)
                     LineMark(x: .value("Time", date), y: .value("Rate", rate / topRate), series: .value("Run", index))
                         .interpolationMethod(.stepEnd)
                         .lineStyle(StrokeStyle(lineWidth: 1))
                         .foregroundStyle(settings.deliveryRateColor)
+                        .accessibilityLabel(Self.timeLabel(date, span: p.span))
+                        .accessibilityValue(PumpFormat.rate(rate))
                 }
             }
 
             ForEach(p.boluses, id: \.id) { bolus in
+                let units = bolus.bolusUnits ?? 0
                 BarMark(x: .value("Time", bolus.date), yStart: .value("Base", 0.0),
-                        yEnd: .value("Units", max(min((bolus.bolusUnits ?? 0) / largestBolus, 1), 0.15)),
+                        yEnd: .value("Units", max(min(units / largestBolus, 1), 0.15)),
                         width: .fixed(2.5))
                     .foregroundStyle(settings.bolusColor)
                     .clipShape(Capsule())
+                    .accessibilityLabel(Self.timeLabel(bolus.date, span: p.span))
+                    .accessibilityValue(Self.bolusText(units))
             }
 
             if let target {
                 RuleMark(x: .value("Time", target.date))
                     .foregroundStyle(.primary.opacity(0.25))
                     .lineStyle(StrokeStyle(lineWidth: 1))
+                    .accessibilityHidden(true)
             }
         }
         .chartXScale(domain: p.start...p.end)
@@ -324,6 +345,7 @@ struct GlucoseChart: View {
         .chartPlotStyle { plot in
             plot.clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10))
         }
+        .accessibilityLabel("Pump")
     }
 
     // MARK: - Hover
@@ -363,7 +385,7 @@ struct GlucoseChart: View {
 
     private func pill(for target: HoverTarget, in p: Plot) -> some View {
         let time = Self.timeLabel(target.date, span: p.span)
-        let insulin = [target.bolus?.bolusUnits.map { String(localized: "Bolus \(PumpFormat.bolus($0))") },
+        let insulin = [target.bolus?.bolusUnits.map(Self.bolusText),
                        ChartMath.rate(at: target.date, in: p.steps).map(PumpFormat.rate)].compactMap(\.self)
         return HoverPill(title: target.reading.map { "\($0.text(in: p.units)) · \(time)" } ?? time,
                          insulin: insulin.isEmpty ? nil : insulin.joined(separator: " · "),

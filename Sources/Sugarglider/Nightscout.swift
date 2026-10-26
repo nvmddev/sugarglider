@@ -23,6 +23,19 @@ struct Reading {
             case .doubleDown: "↓↓"
             }
         }
+
+        /// For VoiceOver, which reads the arrows by their character names ("north east arrow").
+        var spokenName: String {
+            switch self {
+            case .doubleUp: String(localized: "rising quickly")
+            case .singleUp: String(localized: "rising")
+            case .fortyFiveUp: String(localized: "rising slowly")
+            case .flat: String(localized: "steady")
+            case .fortyFiveDown: String(localized: "falling slowly")
+            case .singleDown: String(localized: "falling")
+            case .doubleDown: String(localized: "falling quickly")
+            }
+        }
     }
 
     /// Nightscout's markers for a value beyond the sensor's range, one step past each bound. Only
@@ -36,11 +49,12 @@ struct Reading {
 
     func value(in units: AppSettings.Units) -> Double { units.value(fromMgdl: Double(sgv)) }
 
-    func text(in units: AppSettings.Units) -> String {
+    /// LOW and HIGH have no value, so no unit either.
+    func text(in units: AppSettings.Units, withUnit: Bool = false) -> String {
         switch outOfRange {
         case .low: "LOW"
         case .high: "HIGH"
-        case nil: units.text(fromMgdl: sgv)
+        case nil: withUnit ? "\(units.text(fromMgdl: sgv)) \(units.label)" : units.text(fromMgdl: sgv)
         }
     }
 }

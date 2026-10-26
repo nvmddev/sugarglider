@@ -126,6 +126,14 @@ extension SugargliderTests {
         #expect(MenuBarLabel(settings: settings, store: store).title == expected)
     }
 
+    @Test func spokenTitleNamesTheTrend() {
+        let settings = Self.makeSettings()
+        settings.baseURL = "https://ns.example"
+        let store = ReadingStore(settings: settings)
+        store.lastReading = reading(120, direction: .fortyFiveUp, from: store.now)
+        #expect(MenuBarLabel(settings: settings, store: store).spokenTitle == "6.7, rising slowly")
+    }
+
     @Test func titleShowsTheDeltaOnlyWhenSetToTheStatusBar() {
         let settings = Self.makeSettings()
         settings.baseURL = "https://ns.example"

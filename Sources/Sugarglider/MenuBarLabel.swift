@@ -8,12 +8,17 @@ struct MenuBarLabel: View {
     // styling would reach the menu bar.
     var body: some View {
         Text(title)
+            .accessibilityLabel(spokenTitle)
     }
 
-    var title: String {
+    var title: String { text(trend: { " \($0.arrow)" }) }
+
+    var spokenTitle: String { text(trend: { ", \($0.spokenName)" }) }
+
+    private func text(trend: (Reading.Direction) -> String) -> String {
         guard settings.isConfigured else { return "CGM ⚙" }
         guard let reading = store.lastReading else { return store.lastError == nil ? "CGM …" : "CGM ⚠" }
-        let arrow = reading.direction.map { " \($0.arrow)" } ?? ""
+        let arrow = reading.direction.map(trend) ?? ""
         let delta = settings.deltaDisplay == .menuAndStatusBar ? store.deltaText().map { "  (\($0))" } : nil
         let age = store.isStale ? " ⚠ \(reading.date.age(at: store.now))" : ""
         return "\(reading.text(in: settings.units))\(arrow)\(delta ?? "")\(age)"

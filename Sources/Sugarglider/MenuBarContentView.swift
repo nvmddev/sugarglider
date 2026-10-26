@@ -99,12 +99,14 @@ struct MenuBarContentView: View {
     }
 
     private func readingText(_ reading: Reading) -> Text {
-        // LOW and HIGH have no value to put a unit to, and no delta: they say where the sensor ran out instead.
-        let text = reading.text(in: settings.units)
-        let value = Text(verbatim: reading.outOfRange == nil ? "\(text) \(settings.units.label)" : text)
+        // LOW and HIGH have no delta: they say where the sensor ran out instead.
+        let value = Text(verbatim: reading.text(in: settings.units, withUnit: true))
             .font(.title3.weight(.medium))
-        let arrow = reading.direction.map { Text(verbatim: " \($0.arrow)").font(.title2.weight(.semibold)) }
-            ?? Text(verbatim: "")
+        let arrow = reading.direction.map { direction in
+            Text(verbatim: " \(direction.arrow)")
+                .font(.title2.weight(.semibold))
+                .accessibilityLabel(Text(verbatim: ", \(direction.spokenName)"))
+        } ?? Text(verbatim: "")
         let note: Text? = switch reading.outOfRange {
         case .low: Text("below the sensor's range")
         case .high: Text("above the sensor's range")
