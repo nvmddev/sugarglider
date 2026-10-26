@@ -68,7 +68,7 @@ struct MenuBarContentView: View {
         .buttonBorderShape(.circle)
     }
 
-    private func actionButton(_ title: String, systemImage: String, shortcut: KeyEquivalent,
+    private func actionButton(_ title: LocalizedStringKey, systemImage: String, shortcut: KeyEquivalent,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
             // A circle sizes to its label, so only equal squares give equal circles.

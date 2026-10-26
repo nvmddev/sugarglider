@@ -54,7 +54,7 @@ struct PumpTab: View {
         .task { await store.refreshPumpStatus(force: false, evenIfSwitchedOff: true) }
     }
 
-    private func toggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
+    private func toggle(_ title: LocalizedStringKey, detail: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
             Text(title)
             Text(detail)

@@ -166,7 +166,7 @@ enum ChartMath {
         // The next temp basal ends each one, so lasting a whole sweep is always long enough.
         func basal(_ rate: Double) -> Treatment.Kind { .tempBasal(rate: rate, minutes: sweep / 60) }
         let events: [(t: Double, kind: Treatment.Kind)] = [
-            (0.00, basal(0.8)), (0.08, basal(0.45)), (0.17, basal(0.15)), (0.25, .note("Low glucose")),
+            (0.00, basal(0.8)), (0.08, basal(0.45)), (0.17, basal(0.15)), (0.25, .note(String(localized: "Low glucose"))),
             (0.33, basal(0.5)), (0.43, .bolus(units: 5.5)), (0.45, basal(1.0)), (0.55, basal(1.8)),
             (0.68, basal(2.4)), (0.72, .bolus(units: 1.5)), (0.80, basal(1.4)), (0.90, basal(0.9)),
         ]

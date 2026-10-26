@@ -100,8 +100,8 @@ struct GeneralTab: View {
         loginItem = SMAppService.mainApp.status
     }
 
-    private func intervalField(_ prefix: String, value: Binding<Int>,
-                               unit: String, limits: ClosedRange<Int>) -> some View {
+    private func intervalField(_ prefix: LocalizedStringKey, value: Binding<Int>,
+                               unit: LocalizedStringKey, limits: ClosedRange<Int>) -> some View {
         HStack(spacing: 4) {
             Text(prefix)
             TextField("", value: value, format: .number)
@@ -109,7 +109,7 @@ struct GeneralTab: View {
                 .multilineTextAlignment(.trailing)
                 .frame(width: 36)
             Text(unit)
-                .help("\(limits.lowerBound)–\(limits.upperBound) \(unit)")
+                .help(Text("\(limits.lowerBound)–\(limits.upperBound) \(Text(unit))"))
         }
     }
 
