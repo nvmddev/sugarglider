@@ -119,9 +119,10 @@ struct Nightscout {
         return readings
     }
 
-    /// More than one, because an uploader may spread its data over several records;
-    /// `PumpStatus.mergeSpan` keeps the older ones from passing for current.
-    static let deviceStatusCount = 10
+    /// More than one, because an uploader may spread its data over several records and a CGM app
+    /// (xDrip+) posts its phone's battery in between; `PumpStatus.mergeSpan` keeps the older ones
+    /// from passing for current.
+    static let deviceStatusCount = 30
 
     /// Nil rather than an error for a site without pump data: most only have a CGM uploading.
     func pumpStatus() async throws -> PumpStatus? {
