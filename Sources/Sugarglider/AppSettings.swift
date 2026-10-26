@@ -301,9 +301,10 @@ final class AppSettings {
 
     func defaultPresetName() -> String {
         let names = Set(colorPresets.map(\.name))
+        func name(_ number: Int) -> String { String(localized: "Palette \(number)") }
         var number = 1
-        while names.contains("Palette \(number)") { number += 1 }
-        return "Palette \(number)"
+        while names.contains(name(number)) { number += 1 }
+        return name(number)
     }
 
     /// Compares sRGB channels, because `==` tells apart colors that render the same

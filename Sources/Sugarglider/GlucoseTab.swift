@@ -30,7 +30,7 @@ struct GlucoseTab: View {
     }
 
     // Value-based: a text binding reformats on every keystroke, which makes decimals impossible to type.
-    private func thresholdField(_ label: String, _ keyPath: ReferenceWritableKeyPath<AppSettings, Double>) -> some View {
+    private func thresholdField(_ label: LocalizedStringKey, _ keyPath: ReferenceWritableKeyPath<AppSettings, Double>) -> some View {
         LabeledContent(label) {
             HStack(spacing: 4) {
                 TextField(label, value: displayValue(keyPath), format: settings.thresholdFormat)

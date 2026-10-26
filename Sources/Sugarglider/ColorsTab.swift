@@ -162,25 +162,26 @@ struct ColorsTab: View {
         }
     }
 
-    private struct Swatch: Identifiable {
-        var caption: String
-        var help: String
+    private struct Swatch {
+        var caption: LocalizedStringKey
+        var help: LocalizedStringKey
         var color: Binding<Color>
         var enabled = true
-        var id: String { caption }
 
-        init(_ caption: String, help: String, color: Binding<Color>, enabled: Bool = true) {
+        init(_ caption: LocalizedStringKey, help: LocalizedStringKey, color: Binding<Color>, enabled: Bool = true) {
             self.caption = caption; self.help = help; self.color = color; self.enabled = enabled
         }
     }
 
     // An HStack, not LabeledContent: that pins its label to the top of a two-line row instead of centering it.
-    private func swatchRow(_ label: String, _ swatches: [Swatch]) -> some View {
+    private func swatchRow(_ label: LocalizedStringKey, _ swatches: [Swatch]) -> some View {
         HStack {
             Text(label)
             Spacer()
             HStack(alignment: .top, spacing: Self.swatchSpacing) {
-                ForEach(swatches) { swatch in
+                // A fixed list, so its positions are its identities.
+                ForEach(swatches.indices, id: \.self) { index in
+                    let swatch = swatches[index]
                     VStack(spacing: 3) {
                         ColorPicker(swatch.help, selection: swatch.color)
                             .labelsHidden()
@@ -206,7 +207,7 @@ struct ColorsTab: View {
     private static let swatchSpacing: CGFloat = 34
 
     // A mode menu plus the well it unlocks.
-    private func choiceRow<Value: Hashable>(_ label: String, selection: Binding<Value>, color: Binding<Color>,
+    private func choiceRow<Value: Hashable>(_ label: LocalizedStringKey, selection: Binding<Value>, color: Binding<Color>,
                                             customEnabled: Bool,
                                             @ViewBuilder options: () -> some View) -> some View {
         wellRow(label, color: color, enabled: customEnabled) {
@@ -217,12 +218,12 @@ struct ColorsTab: View {
     }
 
     // A control and the well it unlocks, flush with the trailing edge like the swatch rows' last well.
-    private func wellRow(_ label: String, color: Binding<Color>, enabled: Bool,
+    private func wellRow(_ label: LocalizedStringKey, color: Binding<Color>, enabled: Bool,
                          @ViewBuilder control: () -> some View) -> some View {
         LabeledContent(label) {
             HStack(spacing: 8) {
                 control()
-                ColorPicker("\(label) color", selection: color)
+                ColorPicker("\(Text(label)) color", selection: color)
                     .labelsHidden()
                     .disabled(!enabled)
             }
@@ -230,7 +231,7 @@ struct ColorsTab: View {
     }
 
     // Continuous plus rounding rather than step:, which on macOS draws a tick mark per half point.
-    private func sizeRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
+    private func sizeRow(_ label: LocalizedStringKey, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         let halfPoints = Binding(
             get: { value.wrappedValue },
             set: { value.wrappedValue = ($0 * 2).rounded() / 2 }
