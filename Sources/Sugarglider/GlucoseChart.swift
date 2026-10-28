@@ -21,12 +21,6 @@ struct GlucoseChart: View {
 
     private static func bolusText(_ units: Double) -> String { String(localized: "Bolus \(PumpFormat.bolus(units))") }
 
-    private static func timeLabel(_ date: Date, span: TimeInterval) -> String {
-        date.formatted(ChartMath.labelsNeedDay(span: span)
-                       ? .dateTime.weekday().hour().minute()
-                       : .dateTime.hour().minute())
-    }
-
     var body: some View {
         if let plot = Plot(self) {
             VStack(spacing: 0) {
@@ -56,6 +50,8 @@ struct GlucoseChart: View {
     private struct Plot {
         var start: Date
         var end: Date
+        /// Marks label their time as `Text`, which formats only once VoiceOver asks for it.
+        var timeStyle: Date.FormatStyle
         var visible: [Reading]
         var latest: Reading
         var axis: ChartMath.ValueAxis
@@ -79,6 +75,8 @@ struct GlucoseChart: View {
 
             self.start = start
             self.end = end
+            timeStyle = ChartMath.labelsNeedDay(span: end.timeIntervalSince(start))
+                ? .dateTime.weekday().hour().minute() : .dateTime.hour().minute()
             self.visible = visible
             self.latest = latest
             self.units = units
@@ -152,7 +150,7 @@ struct GlucoseChart: View {
                             .foregroundStyle(settings.announcementColor)
                     }
                     .offset(y: 3)
-                    .accessibilityLabel(Self.timeLabel(note.date, span: p.span))
+                    .accessibilityLabel(Text(note.date, format: p.timeStyle))
                     .accessibilityValue(note.noteText ?? "")
             }
 
@@ -179,7 +177,7 @@ struct GlucoseChart: View {
                         .foregroundStyle(line)
                         .alignsMarkStylesWithPlotArea()
                         .opacity(0.9)
-                        .accessibilityLabel(Self.timeLabel(reading.date, span: p.span))
+                        .accessibilityLabel(Text(reading.date, format: p.timeStyle))
                         .accessibilityValue(reading.text(in: p.units, withUnit: true))
                 }
             }
@@ -188,7 +186,7 @@ struct GlucoseChart: View {
                 PointMark(x: .value("Time", reading.date), y: .value("Glucose", p.plotted(reading)))
                     .symbolSize(CGSize(width: 4, height: 4))
                     .foregroundStyle(ChartMath.color(for: reading.sgv, zones: p.zones))
-                    .accessibilityLabel(Self.timeLabel(reading.date, span: p.span))
+                    .accessibilityLabel(Text(reading.date, format: p.timeStyle))
                     .accessibilityValue(reading.text(in: p.units, withUnit: true))
             }
         }
@@ -196,11 +194,9 @@ struct GlucoseChart: View {
         .chartYScale(domain: p.axis.lower...p.axis.upper)
         .chartXAxis {
             AxisMarks(preset: .inset, values: [p.start, p.latest.date]) { value in
-                AxisValueLabel(anchor: value.index == 0 ? .bottomLeading : .bottomTrailing) {
-                    if let date = value.as(Date.self) { Text(Self.timeLabel(date, span: p.span)) }
-                }
-                .font(.caption2)
-                .foregroundStyle(Self.axisLabel)
+                AxisValueLabel(format: p.timeStyle, anchor: value.index == 0 ? .bottomLeading : .bottomTrailing)
+                    .font(.caption2)
+                    .foregroundStyle(Self.axisLabel)
             }
         }
         .chartYAxis {
@@ -277,7 +273,7 @@ struct GlucoseChart: View {
                         .interpolationMethod(.stepEnd)
                         .lineStyle(StrokeStyle(lineWidth: 1))
                         .foregroundStyle(settings.deliveryRateColor)
-                        .accessibilityLabel(Self.timeLabel(date, span: p.span))
+                        .accessibilityLabel(Text(date, format: p.timeStyle))
                         .accessibilityValue(PumpFormat.rate(rate))
                 }
             }
@@ -289,7 +285,7 @@ struct GlucoseChart: View {
                         width: .fixed(2.5))
                     .foregroundStyle(settings.bolusColor)
                     .clipShape(Capsule())
-                    .accessibilityLabel(Self.timeLabel(bolus.date, span: p.span))
+                    .accessibilityLabel(Text(bolus.date, format: p.timeStyle))
                     .accessibilityValue(Self.bolusText(units))
             }
         }
@@ -399,7 +395,7 @@ struct GlucoseChart: View {
         }
 
         private func pill(for target: HoverTarget) -> some View {
-            let time = GlucoseChart.timeLabel(target.date, span: plot.span)
+            let time = target.date.formatted(plot.timeStyle)
             let insulin = [target.bolus?.bolusUnits.map(GlucoseChart.bolusText),
                            ChartMath.rate(at: target.date, in: plot.steps).map(PumpFormat.rate)].compactMap(\.self)
             return HoverPill(title: target.reading.map { "\($0.text(in: plot.units)) · \(time)" } ?? time,
