@@ -11,16 +11,6 @@ struct GlucoseChart: View {
 
     static let laneHeight: CGFloat = 22
 
-    @State private var hover: Hover?
-    @State private var width: CGFloat = 0
-
-    /// Identities rather than a position, so moving within one target doesn't redraw.
-    private struct Hover: Equatable {
-        var readingDate: Date?
-        var bolusID: String?
-        var noteID: String?
-    }
-
     /// Decided on every cached treatment, not just the window's, so dragging the range can't
     /// make the chart jump in height.
     static func laneSpace(for treatments: [Treatment], settings: AppSettings) -> CGFloat {
@@ -30,12 +20,6 @@ struct GlucoseChart: View {
     }
 
     private static func bolusText(_ units: Double) -> String { String(localized: "Bolus \(PumpFormat.bolus(units))") }
-
-    private static func timeLabel(_ date: Date, span: TimeInterval) -> String {
-        date.formatted(ChartMath.labelsNeedDay(span: span)
-                       ? .dateTime.weekday().hour().minute()
-                       : .dateTime.hour().minute())
-    }
 
     var body: some View {
         if let plot = Plot(self) {
@@ -47,17 +31,11 @@ struct GlucoseChart: View {
                         .overlay(alignment: .top) { Rectangle().fill(.separator).frame(height: 0.5) }
                 }
             }
+            .overlay { HoverLayer(plot: plot, settings: settings) }
             .background {
                 if settings.chartBackgroundEnabled { Self.frame.fill(settings.chartBackgroundColor) }
             }
             .overlay { Self.frame.strokeBorder(.separator) }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            .onContinuousHover { phase in
-                switch phase {
-                case .active(let location): updateHover(at: location.x, in: plot)
-                case .ended: hover = nil
-                }
-            }
         } else {
             Text("No data for this range")
                 .font(.caption)
@@ -72,6 +50,8 @@ struct GlucoseChart: View {
     private struct Plot {
         var start: Date
         var end: Date
+        /// Marks label their time as `Text`, which formats only once VoiceOver asks for it.
+        var timeStyle: Date.FormatStyle
         var visible: [Reading]
         var latest: Reading
         var axis: ChartMath.ValueAxis
@@ -81,21 +61,23 @@ struct GlucoseChart: View {
         var notes: [Treatment]
         var steps: [ChartMath.DeliveryStep]
         var hasLane: Bool
-        var target: HoverTarget? = nil
 
         var span: TimeInterval { end.timeIntervalSince(start) }
 
         init?(_ chart: GlucoseChart) {
             let settings = chart.settings
-            let end = chart.windowEnd
+            // A reading dated ahead of this Mac's clock moves the end, rather than falling off the chart.
+            let end = max(chart.windowEnd, chart.readings.last?.date ?? chart.windowEnd)
             let start = end.addingTimeInterval(-Double(chart.rangeHours) * 3600)
             let visible = chart.readings.filter { $0.date >= start }
-            guard visible.count >= 2, let latest = visible.last else { return nil }
+            guard let latest = visible.last else { return nil }
             let units = settings.units
             let inWindow = chart.treatments.filter { $0.date >= start && $0.date <= end }
 
             self.start = start
             self.end = end
+            timeStyle = ChartMath.labelsNeedDay(span: end.timeIntervalSince(start))
+                ? .dateTime.weekday().hour().minute() : .dateTime.hour().minute()
             self.visible = visible
             self.latest = latest
             self.units = units
@@ -115,7 +97,6 @@ struct GlucoseChart: View {
             steps = settings.chartShowsDeliveryRate
                 ? ChartMath.deliverySteps(chart.treatments, from: start, to: end) : []
             hasLane = GlucoseChart.laneSpace(for: chart.treatments, settings: settings) > 0
-            if let hover = chart.hover { target = HoverTarget(hover, in: self) }
         }
 
         /// LOW and HIGH sit at their markers, kept just inside the plot: the mg/dL axis stops at 40,
@@ -147,6 +128,9 @@ struct GlucoseChart: View {
                                                              blended: settings.blendLineColors),
                                   startPoint: .bottom, endPoint: .top)
         let shade = settings.lineShadingUsesLineColor ? p.zones.inRangeColor.opacity(0.14) : settings.lineShadingColor
+        let shading = !settings.lineShadingEnabled ? [] : segments.indices.flatMap { index in
+            segments[index].map { AreaPoint(date: $0.date, base: p.axis.lower, value: p.plotted($0), series: index) }
+        }
 
         return Chart {
             if low < high {
@@ -170,23 +154,13 @@ struct GlucoseChart: View {
                             .foregroundStyle(settings.announcementColor)
                     }
                     .offset(y: 3)
-                    .accessibilityLabel(Self.timeLabel(note.date, span: p.span))
+                    .accessibilityLabel(Text(note.date, format: p.timeStyle))
                     .accessibilityValue(note.noteText ?? "")
             }
 
-            if settings.lineShadingEnabled {
-                ForEach(segments.indices, id: \.self) { index in
-                    ForEach(segments[index], id: \.date) { reading in
-                        AreaMark(x: .value("Time", reading.date), yStart: .value("Base", p.axis.lower),
-                                 yEnd: .value("Glucose", p.plotted(reading)), series: .value("Segment", index))
-                            .interpolationMethod(.catmullRom)
-                            .foregroundStyle(LinearGradient(colors: [shade, shade.opacity(0)],
-                                                            startPoint: .top, endPoint: .bottom))
-                            .alignsMarkStylesWithPlotArea()
-                            .accessibilityHidden(true)
-                    }
-                }
-            }
+            Self.area(shading, interpolation: .catmullRom)
+                .foregroundStyle(LinearGradient(colors: [shade, shade.opacity(0)], startPoint: .top, endPoint: .bottom))
+                .alignsMarkStylesWithPlotArea()
 
             ForEach(runs.indices, id: \.self) { index in
                 ForEach(runs[index].readings, id: \.date) { reading in
@@ -197,8 +171,10 @@ struct GlucoseChart: View {
                         .foregroundStyle(line)
                         .alignsMarkStylesWithPlotArea()
                         .opacity(0.9)
-                        .accessibilityLabel(Self.timeLabel(reading.date, span: p.span))
+                        .accessibilityLabel(Text(reading.date, format: p.timeStyle))
                         .accessibilityValue(reading.text(in: p.units, withUnit: true))
+                        // A run starts on the reading the previous one ended on, which that one already lists.
+                        .accessibilityHidden(index > 0 && runs[index - 1].readings.last?.date == reading.date)
                 }
             }
 
@@ -206,28 +182,17 @@ struct GlucoseChart: View {
                 PointMark(x: .value("Time", reading.date), y: .value("Glucose", p.plotted(reading)))
                     .symbolSize(CGSize(width: 4, height: 4))
                     .foregroundStyle(ChartMath.color(for: reading.sgv, zones: p.zones))
-                    .accessibilityLabel(Self.timeLabel(reading.date, span: p.span))
+                    .accessibilityLabel(Text(reading.date, format: p.timeStyle))
                     .accessibilityValue(reading.text(in: p.units, withUnit: true))
-            }
-
-            if let target = p.target {
-                Self.crosshair(at: target.date)
-                    .annotation(position: .top, spacing: 0,
-                                overflowResolution: .init(x: .fit(to: .plot), y: .fit(to: .plot))) {
-                        pill(for: target, in: p)
-                            .padding(.top, 6)
-                    }
             }
         }
         .chartXScale(domain: p.start...p.end)
         .chartYScale(domain: p.axis.lower...p.axis.upper)
         .chartXAxis {
             AxisMarks(preset: .inset, values: [p.start, p.latest.date]) { value in
-                AxisValueLabel(anchor: value.index == 0 ? .bottomLeading : .bottomTrailing) {
-                    if let date = value.as(Date.self) { Text(Self.timeLabel(date, span: p.span)) }
-                }
-                .font(.caption2)
-                .foregroundStyle(Self.axisLabel)
+                AxisValueLabel(format: p.timeStyle, anchor: value.index == 0 ? .bottomLeading : .bottomTrailing)
+                    .font(.caption2)
+                    .foregroundStyle(Self.axisLabel)
             }
         }
         .chartYAxis {
@@ -250,9 +215,16 @@ struct GlucoseChart: View {
                                                   bottomTrailingRadius: bottomRadius, topTrailingRadius: Self.cornerRadius))
         }
         .chartOverlay { proxy in
+            // Outside the plot's clip, so the latest reading's halo may reach past the frame.
             GeometryReader { geometry in
-                if let plotFrame = proxy.plotFrame.map({ geometry[$0] }) {
-                    dots(in: p, proxy: proxy).offset(x: plotFrame.minX, y: plotFrame.minY)
+                if let plotFrame = proxy.plotFrame.map({ geometry[$0] }),
+                   let latest = proxy.position(for: (x: p.latest.date, y: p.plotted(p.latest))) {
+                    let color = Self.dotColor(for: p.latest, in: p, settings: settings)
+                    ZStack(alignment: .topLeading) {
+                        Self.dot(at: latest, radius: settings.dotHaloRadius, color: color.opacity(0.18))
+                        Self.dot(at: latest, radius: settings.dotRadius, color: color)
+                    }
+                    .offset(x: plotFrame.minX, y: plotFrame.minY)
                 }
             }
             .allowsHitTesting(false)
@@ -261,82 +233,77 @@ struct GlucoseChart: View {
         .accessibilityLabel("Glucose")
     }
 
-    /// Outside the plot's clip, so the latest reading's halo may reach past the frame.
-    private func dots(in p: Plot, proxy: ChartProxy) -> some View {
-        func position(of reading: Reading) -> CGPoint? {
-            proxy.position(for: (x: reading.date, y: p.plotted(reading)))
-        }
-        let latestColor = dotColor(for: p.latest, zones: p.zones)
-        return ZStack(alignment: .topLeading) {
-            if let latest = position(of: p.latest) {
-                dot(at: latest, radius: settings.dotHaloRadius, color: latestColor.opacity(0.18))
-                dot(at: latest, radius: settings.dotRadius, color: latestColor)
-            }
-            if let reading = p.target?.reading, let point = position(of: reading) {
-                // Floored so the crosshair keeps a visible point when the dot is sized away.
-                dot(at: point, radius: max(3, settings.dotRadius), color: dotColor(for: reading, zones: p.zones))
-            }
-        }
+    /// A point of an area, which is drawn as one `AreaPlot` rather than a mark per point.
+    private struct AreaPoint {
+        var date: Date
+        var base: Double
+        var value: Double
+        var series: Int
     }
 
-    private func dot(at center: CGPoint, radius: CGFloat, color: Color) -> some View {
+    /// Areas only fill in under lines whose marks carry the labels, so they stay hidden from VoiceOver.
+    private static func area(_ points: [AreaPoint], interpolation: InterpolationMethod) -> some ChartContent {
+        AreaPlot(points, x: .value("Time", \.date), yStart: .value("Base", \.base), yEnd: .value("Value", \.value),
+                 series: .value("Series", \.series))
+            .accessibilityHidden(true)
+            .interpolationMethod(interpolation)
+    }
+
+    private static func dot(at center: CGPoint, radius: CGFloat, color: Color) -> some View {
         Circle()
             .fill(color)
             .frame(width: radius * 2, height: radius * 2)
             .position(center)
     }
 
-    private func dotColor(for reading: Reading, zones: ChartMath.Zones) -> Color {
-        settings.dotUsesZoneColor ? ChartMath.color(for: reading.sgv, zones: zones) : settings.dotColor
+    private static func dotColor(for reading: Reading, in p: Plot, settings: AppSettings) -> Color {
+        settings.dotUsesZoneColor ? ChartMath.color(for: reading.sgv, zones: p.zones) : settings.dotColor
     }
 
     // MARK: - Pump lane
 
-    /// Rate and boluses share no axis, so each scales on its own, with a floor (1 U/h, 2 U) so a
-    /// quiet stretch or a lone small bolus doesn't stand full height. The top 4 points stay free.
+    /// The scale is the rate's, floored at 1 U/h so a quiet stretch doesn't stand full height. Boluses
+    /// share no unit with it and scale to the largest (at least 2 U) instead. The top 4 points stay free.
     private func lane(_ p: Plot) -> some View {
         let topRate = max(p.steps.map(\.rate).max() ?? 0, 1)
         let largestBolus = max(p.boluses.compactMap(\.bolusUnits).max() ?? 0, 2)
-        let runs = ChartMath.contiguousRuns(p.steps)
+        // Each step's start, plus the end of the last, held with .stepEnd.
+        let runs = ChartMath.contiguousRuns(p.steps).enumerated().map { index, run in
+            run.map { AreaPoint(date: $0.start, base: 0, value: $0.rate, series: index) }
+                + run.suffix(1).map { AreaPoint(date: $0.end, base: 0, value: $0.rate, series: index) }
+        }
 
         return Chart {
+            Self.area(runs.flatMap(\.self), interpolation: .stepEnd)
+                .foregroundStyle(settings.deliveryRateColor.opacity(0.3))
+
             ForEach(runs.indices, id: \.self) { index in
-                // Each step's start, plus the end of the last, held with .stepEnd.
-                let run = runs[index]
-                let corners = run.map { ($0.start, $0.rate) } + run.suffix(1).map { ($0.end, $0.rate) }
-                ForEach(corners.indices, id: \.self) { corner in
-                    let (date, rate) = corners[corner]
-                    AreaMark(x: .value("Time", date), yStart: .value("Base", 0.0),
-                             yEnd: .value("Rate", rate / topRate), series: .value("Run", index))
-                        .interpolationMethod(.stepEnd)
-                        .foregroundStyle(settings.deliveryRateColor.opacity(0.3))
-                        .accessibilityHidden(true)
-                    LineMark(x: .value("Time", date), y: .value("Rate", rate / topRate), series: .value("Run", index))
+                ForEach(runs[index].indices, id: \.self) { corner in
+                    let point = runs[index][corner]
+                    LineMark(x: .value("Time", point.date), y: .value("Rate", point.value), series: .value("Run", index))
                         .interpolationMethod(.stepEnd)
                         .lineStyle(StrokeStyle(lineWidth: 1))
                         .foregroundStyle(settings.deliveryRateColor)
-                        .accessibilityLabel(Self.timeLabel(date, span: p.span))
-                        .accessibilityValue(PumpFormat.rate(rate))
+                        .accessibilityLabel(Text(point.date, format: p.timeStyle))
+                        .accessibilityValue(PumpFormat.rate(point.value))
+                        // The end corner holds the last rate until then; it starts no step.
+                        .accessibilityHidden(corner == runs[index].count - 1)
                 }
             }
 
             ForEach(p.boluses, id: \.id) { bolus in
                 let units = bolus.bolusUnits ?? 0
                 BarMark(x: .value("Time", bolus.date), yStart: .value("Base", 0.0),
-                        yEnd: .value("Units", max(min(units / largestBolus, 1), 0.15)),
+                        yEnd: .value("Units", max(min(units / largestBolus, 1), 0.15) * topRate),
                         width: .fixed(2.5))
                     .foregroundStyle(settings.bolusColor)
                     .clipShape(Capsule())
-                    .accessibilityLabel(Self.timeLabel(bolus.date, span: p.span))
+                    .accessibilityLabel(Text(bolus.date, format: p.timeStyle))
                     .accessibilityValue(Self.bolusText(units))
-            }
-
-            if let target = p.target {
-                Self.crosshair(at: target.date)
             }
         }
         .chartXScale(domain: p.start...p.end)
-        .chartYScale(domain: 0...Double(Self.laneHeight / (Self.laneHeight - 4)))
+        .chartYScale(domain: 0...topRate * Self.laneHeight / (Self.laneHeight - 4))
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartPlotStyle { plot in
@@ -348,11 +315,11 @@ struct GlucoseChart: View {
 
     // MARK: - Hover
 
-    private static func crosshair(at date: Date) -> some ChartContent {
-        RuleMark(x: .value("Time", date))
-            .foregroundStyle(.primary.opacity(0.25))
-            .lineStyle(StrokeStyle(lineWidth: 1))
-            .accessibilityHidden(true)
+    /// Identities rather than a position, so moving within one target doesn't redraw.
+    private struct Hover: Equatable {
+        var readingDate: Date?
+        var bolusID: String?
+        var noteID: String?
     }
 
     private struct HoverTarget {
@@ -371,30 +338,89 @@ struct GlucoseChart: View {
         }
     }
 
-    /// The plot spans the chart's full width, so a position maps to a date linearly.
-    private func updateHover(at x: CGFloat, in p: Plot) {
-        guard width > 0 else { return }
-        let secondsPerPoint = p.span / width
-        let date = p.start.addingTimeInterval(x * secondsPerPoint)
-        // Events are narrow marks, so they want the pointer much closer than a reading does.
-        func nearest(_ dates: [Date], within points: CGFloat) -> Int? {
-            ChartMath.nearestIndex(to: date, in: dates, maxDistance: points * secondsPerPoint)
-        }
-        let next = Hover(
-            readingDate: nearest(p.visible.map(\.date), within: 24).map { p.visible[$0].date },
-            bolusID: nearest(p.boluses.map(\.date), within: 6).map { p.boluses[$0].id },
-            noteID: nearest(p.notes.map(\.date), within: 6).map { p.notes[$0].id })
-        hover = next == Hover() ? nil : next
-    }
+    /// The crosshair, its pill and the hovered reading's dot, in a chart of their own over both
+    /// charts, so that only this redraws while the pointer moves.
+    private struct HoverLayer: View {
+        let plot: Plot
+        let settings: AppSettings
+        @State private var hover: Hover?
 
-    private func pill(for target: HoverTarget, in p: Plot) -> some View {
-        let time = Self.timeLabel(target.date, span: p.span)
-        let insulin = [target.bolus?.bolusUnits.map(Self.bolusText),
-                       ChartMath.rate(at: target.date, in: p.steps).map(PumpFormat.rate)].compactMap(\.self)
-        return HoverPill(title: target.reading.map { "\($0.text(in: p.units)) · \(time)" } ?? time,
-                         insulin: insulin.isEmpty ? nil : insulin.joined(separator: " · "),
-                         note: target.note?.noteText)
-            .frame(maxWidth: 240)
+        var body: some View {
+            let target = hover.flatMap { HoverTarget($0, in: plot) }
+            Chart {
+                if let target {
+                    RuleMark(x: .value("Time", target.date))
+                        .foregroundStyle(.primary.opacity(0.25))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                        .annotation(position: .top, spacing: 0,
+                                    overflowResolution: .init(x: .fit(to: .plot), y: .fit(to: .plot))) {
+                            pill(for: target)
+                                .padding(.top, 6)
+                        }
+                }
+            }
+            .chartXScale(domain: plot.start...plot.end)
+            // The lane takes the bottom of this plot, so a reading's dot lands where the glucose chart draws it.
+            .chartYScale(domain: plot.axis.lower...plot.axis.upper,
+                         range: .plotDimension(startPadding: plot.hasLane ? GlucoseChart.laneHeight : 0))
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .chartPlotStyle { $0.clipShape(GlucoseChart.frame) }
+            // Under the pill, which shows the value anyway, and outside the plot's clip like the latest dot.
+            .chartBackground { proxy in
+                GeometryReader { geometry in
+                    if let plotFrame = proxy.plotFrame.map({ geometry[$0] }), let reading = target?.reading,
+                       let point = proxy.position(for: (x: reading.date, y: plot.plotted(reading))) {
+                        // Floored so the crosshair keeps a visible point when the dot is sized away.
+                        GlucoseChart.dot(at: point, radius: max(3, settings.dotRadius),
+                                         color: GlucoseChart.dotColor(for: reading, in: plot, settings: settings))
+                            .offset(x: plotFrame.minX, y: plotFrame.minY)
+                    }
+                }
+            }
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    if let plotFrame = proxy.plotFrame.map({ geometry[$0] }) {
+                        Rectangle()
+                            .fill(.clear)
+                            .contentShape(.rect)
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    updateHover(at: location.x - plotFrame.minX, width: plotFrame.width, proxy: proxy)
+                                case .ended:
+                                    hover = nil
+                                }
+                            }
+                    }
+                }
+            }
+            .accessibilityHidden(true)
+        }
+
+        private func updateHover(at x: CGFloat, width: CGFloat, proxy: ChartProxy) {
+            guard width > 0, let date = proxy.value(atX: x, as: Date.self) else { return }
+            let secondsPerPoint = plot.span / width
+            // Events are narrow marks, so they want the pointer much closer than a reading does.
+            func nearest(_ dates: [Date], within points: CGFloat) -> Int? {
+                ChartMath.nearestIndex(to: date, in: dates, maxDistance: points * secondsPerPoint)
+            }
+            let next = Hover(
+                readingDate: nearest(plot.visible.map(\.date), within: 24).map { plot.visible[$0].date },
+                bolusID: nearest(plot.boluses.map(\.date), within: 6).map { plot.boluses[$0].id },
+                noteID: nearest(plot.notes.map(\.date), within: 6).map { plot.notes[$0].id })
+            hover = next == Hover() ? nil : next
+        }
+
+        private func pill(for target: HoverTarget) -> some View {
+            let time = target.date.formatted(plot.timeStyle)
+            let insulin = [target.bolus?.bolusUnits.map(GlucoseChart.bolusText),
+                           ChartMath.rate(at: target.date, in: plot.steps).map(PumpFormat.rate)].compactMap(\.self)
+            return HoverPill(title: target.reading.map { "\($0.text(in: plot.units)) · \(time)" } ?? time,
+                             insulin: insulin.isEmpty ? nil : insulin.joined(separator: " · "),
+                             note: target.note?.noteText)
+                .frame(maxWidth: 240)
+        }
     }
 }
 
