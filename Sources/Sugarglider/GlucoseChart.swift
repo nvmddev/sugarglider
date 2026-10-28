@@ -360,7 +360,7 @@ struct GlucoseChart: View {
                 }
             }
             .chartXScale(domain: plot.start...plot.end)
-            // The lane pads the glucose scale from below, so one crosshair runs through both charts.
+            // The lane takes the bottom of this plot, so a reading's dot lands where the glucose chart draws it.
             .chartYScale(domain: plot.axis.lower...plot.axis.upper,
                          range: .plotDimension(startPadding: plot.hasLane ? GlucoseChart.laneHeight : 0))
             .chartXAxis(.hidden)
