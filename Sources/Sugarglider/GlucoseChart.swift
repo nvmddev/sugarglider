@@ -127,6 +127,9 @@ struct GlucoseChart: View {
                                                              blended: settings.blendLineColors),
                                   startPoint: .bottom, endPoint: .top)
         let shade = settings.lineShadingUsesLineColor ? p.zones.inRangeColor.opacity(0.14) : settings.lineShadingColor
+        let shading = !settings.lineShadingEnabled ? [] : segments.indices.flatMap { index in
+            segments[index].map { AreaPoint(date: $0.date, base: p.axis.lower, value: p.plotted($0), series: index) }
+        }
 
         return Chart {
             if low < high {
@@ -154,19 +157,9 @@ struct GlucoseChart: View {
                     .accessibilityValue(note.noteText ?? "")
             }
 
-            if settings.lineShadingEnabled {
-                ForEach(segments.indices, id: \.self) { index in
-                    ForEach(segments[index], id: \.date) { reading in
-                        AreaMark(x: .value("Time", reading.date), yStart: .value("Base", p.axis.lower),
-                                 yEnd: .value("Glucose", p.plotted(reading)), series: .value("Segment", index))
-                            .interpolationMethod(.catmullRom)
-                            .foregroundStyle(LinearGradient(colors: [shade, shade.opacity(0)],
-                                                            startPoint: .top, endPoint: .bottom))
-                            .alignsMarkStylesWithPlotArea()
-                            .accessibilityHidden(true)
-                    }
-                }
-            }
+            Self.area(shading, interpolation: .catmullRom)
+                .foregroundStyle(LinearGradient(colors: [shade, shade.opacity(0)], startPoint: .top, endPoint: .bottom))
+                .alignsMarkStylesWithPlotArea()
 
             ForEach(runs.indices, id: \.self) { index in
                 ForEach(runs[index].readings, id: \.date) { reading in
@@ -239,6 +232,22 @@ struct GlucoseChart: View {
         .accessibilityLabel("Glucose")
     }
 
+    /// A point of an area, which is drawn as one `AreaPlot` rather than a mark per point.
+    private struct AreaPoint {
+        var date: Date
+        var base: Double
+        var value: Double
+        var series: Int
+    }
+
+    /// Areas only fill in under lines whose marks carry the labels, so they stay hidden from VoiceOver.
+    private static func area(_ points: [AreaPoint], interpolation: InterpolationMethod) -> some ChartContent {
+        AreaPlot(points, x: .value("Time", \.date), yStart: .value("Base", \.base), yEnd: .value("Value", \.value),
+                 series: .value("Series", \.series))
+            .accessibilityHidden(true)
+            .interpolationMethod(interpolation)
+    }
+
     private static func dot(at center: CGPoint, radius: CGFloat, color: Color) -> some View {
         Circle()
             .fill(color)
@@ -257,28 +266,27 @@ struct GlucoseChart: View {
     private func lane(_ p: Plot) -> some View {
         let topRate = max(p.steps.map(\.rate).max() ?? 0, 1)
         let largestBolus = max(p.boluses.compactMap(\.bolusUnits).max() ?? 0, 2)
-        let runs = ChartMath.contiguousRuns(p.steps)
+        // Each step's start, plus the end of the last, held with .stepEnd.
+        let runs = ChartMath.contiguousRuns(p.steps).enumerated().map { index, run in
+            run.map { AreaPoint(date: $0.start, base: 0, value: $0.rate, series: index) }
+                + run.suffix(1).map { AreaPoint(date: $0.end, base: 0, value: $0.rate, series: index) }
+        }
 
         return Chart {
+            Self.area(runs.flatMap(\.self), interpolation: .stepEnd)
+                .foregroundStyle(settings.deliveryRateColor.opacity(0.3))
+
             ForEach(runs.indices, id: \.self) { index in
-                // Each step's start, plus the end of the last, held with .stepEnd.
-                let run = runs[index]
-                let corners = run.map { ($0.start, $0.rate) } + run.suffix(1).map { ($0.end, $0.rate) }
-                ForEach(corners.indices, id: \.self) { corner in
-                    let (date, rate) = corners[corner]
-                    AreaMark(x: .value("Time", date), yStart: .value("Base", 0.0),
-                             yEnd: .value("Rate", rate), series: .value("Run", index))
-                        .interpolationMethod(.stepEnd)
-                        .foregroundStyle(settings.deliveryRateColor.opacity(0.3))
-                        .accessibilityHidden(true)
-                    LineMark(x: .value("Time", date), y: .value("Rate", rate), series: .value("Run", index))
+                ForEach(runs[index].indices, id: \.self) { corner in
+                    let point = runs[index][corner]
+                    LineMark(x: .value("Time", point.date), y: .value("Rate", point.value), series: .value("Run", index))
                         .interpolationMethod(.stepEnd)
                         .lineStyle(StrokeStyle(lineWidth: 1))
                         .foregroundStyle(settings.deliveryRateColor)
-                        .accessibilityLabel(Text(date, format: p.timeStyle))
-                        .accessibilityValue(PumpFormat.rate(rate))
+                        .accessibilityLabel(Text(point.date, format: p.timeStyle))
+                        .accessibilityValue(PumpFormat.rate(point.value))
                         // The end corner holds the last rate until then; it starts no step.
-                        .accessibilityHidden(corner == corners.count - 1)
+                        .accessibilityHidden(corner == runs[index].count - 1)
                 }
             }
 
