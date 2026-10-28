@@ -179,6 +179,8 @@ struct GlucoseChart: View {
                         .opacity(0.9)
                         .accessibilityLabel(Text(reading.date, format: p.timeStyle))
                         .accessibilityValue(reading.text(in: p.units, withUnit: true))
+                        // A run starts on the reading the previous one ended on, which that one already lists.
+                        .accessibilityHidden(index > 0 && runs[index - 1].readings.last?.date == reading.date)
                 }
             }
 
@@ -250,8 +252,8 @@ struct GlucoseChart: View {
 
     // MARK: - Pump lane
 
-    /// Rate and boluses share no axis, so each scales on its own, with a floor (1 U/h, 2 U) so a
-    /// quiet stretch or a lone small bolus doesn't stand full height. The top 4 points stay free.
+    /// The scale is the rate's, floored at 1 U/h so a quiet stretch doesn't stand full height. Boluses
+    /// share no unit with it and scale to the largest (at least 2 U) instead. The top 4 points stay free.
     private func lane(_ p: Plot) -> some View {
         let topRate = max(p.steps.map(\.rate).max() ?? 0, 1)
         let largestBolus = max(p.boluses.compactMap(\.bolusUnits).max() ?? 0, 2)
@@ -265,23 +267,25 @@ struct GlucoseChart: View {
                 ForEach(corners.indices, id: \.self) { corner in
                     let (date, rate) = corners[corner]
                     AreaMark(x: .value("Time", date), yStart: .value("Base", 0.0),
-                             yEnd: .value("Rate", rate / topRate), series: .value("Run", index))
+                             yEnd: .value("Rate", rate), series: .value("Run", index))
                         .interpolationMethod(.stepEnd)
                         .foregroundStyle(settings.deliveryRateColor.opacity(0.3))
                         .accessibilityHidden(true)
-                    LineMark(x: .value("Time", date), y: .value("Rate", rate / topRate), series: .value("Run", index))
+                    LineMark(x: .value("Time", date), y: .value("Rate", rate), series: .value("Run", index))
                         .interpolationMethod(.stepEnd)
                         .lineStyle(StrokeStyle(lineWidth: 1))
                         .foregroundStyle(settings.deliveryRateColor)
                         .accessibilityLabel(Text(date, format: p.timeStyle))
                         .accessibilityValue(PumpFormat.rate(rate))
+                        // The end corner holds the last rate until then; it starts no step.
+                        .accessibilityHidden(corner == corners.count - 1)
                 }
             }
 
             ForEach(p.boluses, id: \.id) { bolus in
                 let units = bolus.bolusUnits ?? 0
                 BarMark(x: .value("Time", bolus.date), yStart: .value("Base", 0.0),
-                        yEnd: .value("Units", max(min(units / largestBolus, 1), 0.15)),
+                        yEnd: .value("Units", max(min(units / largestBolus, 1), 0.15) * topRate),
                         width: .fixed(2.5))
                     .foregroundStyle(settings.bolusColor)
                     .clipShape(Capsule())
@@ -290,7 +294,7 @@ struct GlucoseChart: View {
             }
         }
         .chartXScale(domain: p.start...p.end)
-        .chartYScale(domain: 0...Double(Self.laneHeight / (Self.laneHeight - 4)))
+        .chartYScale(domain: 0...topRate * Self.laneHeight / (Self.laneHeight - 4))
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartPlotStyle { plot in
