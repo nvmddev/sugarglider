@@ -202,9 +202,12 @@ extension SugargliderTests {
         #expect(renderedImage(GlucoseChart(readings: [], rangeHours: 6, settings: Self.makeSettings(), windowEnd: .now)) != nil)
     }
 
-    @Test func rendersSinglePointAsNoData() {
-        let chart = GlucoseChart(readings: [reading(100, minutesAgo: 0)], rangeHours: 6, settings: Self.makeSettings(), windowEnd: .now)
-        #expect(renderedImage(chart) != nil)
+    /// The first reading after a gap longer than the range, as after a sensor change.
+    @Test func rendersALoneReadingAsAPoint() {
+        let s = Self.makeSettings()
+        let chart = pixels(of: GlucoseChart(readings: [reading(100, minutesAgo: 0)], rangeHours: 6, settings: s, windowEnd: .now))
+        #expect(chart != nil)
+        #expect(chart != pixels(of: GlucoseChart(readings: [], rangeHours: 6, settings: s, windowEnd: .now)))
     }
 
     @Test func rendersFullChartMmolDirectColors() {
@@ -292,6 +295,20 @@ extension SugargliderTests {
         let chart = pixels(of: GlucoseChart(readings: readings, rangeHours: 2, settings: s, windowEnd: end))
         #expect(chart != nil)
         #expect(chart != pixels(of: GlucoseChart(readings: [], rangeHours: 2, settings: s, windowEnd: .now)))
+    }
+
+    /// An uploader whose clock runs ahead dates the newest reading past the window's end. The end
+    /// moves with it, so the chart draws as if the clocks agreed.
+    @Test func readingPastTheWindowEndMovesTheEnd() {
+        let s = Self.makeSettings()
+        let newest = Date.now
+        let readings = [180, 150, 120, 110, 100].enumerated().map { i, sgv in
+            reading(sgv, minutesAgo: Double(4 - i) * 15, from: newest)
+        }
+        let ahead = pixels(of: GlucoseChart(readings: readings, rangeHours: 2, settings: s,
+                                            windowEnd: newest.addingTimeInterval(-10 * 60)))
+        #expect(ahead != nil)
+        #expect(ahead == pixels(of: GlucoseChart(readings: readings, rangeHours: 2, settings: s, windowEnd: newest)))
     }
 
     /// Single-reading segments take the isolated-dot branch.
