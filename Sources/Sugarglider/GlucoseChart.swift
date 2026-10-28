@@ -366,16 +366,21 @@ struct GlucoseChart: View {
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
             .chartPlotStyle { $0.clipShape(GlucoseChart.frame) }
+            // Under the pill, which shows the value anyway, and outside the plot's clip like the latest dot.
+            .chartBackground { proxy in
+                GeometryReader { geometry in
+                    if let plotFrame = proxy.plotFrame.map({ geometry[$0] }), let reading = target?.reading,
+                       let point = proxy.position(for: (x: reading.date, y: plot.plotted(reading))) {
+                        // Floored so the crosshair keeps a visible point when the dot is sized away.
+                        GlucoseChart.dot(at: point, radius: max(3, settings.dotRadius),
+                                         color: GlucoseChart.dotColor(for: reading, in: plot, settings: settings))
+                            .offset(x: plotFrame.minX, y: plotFrame.minY)
+                    }
+                }
+            }
             .chartOverlay { proxy in
                 GeometryReader { geometry in
                     if let plotFrame = proxy.plotFrame.map({ geometry[$0] }) {
-                        if let reading = target?.reading,
-                           let point = proxy.position(for: (x: reading.date, y: plot.plotted(reading))) {
-                            // Floored so the crosshair keeps a visible point when the dot is sized away.
-                            GlucoseChart.dot(at: point, radius: max(3, settings.dotRadius),
-                                             color: GlucoseChart.dotColor(for: reading, in: plot, settings: settings))
-                                .offset(x: plotFrame.minX, y: plotFrame.minY)
-                        }
                         Rectangle()
                             .fill(.clear)
                             .contentShape(.rect)
