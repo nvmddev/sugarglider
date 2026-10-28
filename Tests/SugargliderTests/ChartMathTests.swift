@@ -294,6 +294,20 @@ extension SugargliderTests {
         #expect(chart != pixels(of: GlucoseChart(readings: [], rangeHours: 2, settings: s, windowEnd: .now)))
     }
 
+    /// An uploader whose clock runs ahead dates the newest reading past the window's end. The end
+    /// moves with it, so the chart draws as if the clocks agreed.
+    @Test func readingPastTheWindowEndMovesTheEnd() {
+        let s = Self.makeSettings()
+        let newest = Date.now
+        let readings = [180, 150, 120, 110, 100].enumerated().map { i, sgv in
+            reading(sgv, minutesAgo: Double(4 - i) * 15, from: newest)
+        }
+        let ahead = pixels(of: GlucoseChart(readings: readings, rangeHours: 2, settings: s,
+                                            windowEnd: newest.addingTimeInterval(-10 * 60)))
+        #expect(ahead != nil)
+        #expect(ahead == pixels(of: GlucoseChart(readings: readings, rangeHours: 2, settings: s, windowEnd: newest)))
+    }
+
     /// Single-reading segments take the isolated-dot branch.
     @Test func rendersWithGapsAndIsolatedPoints() {
         let base = Date.now

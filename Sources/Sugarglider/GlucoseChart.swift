@@ -66,7 +66,8 @@ struct GlucoseChart: View {
 
         init?(_ chart: GlucoseChart) {
             let settings = chart.settings
-            let end = chart.windowEnd
+            // A reading dated ahead of this Mac's clock moves the end, rather than falling off the chart.
+            let end = max(chart.windowEnd, chart.readings.last?.date ?? chart.windowEnd)
             let start = end.addingTimeInterval(-Double(chart.rangeHours) * 3600)
             let visible = chart.readings.filter { $0.date >= start }
             guard visible.count >= 2, let latest = visible.last else { return nil }
