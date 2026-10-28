@@ -70,7 +70,7 @@ struct GlucoseChart: View {
             let end = max(chart.windowEnd, chart.readings.last?.date ?? chart.windowEnd)
             let start = end.addingTimeInterval(-Double(chart.rangeHours) * 3600)
             let visible = chart.readings.filter { $0.date >= start }
-            guard visible.count >= 2, let latest = visible.last else { return nil }
+            guard let latest = visible.last else { return nil }
             let units = settings.units
             let inWindow = chart.treatments.filter { $0.date >= start && $0.date <= end }
 

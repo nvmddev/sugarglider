@@ -202,9 +202,12 @@ extension SugargliderTests {
         #expect(renderedImage(GlucoseChart(readings: [], rangeHours: 6, settings: Self.makeSettings(), windowEnd: .now)) != nil)
     }
 
-    @Test func rendersSinglePointAsNoData() {
-        let chart = GlucoseChart(readings: [reading(100, minutesAgo: 0)], rangeHours: 6, settings: Self.makeSettings(), windowEnd: .now)
-        #expect(renderedImage(chart) != nil)
+    /// The first reading after a gap longer than the range, as after a sensor change.
+    @Test func rendersALoneReadingAsAPoint() {
+        let s = Self.makeSettings()
+        let chart = pixels(of: GlucoseChart(readings: [reading(100, minutesAgo: 0)], rangeHours: 6, settings: s, windowEnd: .now))
+        #expect(chart != nil)
+        #expect(chart != pixels(of: GlucoseChart(readings: [], rangeHours: 6, settings: s, windowEnd: .now)))
     }
 
     @Test func rendersFullChartMmolDirectColors() {
