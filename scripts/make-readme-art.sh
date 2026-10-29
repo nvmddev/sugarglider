@@ -6,8 +6,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Only a full Xcode has xcodebuild, and the Command Line Tools can't build the
-# app's SwiftUI macros.
-if [[ -z "${DEVELOPER_DIR:-}" && ! -x "$(xcode-select -p 2>/dev/null)/usr/bin/xcodebuild" ]]; then
+# app's SwiftUI macros. Probed by running it: with no developer directory selected,
+# /usr/bin/xcodebuild is the always-present shim that prints the "requires Xcode"
+# error, so an -x test on the path would skip the loop exactly when it is needed.
+if [[ -z "${DEVELOPER_DIR:-}" ]] && ! xcodebuild -version >/dev/null 2>&1; then
     for candidate in /Applications/Xcode*.app/Contents/Developer; do
         if [[ -d "${candidate}" ]]; then export DEVELOPER_DIR="${candidate}"; break; fi
     done

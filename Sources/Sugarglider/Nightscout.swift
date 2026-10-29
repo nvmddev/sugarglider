@@ -150,8 +150,8 @@ struct Nightscout {
     /// from passing for current.
     static let deviceStatusCount = 30
 
-    /// How far ahead of this Mac's clock a record may be dated and still count: the store drops
-    /// such entries, and the pump merge anchors on a plausible record instead.
+    /// Records dated further ahead than this are dropped by the store, and the pump merge
+    /// anchors on the newest record within it instead of a skewed one.
     static let futureTolerance: TimeInterval = 5 * 60
 
     /// Nil rather than an error for a site without pump data: most only have a CGM uploading.

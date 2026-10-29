@@ -17,7 +17,7 @@ cd "$(dirname "$0")"
 APP="Sugarglider.app"
 ARCHIVE=".build/Sugarglider.xcarchive"
 
-VERSION="${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)}"
+VERSION="${VERSION:-$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null | grep -v -- '-' | sed 's/^v//' || true)}"
 VERSION="${VERSION:-0.0.0-dev}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
@@ -36,6 +36,13 @@ else
         # xcodebuild only finds installed profiles, in the folder that opening
         # one in Finder puts it in.
         UUID="$(security cms -D -i "${PROFILE}" | plutil -extract UUID raw -o - -)"
+        # A profile without keychain-access-groups yields an app that signs cleanly and
+        # is then killed at launch by AMFI, so check before using it.
+        security cms -D -i "${PROFILE}" \
+            | plutil -extract Entitlements.keychain-access-groups xml1 -o - - > /dev/null || {
+            echo "error: ${PROFILE} grants no keychain-access-groups" >&2
+            exit 1
+        }
         PROFILES="${HOME}/Library/Developer/Xcode/UserData/Provisioning Profiles"
         mkdir -p "${PROFILES}"
         cp "${PROFILE}" "${PROFILES}/${UUID}.provisionprofile"
@@ -55,8 +62,11 @@ xcodebuild archive -quiet \
     -derivedDataPath .build/xcode -archivePath "${ARCHIVE}" \
     "${SETTINGS[@]}"
 
-rm -rf "${APP}"
-ditto "${ARCHIVE}/Products/Applications/${APP}" "${APP}"
+# Copied to a partial path and renamed: an interrupt or a crash mid-copy would
+# otherwise leave a truncated app in place of the working one.
+rm -rf "${APP}" "${APP}.partial"
+ditto "${ARCHIVE}/Products/Applications/${APP}" "${APP}.partial"
+mv "${APP}.partial" "${APP}"
 codesign --verify --strict --verbose=2 "${APP}"
 
 echo "Built ${APP} (${VERSION}, build ${BUILD_NUMBER})"

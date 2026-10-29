@@ -75,6 +75,11 @@ section_for() {
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 
+# Written through a file, not a process substitution: `set -e` doesn't see a
+# failing command inside `< <(...)`, and a silent empty log would pass for
+# "no changes" while prepend replaces the changelog.
+git log --no-merges --format='%H%x1f%s%x1f%b%x1e' "${RANGE}" > "${WORK}/records"
+
 count=0
 while IFS= read -r -d $'\x1e' record; do
     record="${record#$'\n'}"
@@ -96,7 +101,9 @@ while IFS= read -r -d $'\x1e' record; do
         desc="${subject}"
     fi
 
-    if [[ -n "${bang}" || "${body}" == *"BREAKING CHANGE"* ]]; then
+    # The footer tokens, at line starts only: prose that merely mentions the
+    # phrase must not break. BREAKING-CHANGE is the spec's synonym.
+    if [[ -n "${bang}" ]] || grep -qE '^BREAKING CHANGE: |^BREAKING-CHANGE: ' <<<"${body}"; then
         section="breaking"
     else
         section="$(section_for "${type}")"
@@ -113,7 +120,11 @@ done < <(git log --no-merges --format='%H%x1f%s%x1f%b%x1e' "${RANGE}")
 
 render() {
     local section
-    printf '## [%s](%s) (%s)\n' "${VERSION}" "${REPO_URL}/releases/tag/v${VERSION}" "${DATE}"
+    if [[ -n "${REPO_URL}" ]]; then
+        printf '## [%s](%s) (%s)\n' "${VERSION}" "${REPO_URL}/releases/tag/v${VERSION}" "${DATE}"
+    else
+        printf '## %s (%s)\n' "${VERSION}" "${DATE}"
+    fi
 
     if [[ "${count}" -eq 0 ]]; then
         printf '\nNo code changes since %s.\n' "${FROM:-the initial commit}"
@@ -150,6 +161,14 @@ HEADER
 
     if [[ -f CHANGELOG.md ]]; then
         first_release="$(grep -n '^## ' CHANGELOG.md | head -n1 | cut -d: -f1 || true)"
+        # Already at this version: the workflow re-runs prepend on a branch that may carry it,
+        # and its diff guard relies on a second run changing nothing. The section line renders
+        # with or without a link, depending on whether an origin remote is known.
+        if [[ -n "${first_release}" ]] \
+            && sed -n "${first_release}p" CHANGELOG.md | grep -qE "^## (\[)?${VERSION}(\])? "; then
+            echo "CHANGELOG.md already has ${VERSION}."
+            exit 0
+        fi
         if [[ -n "${first_release}" ]]; then
             printf '\n' >> "${NEW}"
             tail -n "+${first_release}" CHANGELOG.md >> "${NEW}"

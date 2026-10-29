@@ -18,6 +18,8 @@ STAPLE="${2:-}"
 
 echo "==> Notarizing ${FILE}"
 # Captured, not streamed: on failure the submission id is needed to fetch the log.
+# The credentials ride in argv, not a keychain profile: the only caller is an
+# ephemeral, single-user CI runner, so nobody else can read the process list.
 if output="$(xcrun notarytool submit "${FILE}" \
     --apple-id "${APPLE_ID}" \
     --team-id "${APPLE_TEAM_ID}" \

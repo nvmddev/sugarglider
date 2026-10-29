@@ -35,6 +35,11 @@ jobs:
       - name: Test
         run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64
 
+      # Crafted Conventional Commits history; runs here too, on the release
+      # interpreter, macOS' bash 3.2, which ubuntu's bash 5 can't stand in for.
+      - name: Smoke-test version + changelog (bash 3.2)
+        run: scripts/smoke-version-changelog.sh
+
       - name: Assemble app bundle
         run: ./build.sh
 
@@ -124,7 +129,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Exercise version + changelog generation
+      # Crafted subjects: breaking bang, both footer spellings, prose mentioning
+      # the phrase, case and description rules, prerelease tags, prepend
+      # idempotence, and the failure paths the real history never shows.
+      - name: Exercise version + changelog on crafted history
+        run: scripts/smoke-version-changelog.sh
+
+      - name: Preview release notes
         run: |
           set -euo pipefail
           echo "latest tag:   $(scripts/version.sh latest)"
