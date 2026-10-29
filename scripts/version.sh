@@ -37,7 +37,7 @@ latest_tag() {
 previous_tag() {
     local exclude="$1" tag prev
     # Prereleases are excluded here, not matched and rejected: the fallback below
-    # takes the newest plain tag anywhere, which a side-branch tag would win.
+    # takes the newest plain tag on this branch.
     if prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' "${exclude}^" 2>/dev/null)"; then
         printf '%s' "${prev}"
         return 0

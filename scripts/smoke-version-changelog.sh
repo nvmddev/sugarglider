@@ -122,7 +122,7 @@ commit "chore: more" "BREAKING-CHANGE: api gone"
 
 expect "2.0.0" "$(scripts/version.sh next auto)" "next auto over bang and both footers"
 expect "1.1.0" "$(scripts/version.sh next minor)" "next minor is unaffected"
-expect_exit 1 "app-changed rejects an unknown tag" scripts/version.sh app-changed v9.9.9
+expect_exit 1 "app-changed rejects an unknown tag" scripts/version.sh app-changed v8.8.8
 
 notes="$(scripts/changelog.sh notes 1.1.0 v1.0.0 "$(git rev-parse HEAD~3)")"
 expect_not "Breaking changes" "${notes}" "prose mention is not breaking"

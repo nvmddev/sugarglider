@@ -26,8 +26,9 @@ final class ReadingStore {
     private(set) var now = Date.now
 
     /// The ticker intervals, injectable so tests can run the restart logic in milliseconds.
-    var tickInterval: Duration = .seconds(30)
-    var idleTickInterval: Duration = .seconds(300)
+    /// Not tracked: they are configuration, and a future write must not redraw every observer.
+    @ObservationIgnored var tickInterval: Duration = .seconds(30)
+    @ObservationIgnored var idleTickInterval: Duration = .seconds(300)
 
     /// Start of the earliest window a full fetch requested, which is what the cache covers.
     /// Only moves earlier: a request that finished late never narrows what an earlier fetch covered.

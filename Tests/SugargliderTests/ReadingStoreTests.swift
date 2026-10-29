@@ -484,6 +484,14 @@ extension SugargliderTests {
         #expect(server.requests.count == 4)   // the poll's two entries, history, device status, treatments
     }
 
+    /// The app's real defaults are load-bearing: the 300 s idle sleep keeps an empty menu bar
+    /// quiet, and the 30 s steady tick is what ages the reading and the stale check.
+    @Test func tickerDefaults() {
+        let store = ReadingStore(settings: Self.makeSettings())
+        #expect(store.idleTickInterval == .seconds(300))
+        #expect(store.tickInterval == .seconds(30))
+    }
+
     /// The unconfigured clock ticks slowly to save wakeups; the first reading restarts it, or the
     /// residual long sleep would freeze the age and the stale check for up to five minutes. The
     /// interval is injected, so the restart proves itself in milliseconds instead of 30 seconds.
