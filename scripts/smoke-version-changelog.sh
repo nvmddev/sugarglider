@@ -92,6 +92,16 @@ git tag v1.0.0
 expect "v1.0.0" "$(scripts/version.sh latest)" "latest"
 expect "v0.2.0" "$(scripts/version.sh previous v1.0.0)" "previous v1.0.0"
 expect "v0.1.0" "$(scripts/version.sh previous v0.2.0)" "previous v0.2.0"
+
+# An experiment tag on a side branch must not drive the version: latest keeps
+# the newest tag on this branch, and next auto reads its range from there.
+git branch side main
+git checkout -q side
+commit "chore: experiment on a side branch"
+git tag v9.9.9
+git checkout -q main
+expect "v1.0.0" "$(scripts/version.sh latest)" "latest ignores a side-branch tag"
+expect "1.0.1" "$(scripts/version.sh next auto)" "next auto ignores a side-branch tag"
 expect "1.0.1" "$(scripts/version.sh next patch)" "next patch"
 expect "1.1.0" "$(scripts/version.sh next minor)" "next minor"
 expect "2.0.0" "$(scripts/version.sh next major)" "next major"

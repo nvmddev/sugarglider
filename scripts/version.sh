@@ -19,7 +19,9 @@ trap 'rm -rf "${WORK}"' EXIT
 all_tags() {
     # Plain releases only: the two-dot glob alone still matches v1.2.3-beta.1, and a
     # prerelease as `latest` would fail every `next` call until the tag is deleted.
-    git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v -- '-' || true
+    # Only tags on this branch count: an experiment tag on a side branch must not
+    # drive the next released version.
+    git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname --merged HEAD | grep -v -- '-' || true
 }
 
 # No `| head -n1`: under pipefail, git dying of SIGPIPE would fail the script.
