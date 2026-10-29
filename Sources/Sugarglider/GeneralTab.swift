@@ -50,8 +50,8 @@ struct GeneralTab: View {
                 }
                 Picker("Show delta", selection: $settings.deltaDisplay) {
                     Text("Off").tag(AppSettings.DeltaDisplay.off)
-                    Text("In Dropdown").tag(AppSettings.DeltaDisplay.menu)
-                    Text("In Dropdown + Menu Bar").tag(AppSettings.DeltaDisplay.menuAndStatusBar)
+                    Text("In Dropdown").tag(AppSettings.DeltaDisplay.dropdown)
+                    Text("In Dropdown + Menu Bar").tag(AppSettings.DeltaDisplay.dropdownAndStatusBar)
                 }
                 LabeledContent("Refresh") {
                     intervalField("Every", value: $settings.pollIntervalSeconds,
@@ -127,7 +127,7 @@ struct GeneralTab: View {
                 .multilineTextAlignment(.trailing)
                 .frame(width: 36)
             Text(unit)
-                .help(Text("\(limits.lowerBound)–\(limits.upperBound) \(Text(unit))"))
+                .help(Text("\(limits.lowerBound) to \(limits.upperBound) \(Text(unit))"))
         }
     }
 

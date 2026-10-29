@@ -73,7 +73,7 @@ struct PumpStatus: Equatable {
         // A record dated ahead of this Mac's clock would anchor the window and push every real
         // record out of `mergeSpan`. The newest plausible record anchors instead; a site whose
         // clock alone is skewed still shows what it sends, like Nightscout does.
-        let tolerance = now.addingTimeInterval(5 * 60)
+        let tolerance = now.addingTimeInterval(Nightscout.futureTolerance)
         let anchor = newestFirst.first { $0.date <= tolerance } ?? newest
         let recent = newestFirst.filter {
             anchor.date.timeIntervalSince($0.date) <= mergeSpan && $0.date <= anchor.date

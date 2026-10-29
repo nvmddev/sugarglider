@@ -25,7 +25,8 @@ final class ReadingStore {
     /// no value changes. They can't keep time themselves: a `TimelineView` hangs a `MenuBarExtra` label.
     private(set) var now = Date.now
 
-    /// Start of the window the last full fetch requested, which is what the cache covers.
+    /// Start of the earliest window a full fetch requested, which is what the cache covers.
+    /// Only moves earlier: a request that finished late never narrows what an earlier fetch covered.
     @ObservationIgnored private(set) var historyWindowStart: Date?
     @ObservationIgnored private(set) var treatmentsWindowStart: Date?
 
@@ -136,14 +137,11 @@ final class ReadingStore {
         }
     }
 
-    /// How far ahead of this Mac's clock an entry may be dated and still count as plausible.
-    static let futureTolerance: TimeInterval = 5 * 60
-
-    /// Drops entries dated ahead of `now` beyond `futureTolerance`: a site whose uploader's clock
-    /// runs ahead would otherwise pin the menu bar and the chart's window to a future date
-    /// forever. Dropped, never clamped: a clamped date would be invented data.
+    /// Drops entries dated ahead of `now` beyond `Nightscout.futureTolerance`: a site whose
+    /// uploader's clock runs ahead would otherwise pin the menu bar and the chart's window to a
+    /// future date forever. Dropped, never clamped: a clamped date would be invented data.
     static func keepingPlausible(_ readings: [Reading], now: Date = .now) -> [Reading] {
-        readings.filter { $0.date <= now.addingTimeInterval(futureTolerance) }
+        readings.filter { $0.date <= now.addingTimeInterval(Nightscout.futureTolerance) }
     }
 
     /// Whether polled entries add to the history without a dropout. Entries beyond one stay
@@ -164,7 +162,7 @@ final class ReadingStore {
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
         guard let fetched = await fetch({ try await $0.entries(count: count, since: since) }) else { return }
         fetchedAt[.history] = .now
-        if !covered { historyWindowStart = start }
+        if !covered { historyWindowStart = historyWindowStart.map { min($0, start) } ?? start }
         merge(Self.keepingPlausible(fetched))
     }
 
@@ -201,8 +199,9 @@ final class ReadingStore {
         }
     }
 
-    /// The Refresh button's one call: a single task so the parts don't overlap each other or a
-    /// poll's request for the same part.
+    /// The Refresh button's one call. The parts run in sequence, so they don't overlap each
+    /// other; a poll's `refresh()` can still race this, and the generation guard and idempotent
+    /// merges keep that harmless.
     func refreshAll(force: Bool) async {
         await refresh()
         await refreshHistory(force: force)
@@ -238,7 +237,7 @@ final class ReadingStore {
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
         guard let fetched = await fetch({ try await $0.treatments(count: count, since: since) }) else { return }
         fetchedAt[.treatments] = .now
-        if !covered { treatmentsWindowStart = start }
+        if !covered { treatmentsWindowStart = treatmentsWindowStart.map { min($0, start) } ?? start }
         treatments = Self.merged(treatments, with: fetched)
     }
 
@@ -339,7 +338,7 @@ final class ReadingStore {
             // Kept with the change: the 30 s tick already moves the clock, and a poll that
             // changes nothing has nothing new to age.
             tick()
-            // The clock was on its slow unconfigured sleep; restart it, or the residual long
+            // The clock was on its slow no-reading sleep; restart it, or the residual long
             // sleep would freeze the age and the stale check.
             if wasWithoutAReading { restartTicker() }
         }

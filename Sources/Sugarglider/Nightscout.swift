@@ -129,7 +129,7 @@ struct Nightscout {
         }
     }
 
-    /// Oldest first. With `since` set this is a top-up, where nothing new is a valid answer.
+    /// With `since` set this is a top-up, where nothing new is a valid answer.
     func entries(count: Int, since: Date? = nil) async throws -> [Reading] {
         var query = [URLQueryItem(name: "count", value: String(count))]
         if let since {
@@ -150,6 +150,10 @@ struct Nightscout {
     /// from passing for current.
     static let deviceStatusCount = 30
 
+    /// How far ahead of this Mac's clock a record may be dated and still count: the store drops
+    /// such entries, and the pump merge anchors on a plausible record instead.
+    static let futureTolerance: TimeInterval = 5 * 60
+
     /// Nil rather than an error for a site without pump data: most only have a CGM uploading.
     func pumpStatus() async throws -> PumpStatus? {
         let data = try await get("api/v1/devicestatus.json",
@@ -157,7 +161,6 @@ struct Nightscout {
         return PumpStatus.merged(try Self.records(in: data).compactMap(PumpStatus.init(record:)))
     }
 
-    /// Oldest first.
     func treatments(count: Int, since: Date) async throws -> [Treatment] {
         let data = try await get("api/v1/treatments.json", query: [
             URLQueryItem(name: "count", value: String(count)),

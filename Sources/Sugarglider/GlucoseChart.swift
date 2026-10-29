@@ -35,9 +35,9 @@ struct GlucoseChart: View {
             }
             .overlay { HoverLayer(plot: plot, settings: settings) }
             .background {
-                if settings.chartBackgroundEnabled { Self.frame.fill(settings.chartBackgroundColor) }
+                if settings.chartBackgroundEnabled { Self.roundedRect.fill(settings.chartBackgroundColor) }
             }
-            .overlay { Self.frame.strokeBorder(.separator) }
+            .overlay { Self.roundedRect.strokeBorder(.separator) }
         } else {
             Text("No data for this range")
                 .font(.caption)
@@ -63,6 +63,11 @@ struct GlucoseChart: View {
         var notes: [Treatment]
         var steps: [ChartMath.DeliveryStep]
         var hasLane: Bool
+        /// The hover targets' dates, held once per update: the hover handler runs per pointer
+        /// event and would rebuild these arrays on every one.
+        var visibleDates: [Date]
+        var bolusDates: [Date]
+        var noteDates: [Date]
 
         var span: TimeInterval { end.timeIntervalSince(start) }
 
@@ -99,6 +104,9 @@ struct GlucoseChart: View {
             steps = settings.chartShowsDeliveryRate
                 ? ChartMath.deliverySteps(chart.treatments, from: start, to: end) : []
             hasLane = GlucoseChart.laneSpace(for: chart.treatments, settings: settings) > 0
+            visibleDates = visible.map(\.date)
+            bolusDates = boluses.map(\.date)
+            noteDates = notes.map(\.date)
         }
 
         /// LOW and HIGH sit at their markers, kept just inside the plot: the mg/dL axis stops at 40,
@@ -114,7 +122,7 @@ struct GlucoseChart: View {
     // MARK: - Glucose
 
     private static let cornerRadius: CGFloat = 10
-    private static let frame = RoundedRectangle(cornerRadius: cornerRadius)
+    private static let roundedRect = RoundedRectangle(cornerRadius: cornerRadius)
     // Axis marks resolve the semantic styles (.separator, .tertiary) against the chart's own colors.
     private static let gridLine = Color(nsColor: .separatorColor)
     private static let axisLabel = Color(nsColor: .tertiaryLabelColor)
@@ -391,7 +399,7 @@ struct GlucoseChart: View {
                          range: .plotDimension(startPadding: plot.hasLane ? GlucoseChart.laneHeight : 0))
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
-            .chartPlotStyle { $0.clipShape(GlucoseChart.frame) }
+            .chartPlotStyle { $0.clipShape(GlucoseChart.roundedRect) }
             // Under the pill, which shows the value anyway, and outside the plot's clip like the latest dot.
             .chartBackground { proxy in
                 GeometryReader { geometry in
@@ -432,9 +440,9 @@ struct GlucoseChart: View {
                 ChartMath.nearestIndex(to: date, in: dates, maxDistance: points * secondsPerPoint)
             }
             let next = Hover(
-                readingDate: nearest(plot.visible.map(\.date), within: 24).map { plot.visible[$0].date },
-                bolusID: nearest(plot.boluses.map(\.date), within: 6).map { plot.boluses[$0].id },
-                noteID: nearest(plot.notes.map(\.date), within: 6).map { plot.notes[$0].id })
+                readingDate: nearest(plot.visibleDates, within: 24).map { plot.visible[$0].date },
+                bolusID: nearest(plot.bolusDates, within: 6).map { plot.boluses[$0].id },
+                noteID: nearest(plot.noteDates, within: 6).map { plot.notes[$0].id })
             hover = next == Hover() ? nil : next
         }
 

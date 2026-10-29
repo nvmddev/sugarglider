@@ -28,7 +28,7 @@ struct ColorsTab: View {
                                 accessibilityTitle: "Glucose, sample data")
                         .frame(height: 95 + GlucoseChart.laneSpace(for: treatments, settings: settings))
                     HStack(spacing: 8) {
-                        Slider(value: $previewHours.sliderValue, in: Self.previewHoursBounds) {
+                        Slider(value: $previewHours.sliderValue, in: AppSettings.rangeHoursSliderBounds) {
                             Text("Preview chart range")
                         }
                         .labelsHidden()
@@ -50,9 +50,6 @@ struct ColorsTab: View {
         .padding([.horizontal, .top], 20)
         .onAppear { sampleEnd = .now }
     }
-
-    private static let previewHoursBounds =
-        Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
 
     // Zone sweeps grow with the square root of the window: 72 h shows about five, not a comb of 24.
     private static let previewHoursPerCycle = 3.0

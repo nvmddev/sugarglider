@@ -20,7 +20,7 @@ struct MenuBarLabel: View {
         guard settings.isConfigured else { return "CGM ⚙" }
         guard let reading = store.lastReading else { return store.lastError == nil ? "CGM …" : "CGM ⚠" }
         let arrow = reading.direction.map(trend) ?? ""
-        let delta = settings.deltaDisplay == .menuAndStatusBar ? store.deltaText().map { "  (\($0))" } : nil
+        let delta = settings.deltaDisplay == .dropdownAndStatusBar ? store.deltaText().map { "  (\($0))" } : nil
         // The age stays narrow in the title; VoiceOver spells the letters of the narrow units.
         let age = store.isStale ? " ⚠ \(reading.date.age(at: store.now, width: ageWidth))" : ""
         return "\(reading.text(in: settings.units))\(arrow)\(delta ?? "")\(age)"

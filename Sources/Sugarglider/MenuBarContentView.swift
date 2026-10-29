@@ -10,8 +10,6 @@ struct MenuBarContentView: View {
     private static let spacing: CGFloat = 10
     /// The button row sits as far above the bottom edge as below the divider, so it reads centered between them.
     static let insets = EdgeInsets(top: 18, leading: 18, bottom: spacing, trailing: 18)
-    private static let rangeSliderBounds =
-        Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
 
     var body: some View {
         let hours = Duration.seconds(Double(settings.rangeHours) * 3600)
@@ -21,7 +19,7 @@ struct MenuBarContentView: View {
                 .frame(height: 135 + GlucoseChart.laneSpace(for: store.treatments, settings: settings))
 
             HStack(spacing: 8) {
-                Slider(value: $settings.rangeHours.sliderValue, in: Self.rangeSliderBounds) { Text("Chart range") }
+                Slider(value: $settings.rangeHours.sliderValue, in: AppSettings.rangeHoursSliderBounds) { Text("Chart range") }
                     .labelsHidden()
                     .tint(settings.sliderColor)
                     .accessibilityValue(Text(verbatim: hours.formatted(.units(allowed: [.hours], width: .wide))))

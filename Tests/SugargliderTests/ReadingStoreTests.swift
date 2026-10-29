@@ -60,7 +60,7 @@ extension SugargliderTests {
     ] as [(AppSettings.Units, Int, Int, String)])
     func deltaIsSignedInTheDisplayUnit(units: AppSettings.Units, sgv: Int, previousSGV: Int, expected: String) {
         let settings = Self.makeSettings()
-        settings.deltaDisplay = .menu
+        settings.deltaDisplay = .dropdown
         settings.units = units
         let store = ReadingStore(settings: settings)
         let now = Date.now
@@ -71,10 +71,10 @@ extension SugargliderTests {
 
     @Test(arguments: [
         (.off, 5),
-        (.menu, nil),
-        (.menu, 12),    // too far apart to count as consecutive
-        (.menu, 20),
-        (.menu, -5),    // the previous reading is the newer one
+        (.dropdown, nil),
+        (.dropdown, 12),    // too far apart to count as consecutive
+        (.dropdown, 20),
+        (.dropdown, -5),    // the previous reading is the newer one
     ] as [(AppSettings.DeltaDisplay, Int?)])
     func deltaIsNilUnlessShownForConsecutiveReadings(display: AppSettings.DeltaDisplay, previousMinutesAgo: Int?) {
         let settings = Self.makeSettings()
@@ -90,7 +90,7 @@ extension SugargliderTests {
     @Test(arguments: [(39, 60), (60, 39), (401, 380), (380, 401), (39, 39)])
     func deltaIsNilAcrossLowOrHigh(sgv: Int, previousSGV: Int) {
         let settings = Self.makeSettings()
-        settings.deltaDisplay = .menu
+        settings.deltaDisplay = .dropdown
         let store = ReadingStore(settings: settings)
         let now = Date.now
         store.lastReading = reading(sgv, from: now)
@@ -142,7 +142,7 @@ extension SugargliderTests {
         store.previousReading = reading(118, minutesAgo: 5, from: store.now)
         let label = MenuBarLabel(settings: settings, store: store)
         #expect(label.title == "6.7 →")   // the default shows it in the dropdown only
-        settings.deltaDisplay = .menuAndStatusBar
+        settings.deltaDisplay = .dropdownAndStatusBar
         #expect(label.title == "6.7 →  (+0.1)")
     }
 

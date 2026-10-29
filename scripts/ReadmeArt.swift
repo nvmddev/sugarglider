@@ -120,7 +120,7 @@ struct MenuBarStrip: View {
 
     private func label(sgv: Int, direction: Reading.Direction, minutesAgo: Double,
                        showDelta: Bool = false, previous: Int? = nil) -> some View {
-        let settings = makeSettings { if showDelta { $0.deltaDisplay = .menuAndStatusBar } }
+        let settings = makeSettings { if showDelta { $0.deltaDisplay = .dropdownAndStatusBar } }
         let store = ReadingStore(settings: settings)
         store.lastReading = Reading(sgv: sgv, direction: direction,
                                     date: now.addingTimeInterval(-minutesAgo * 60))
