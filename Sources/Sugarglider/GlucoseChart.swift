@@ -449,7 +449,7 @@ struct GlucoseChart: View {
         private func pill(for target: HoverTarget) -> some View {
             let time = target.date.formatted(plot.timeStyle)
             let insulin = [target.bolus?.bolusUnits.map(GlucoseChart.bolusText),
-                           ChartMath.rate(at: target.date, in: plot.steps).map(PumpFormat.rate)].compactMap(\.self)
+                           ChartMath.rate(at: target.date, in: plot.steps).map { PumpFormat.rate($0) }].compactMap(\.self)
             return HoverPill(title: target.reading.map { "\($0.text(in: plot.units)) · \(time)" } ?? time,
                              insulin: insulin.isEmpty ? nil : insulin.joined(separator: " · "),
                              note: target.note?.noteText)

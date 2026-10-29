@@ -9,7 +9,7 @@ extension SugargliderTests {
                       (7320, "2 hours ago")])
     func relativeTime(secondsAgo: Int, expected: String) {
         let now = Date.now
-        #expect(now.addingTimeInterval(-TimeInterval(secondsAgo)).relative(to: now) == expected)
+        #expect(now.addingTimeInterval(-TimeInterval(secondsAgo)).relative(to: now, locale: Self.enUS) == expected)
     }
 
     @Test(arguments: [
@@ -19,7 +19,7 @@ extension SugargliderTests {
     ] as [(Int, Int, String)])
     func ageRoundsDown(secondsAgo: Int, units: Int, expected: String) {
         let now = Date.now
-        #expect(now.addingTimeInterval(-TimeInterval(secondsAgo)).age(at: now, units: units) == expected)
+        #expect(now.addingTimeInterval(-TimeInterval(secondsAgo)).age(at: now, units: units, locale: Self.enUS) == expected)
     }
 
     @Test func isStaleAfterTheDefaultDelay() {
@@ -67,7 +67,7 @@ extension SugargliderTests {
         let now = Date.now
         store.lastReading = reading(sgv, from: now)
         store.previousReading = reading(previousSGV, minutesAgo: 5, from: now)
-        #expect(store.deltaText() == expected)
+        #expect(store.deltaText(locale: Self.enUS) == expected)
     }
 
     @Test(arguments: [
@@ -124,7 +124,7 @@ extension SugargliderTests {
         settings.units = units
         let store = ReadingStore(settings: settings)
         store.lastReading = reading(sgv, direction: direction, from: store.now)
-        #expect(MenuBarLabel(settings: settings, store: store).title == expected)
+        #expect(MenuBarLabel(settings: settings, store: store).title(locale: Self.enUS) == expected)
     }
 
     @Test func spokenTitleNamesTheTrend() {
@@ -132,7 +132,7 @@ extension SugargliderTests {
         settings.baseURL = "https://ns.example"
         let store = ReadingStore(settings: settings)
         store.lastReading = reading(120, direction: .fortyFiveUp, from: store.now)
-        #expect(MenuBarLabel(settings: settings, store: store).spokenTitle == "6.7, rising slowly")
+        #expect(MenuBarLabel(settings: settings, store: store).spokenTitle(locale: Self.enUS) == "6.7, rising slowly")
     }
 
     @Test func titleShowsTheDeltaOnlyWhenSetToTheStatusBar() {
@@ -142,9 +142,9 @@ extension SugargliderTests {
         store.lastReading = reading(120, from: store.now)
         store.previousReading = reading(118, minutesAgo: 5, from: store.now)
         let label = MenuBarLabel(settings: settings, store: store)
-        #expect(label.title == "6.7 →")   // the default shows it in the dropdown only
+        #expect(label.title(locale: Self.enUS) == "6.7 →")   // the default shows it in the dropdown only
         settings.deltaDisplay = .dropdownAndStatusBar
-        #expect(label.title == "6.7 →  (+0.1)")
+        #expect(label.title(locale: Self.enUS) == "6.7 →  (+0.1)")
     }
 
     /// A failed poll leaves the last reading up, so its age is what shows that it's old.
@@ -154,11 +154,11 @@ extension SugargliderTests {
         let store = ReadingStore(settings: settings)
         let label = MenuBarLabel(settings: settings, store: store)
         store.lastReading = reading(120, minutesAgo: 10, from: store.now)
-        #expect(label.title == "6.7 →")
+        #expect(label.title(locale: Self.enUS) == "6.7 →")
         store.lastReading = reading(120, minutesAgo: 23, from: store.now)
-        #expect(label.title == "6.7 → ⚠ 23m")
+        #expect(label.title(locale: Self.enUS) == "6.7 → ⚠ 23m")
         store.lastError = "HTTP 500"
-        #expect(label.title == "6.7 → ⚠ 23m")
+        #expect(label.title(locale: Self.enUS) == "6.7 → ⚠ 23m")
     }
 
     @Test func historyCountFollowsTheSelectedRange() {
@@ -485,7 +485,8 @@ extension SugargliderTests {
     }
 
     /// The unconfigured clock ticks slowly to save wakeups; the first reading restarts it, or the
-    /// residual long sleep would freeze the age and the stale check for up to five minutes.
+    /// residual long sleep would freeze the age and the stale check for up to five minutes. The
+    /// interval is injected, so the restart proves itself in milliseconds instead of 30 seconds.
     @Test func theFirstReadingRestartsTheClockToItsSteadyInterval() async throws {
         let server = StubbedSite(json: """
             [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 300_000)}]
@@ -493,17 +494,17 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         settings.pollIntervalSeconds = 300   // keep the poll itself out of the way
         let store = server.store(settings)
+        store.tickInterval = .milliseconds(50)
         store.start()
         try await waitUntil("the first poll") { store.lastReading != nil }
         let before = store.now
 
-        // The 30 s tick plus its 5 s tolerance: well before the 300 s sleep the clock was on.
-        // The 60 s deadline leaves the tick a wide margin even under a loaded runner.
-        let deadline = Date.now.addingTimeInterval(60)
+        // The tick plus its 5 s tolerance: well before the 300 s sleep the clock was on.
+        let deadline = Date.now.addingTimeInterval(8)
         var ticked = false
         while Date.now < deadline, !ticked {
             ticked = store.now > before
-            if !ticked { try await Task.sleep(for: .milliseconds(100)) }
+            if !ticked { try await Task.sleep(for: .milliseconds(10)) }
         }
         #expect(ticked)
     }

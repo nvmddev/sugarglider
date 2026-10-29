@@ -50,11 +50,11 @@ struct Reading: Equatable {
     func value(in units: AppSettings.Units) -> Double { units.value(fromMgdl: Double(sgv)) }
 
     /// LOW and HIGH have no value, so no unit either.
-    func text(in units: AppSettings.Units, withUnit: Bool = false) -> String {
+    func text(in units: AppSettings.Units, withUnit: Bool = false, locale: Locale = .autoupdatingCurrent) -> String {
         switch outOfRange {
         case .low: String(localized: "LOW")
         case .high: String(localized: "HIGH")
-        case nil: withUnit ? "\(units.text(fromMgdl: sgv)) \(units.label)" : units.text(fromMgdl: sgv)
+        case nil: withUnit ? "\(units.text(fromMgdl: sgv, locale: locale)) \(units.label)" : units.text(fromMgdl: sgv, locale: locale)
         }
     }
 }

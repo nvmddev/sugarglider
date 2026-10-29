@@ -5,6 +5,10 @@ import Synchronization
 
 @Suite(.defaultsCleanup) @MainActor
 struct SugargliderTests {
+    /// Pinned to this locale only where a test asserts a formatted string, so the
+    /// expectations don't depend on this machine's region.
+    static let enUS = Locale(identifier: "en_US")
+
     static func makeSettings(defaults: UserDefaults? = nil,
                              tokens: any TokenStorage = InMemoryTokenStore()) -> AppSettings {
         AppSettings(defaults: defaults ?? makeDefaults(), tokens: tokens)

@@ -25,6 +25,10 @@ final class ReadingStore {
     /// no value changes. They can't keep time themselves: a `TimelineView` hangs a `MenuBarExtra` label.
     private(set) var now = Date.now
 
+    /// The ticker intervals, injectable so tests can run the restart logic in milliseconds.
+    var tickInterval: Duration = .seconds(30)
+    var idleTickInterval: Duration = .seconds(300)
+
     /// Start of the earliest window a full fetch requested, which is what the cache covers.
     /// Only moves earlier: a request that finished late never narrows what an earlier fetch covered.
     @ObservationIgnored private(set) var historyWindowStart: Date?
@@ -97,7 +101,7 @@ final class ReadingStore {
         ticking = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                let interval: Duration = self.lastReading == nil ? .seconds(300) : .seconds(30)
+                let interval: Duration = self.lastReading == nil ? self.idleTickInterval : self.tickInterval
                 try? await Task.sleep(for: interval, tolerance: .seconds(5))
                 self.tick()
             }
@@ -360,7 +364,7 @@ final class ReadingStore {
 extension ReadingStore {
     /// Signed change since the previous reading, e.g. "+0.3"; nil when switched off, when the
     /// two readings aren't consecutive, or when either is LOW or HIGH, which have no value.
-    func deltaText() -> String? {
+    func deltaText(locale: Locale = .autoupdatingCurrent) -> String? {
         guard settings.deltaDisplay != .off,
               let current = lastReading, let previous = previousReading,
               current.outOfRange == nil, previous.outOfRange == nil else { return nil }
@@ -368,7 +372,7 @@ extension ReadingStore {
         guard gap > 0, gap < 12 * 60 else { return nil }
         let units = settings.units
         let delta = current.value(in: units) - previous.value(in: units)
-        return delta.formatted(.number.precision(.fractionLength(units == .mmol ? 1 : 0)).sign(strategy: .always()))
+        return delta.formatted(.number.locale(locale).precision(.fractionLength(units == .mmol ? 1 : 0)).sign(strategy: .always()))
     }
 
     var isStale: Bool {
@@ -380,16 +384,18 @@ extension ReadingStore {
 extension Date {
     /// "13m", "1d 4h": the time from this date to `now` in at most `units` units, rounded down so an age
     /// never overstates. `width` lets VoiceOver's text use the spoken words while the title stays compact.
-    func age(at now: Date, units: Int = 1, width: Duration.UnitsFormatStyle.UnitWidth = .narrow) -> String {
+    func age(at now: Date, units: Int = 1, width: Duration.UnitsFormatStyle.UnitWidth = .narrow,
+             locale: Locale = .autoupdatingCurrent) -> String {
         Duration.seconds(max(0, now.timeIntervalSince(self))).formatted(
             .units(allowed: [.days, .hours, .minutes], width: width,
-                   maximumUnitCount: units, fractionalPart: .hide(rounded: .down)))
+                   maximumUnitCount: units, fractionalPart: .hide(rounded: .down)).locale(locale))
     }
 
     /// "3 minutes ago", "this minute", "yesterday".
-    func relative(to now: Date) -> String {
+    func relative(to now: Date, locale: Locale = .autoupdatingCurrent) -> String {
         var style = Date.AnchoredRelativeFormatStyle(anchor: self, presentation: .named, unitsStyle: .wide)
         style.allowedFields = [.minute, .hour, .day]
+        style.locale = locale
         return style.format(now)
     }
 }

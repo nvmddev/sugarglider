@@ -534,7 +534,7 @@ extension SugargliderTests {
 
     @Test func defaultDetailRowsLabelTheRateWithTheMode() {
         let rows = PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
-                                        settings: Self.makeSettings(), now: .now)
+                                        settings: Self.makeSettings(), now: .now, locale: Self.enUS)
         #expect(rows.map(\.label) == ["Active insulin", "Auto mode", "Reservoir", "Pump battery"])
         #expect(rows.map(\.value) == ["1.35 U", "1.15 U/h", "120 U", "65%"])
         #expect(rows.allSatisfy { $0.note == nil })
@@ -544,18 +544,18 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         settings.showDeliveryRate = false
         #expect(PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
-                                     settings: settings, now: .now).contains(.init(label: "Mode", value: "Auto mode")))
+                                     settings: settings, now: .now, locale: Self.enUS).contains(.init(label: "Mode", value: "Auto mode")))
         settings.showDeliveryRate = true
         settings.showPumpMode = false
         #expect(PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
-                                     settings: settings, now: .now).contains(.init(label: "Delivery rate", value: "1.15 U/h")))
+                                     settings: settings, now: .now, locale: Self.enUS).contains(.init(label: "Delivery rate", value: "1.15 U/h")))
     }
 
     @Test func statusTextModeKeepsItsOwnRow() {
         var status = fullStatus()
         status.mode = .other("Closed Loop")
         let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
-                                        settings: Self.makeSettings(), now: .now)
+                                        settings: Self.makeSettings(), now: .now, locale: Self.enUS)
         #expect(rows.contains(.init(label: "Mode", value: "Closed Loop")))
         #expect(rows.contains(.init(label: "Delivery rate", value: "1.15 U/h")))
     }
@@ -564,7 +564,7 @@ extension SugargliderTests {
         for reservoir in [42, nil] as [Double?] {
             let status = PumpStatus(date: .now, reservoir: reservoir, reservoirMessage: "Signal Loss")
             let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
-                                            settings: Self.makeSettings(), now: .now)
+                                            settings: Self.makeSettings(), now: .now, locale: Self.enUS)
             #expect(rows == [.init(label: "Reservoir", value: "Signal Loss")])
         }
     }
@@ -572,11 +572,11 @@ extension SugargliderTests {
     @Test func detailRowsShowOnlyWhatTheSiteReports() {
         let status = PumpStatus(date: .now, reservoir: 8.4)
         let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
-                                        settings: Self.makeSettings(), now: .now)
+                                        settings: Self.makeSettings(), now: .now, locale: Self.enUS)
         #expect(rows == [.init(label: "Reservoir", value: "8.4 U")])
         #expect(PumpDetailsView.rows(status: nil, reservoirChanged: nil, batteryChanged: nil,
-                                     settings: Self.makeSettings(), now: .now).isEmpty)
-        #expect(PumpDetailsView.dailyRows(status: status, settings: Self.makeSettings()).isEmpty)
+                                     settings: Self.makeSettings(), now: .now, locale: Self.enUS).isEmpty)
+        #expect(PumpDetailsView.dailyRows(status: status, settings: Self.makeSettings(), locale: Self.enUS).isEmpty)
     }
 
     @Test func changeAgesFollowTheirSwitch() {
@@ -585,7 +585,7 @@ extension SugargliderTests {
         let changed = now.addingTimeInterval(-25 * 3600)
         func reservoirRow() -> PumpDetailsView.Row? {
             PumpDetailsView.rows(status: fullStatus(), reservoirChanged: changed, batteryChanged: nil,
-                                 settings: settings, now: now).first { $0.label == "Reservoir" }
+                                 settings: settings, now: now, locale: Self.enUS).first { $0.label == "Reservoir" }
         }
         #expect(reservoirRow()?.note == nil)
         settings.showChangeAge = true
@@ -599,12 +599,12 @@ extension SugargliderTests {
         settings.showDailyInsulin = true
         settings.showAverageGlucose = true
         settings.units = .mmol
-        #expect(PumpDetailsView.dailyRows(status: fullStatus(), settings: settings) == [
+        #expect(PumpDetailsView.dailyRows(status: fullStatus(), settings: settings, locale: Self.enUS) == [
             .init(label: "Total insulin", today: "21.5 U", yesterday: "47.3 U"),
             .init(label: "Average glucose", today: "6.9", yesterday: "8.1"),
         ])
         settings.units = .mgdl
-        #expect(PumpDetailsView.dailyRows(status: fullStatus(), settings: settings).last
+        #expect(PumpDetailsView.dailyRows(status: fullStatus(), settings: settings, locale: Self.enUS).last
                 == .init(label: "Average glucose", today: "124", yesterday: "146"))
     }
 
@@ -612,19 +612,19 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         let now = Date.now
         #expect(PumpDetailsView.staleNote(status: PumpStatus(date: now.addingTimeInterval(-5 * 60)),
-                                          settings: settings, now: now) == nil)
+                                          settings: settings, now: now, locale: Self.enUS) == nil)
         #expect(PumpDetailsView.staleNote(status: PumpStatus(date: now.addingTimeInterval(-40 * 60)),
-                                          settings: settings, now: now) == "Pump data from 40 minutes ago")
+                                          settings: settings, now: now, locale: Self.enUS) == "Pump data from 40 minutes ago")
     }
 
     @Test func pumpFormatsUseFixedDecimals() {
-        #expect(PumpFormat.insulin(0) == "0.00 U")
-        #expect(PumpFormat.rate(2.4) == "2.40 U/h")
-        #expect(PumpFormat.reservoir(150) == "150 U")
-        #expect(PumpFormat.battery(65) == "65%")
-        #expect(PumpFormat.dailyInsulin(47.3) == "47.3 U")
-        #expect(PumpFormat.bolus(1) == "1.0 U")
-        #expect(PumpFormat.bolus(0.05) == "0.05 U")
+        #expect(PumpFormat.insulin(0, locale: Self.enUS) == "0.00 U")
+        #expect(PumpFormat.rate(2.4, locale: Self.enUS) == "2.40 U/h")
+        #expect(PumpFormat.reservoir(150, locale: Self.enUS) == "150 U")
+        #expect(PumpFormat.battery(65, locale: Self.enUS) == "65%")
+        #expect(PumpFormat.dailyInsulin(47.3, locale: Self.enUS) == "47.3 U")
+        #expect(PumpFormat.bolus(1, locale: Self.enUS) == "1.0 U")
+        #expect(PumpFormat.bolus(0.05, locale: Self.enUS) == "0.05 U")
     }
 
     /// The fallback id is the dedupe key: two id-less uploads at different times must stay two

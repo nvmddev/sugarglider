@@ -236,19 +236,30 @@ enum NightscoutTime {
 
 enum PumpFormat {
     // The unit is part of the localized string, not appended: a catalog can reorder or rename it.
-    static func insulin(_ units: Double) -> String { String(localized: "\(units.formatted(digits(2))) U") }
-    static func dailyInsulin(_ units: Double) -> String { String(localized: "\(units.formatted(digits(1))) U") }
-    static func rate(_ unitsPerHour: Double) -> String { String(localized: "\(unitsPerHour.formatted(digits(2))) U/h") }
-    static func battery(_ percent: Double) -> String { (percent / 100).formatted(.percent.precision(.fractionLength(0))) }
-
-    /// Two decimals only for the finer doses some loops give ("0.05 U").
-    static func bolus(_ units: Double) -> String {
-        let tenths = units * 10
-        return String(localized: "\(units.formatted(digits(abs(tenths - tenths.rounded()) < 0.001 ? 1 : 2))) U")
+    static func insulin(_ units: Double, locale: Locale = .autoupdatingCurrent) -> String {
+        String(localized: "\(units.formatted(digits(2).locale(locale))) U")
     }
 
-    static func reservoir(_ units: Double) -> String {
-        String(localized: "\(units.formatted(digits(units >= 10 ? 0 : 1))) U")
+    static func dailyInsulin(_ units: Double, locale: Locale = .autoupdatingCurrent) -> String {
+        String(localized: "\(units.formatted(digits(1).locale(locale))) U")
+    }
+
+    static func rate(_ unitsPerHour: Double, locale: Locale = .autoupdatingCurrent) -> String {
+        String(localized: "\(unitsPerHour.formatted(digits(2).locale(locale))) U/h")
+    }
+
+    static func battery(_ percent: Double, locale: Locale = .autoupdatingCurrent) -> String {
+        (percent / 100).formatted(.percent.locale(locale).precision(.fractionLength(0)))
+    }
+
+    /// Two decimals only for the finer doses some loops give ("0.05 U").
+    static func bolus(_ units: Double, locale: Locale = .autoupdatingCurrent) -> String {
+        let tenths = units * 10
+        return String(localized: "\(units.formatted(digits(abs(tenths - tenths.rounded()) < 0.001 ? 1 : 2).locale(locale))) U")
+    }
+
+    static func reservoir(_ units: Double, locale: Locale = .autoupdatingCurrent) -> String {
+        String(localized: "\(units.formatted(digits(units >= 10 ? 0 : 1).locale(locale))) U")
     }
 
     private static func digits(_ count: Int) -> FloatingPointFormatStyle<Double> {

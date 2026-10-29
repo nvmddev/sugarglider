@@ -49,8 +49,10 @@ final class AppSettings {
 
         func value(fromMgdl mgdl: Double) -> Double { self == .mmol ? mgdl / Self.mgdlPerMmol : mgdl }
         func mgdl(from value: Double) -> Double { self == .mmol ? value * Self.mgdlPerMmol : value }
-        func text(fromMgdl sgv: Int) -> String {
-            self == .mmol ? value(fromMgdl: Double(sgv)).formatted(.number.precision(.fractionLength(1))) : sgv.formatted()
+        func text(fromMgdl sgv: Int, locale: Locale = .autoupdatingCurrent) -> String {
+            self == .mmol
+                ? value(fromMgdl: Double(sgv)).formatted(.number.locale(locale).precision(.fractionLength(1)))
+                : sgv.formatted(.number.locale(locale))
         }
     }
 
