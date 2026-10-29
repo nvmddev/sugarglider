@@ -56,9 +56,7 @@ struct MenuBarContentView: View {
     private var actionButtons: some View {
         HStack(spacing: 8) {
             actionButton("Refresh", systemImage: "arrow.clockwise", shortcut: "r") {
-                Task { await store.refresh() }
-                Task { await store.refreshHistory(force: true) }
-                Task { await store.refreshDetails(force: true) }
+                Task { await store.refreshAll(force: true) }
             }
             actionButton("Settings…", systemImage: "gearshape", shortcut: ",") { showSettings() }
             Spacer()

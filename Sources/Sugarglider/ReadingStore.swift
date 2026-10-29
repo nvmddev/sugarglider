@@ -64,20 +64,34 @@ final class ReadingStore {
     }
 
     /// Polls, keeps the clock and follows the settings the fetches depend on, for the app's lifetime.
+    /// Weak captures: the loops never end on their own, so a strong one would keep the store alive forever.
     func start() {
-        Task {
-            for await seconds in Observations({ self.settings.pollIntervalSeconds }) { poll(every: seconds) }
+        Task { [weak self] in
+            for await seconds in Observations({ self?.settings.pollIntervalSeconds }) {
+                guard let self, let seconds else { return }
+                poll(every: seconds)
+            }
         }
-        Task {
-            for await _ in Observations({ (self.settings.baseURL, self.settings.token) }).dropFirst() { reconnect() }
+        Task { [weak self] in
+            for await _ in Observations({ (self?.settings.baseURL ?? "", self?.settings.token ?? "") })
+                .dropFirst() {
+                guard let self else { return }
+                reconnect()
+            }
         }
-        Task {
-            for await _ in Observations({ self.settings.rangeHours }).dropFirst() { ensureHistoryCoverage() }
+        Task { [weak self] in
+            for await _ in Observations({ self?.settings.rangeHours }).dropFirst() {
+                guard let self else { return }
+                ensureHistoryCoverage()
+            }
         }
-        Task {
+        Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30), tolerance: .seconds(5))
-                tick()
+                guard let self else { return }
+                // Nothing reads `now` before the first reading: a slower tick then saves wakeups.
+                let interval: Duration = self.lastReading == nil ? .seconds(300) : .seconds(30)
+                try? await Task.sleep(for: interval, tolerance: .seconds(5))
+                self.tick()
             }
         }
     }
@@ -88,10 +102,14 @@ final class ReadingStore {
 
     private func poll(every seconds: Int) {
         polling?.cancel()
-        polling = Task {
+        polling = Task { [weak self] in
             while !Task.isCancelled {
-                await refresh()
-                try? await Task.sleep(for: .seconds(seconds), tolerance: .seconds(seconds) / 2)
+                guard let self else { return }
+                await self.refresh()
+                // In Low Power Mode the native flag is the knob: Apple's guidance asks apps to
+                // cut background work there, and polling at most once a minute costs nothing.
+                let effective = ProcessInfo.processInfo.isLowPowerModeEnabled ? max(seconds, 60) : seconds
+                try? await Task.sleep(for: .seconds(effective), tolerance: .seconds(effective) / 2)
             }
         }
     }
@@ -101,7 +119,7 @@ final class ReadingStore {
         guard settings.isConfigured else { return }
         let (site, generation) = (site, generation)
         do {
-            let latest = try await site.entries(count: 2)
+            let latest = Self.keepingPlausible(try await site.entries(count: 2))
             guard generation == self.generation else { return }
             showNewest(of: latest)
             if Self.joinsUp(latest, with: readings) { merge(latest) }
@@ -109,6 +127,16 @@ final class ReadingStore {
             guard generation == self.generation, !Task.isCancelled else { return }
             lastError = error.localizedDescription
         }
+    }
+
+    /// How far ahead of this Mac's clock an entry may be dated and still count as plausible.
+    static let futureTolerance: TimeInterval = 5 * 60
+
+    /// Drops entries dated ahead of `now` beyond `futureTolerance`: a site whose uploader's clock
+    /// runs ahead would otherwise pin the menu bar and the chart's window to a future date
+    /// forever. Dropped, never clamped: a clamped date would be invented data.
+    static func keepingPlausible(_ readings: [Reading], now: Date = .now) -> [Reading] {
+        readings.filter { $0.date <= now.addingTimeInterval(futureTolerance) }
     }
 
     /// Whether polled entries add to the history without a dropout. Entries beyond one stay
@@ -130,7 +158,7 @@ final class ReadingStore {
         guard let fetched = await fetch({ try await $0.entries(count: count, since: since) }) else { return }
         fetchedAt[.history] = .now
         if !covered { historyWindowStart = start }
-        merge(fetched)
+        merge(Self.keepingPlausible(fetched))
     }
 
     /// A cap, not a selector: the date filter picks the window, this only bounds a site that
@@ -150,17 +178,28 @@ final class ReadingStore {
     /// gap shows in the chart.
     func ensureHistoryCoverage() {
         guard settings.isConfigured else { return }
-        let start = windowStart
-        let needsHistory = !Self.covers(historyWindowStart, from: start)
-        let needsTreatments = settings.needsTreatments && fetchedAt[.treatments] != nil
-            && !Self.covers(treatmentsWindowStart, from: start)
-        guard needsHistory || needsTreatments else { return }
         widening?.cancel()
-        widening = Task {
+        widening = Task { [weak self] in
             do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
-            if needsHistory { await refreshHistory(force: true) }
-            if needsTreatments { await refreshTreatments(force: true) }
+            guard let self else { return }
+            // Re-checked after the sleep: a drag out and back within the debounce already has
+            // coverage again, and a force fetch of a covered window would only waste requests.
+            let start = self.windowStart
+            let needsHistory = !Self.covers(self.historyWindowStart, from: start)
+            let needsTreatments = self.settings.needsTreatments && self.fetchedAt[.treatments] != nil
+                && !Self.covers(self.treatmentsWindowStart, from: start)
+            guard needsHistory || needsTreatments else { return }
+            if needsHistory { await self.refreshHistory(force: true) }
+            if needsTreatments { await self.refreshTreatments(force: true) }
         }
+    }
+
+    /// The Refresh button's one call: a single task so the parts don't overlap each other or a
+    /// poll's request for the same part.
+    func refreshAll(force: Bool) async {
+        await refresh()
+        await refreshHistory(force: force)
+        await refreshDetails(force: force)
     }
 
     /// Fetches each part only while a switch shows it. The throttle is per part, so one just
@@ -244,10 +283,11 @@ final class ReadingStore {
         fetchedAt = [:]
         widening?.cancel()
         reconnecting?.cancel()
-        reconnecting = Task {
+        reconnecting = Task { [weak self] in
             do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
-            await refresh()
-            await refreshHistory(force: true)
+            guard let self else { return }
+            await self.refresh()
+            await self.refreshHistory(force: true)
         }
     }
 
@@ -275,16 +315,26 @@ final class ReadingStore {
 
     private func merge(_ fetched: [Reading]) {
         guard !fetched.isEmpty else { return }
-        readings = Self.merged(readings, with: fetched)
-        showNewest(of: readings)
+        let merged = Self.merged(readings, with: fetched)
+        guard merged != readings else { return }
+        readings = merged
+        showNewest(of: merged)
     }
 
     private func showNewest(of sorted: [Reading]) {
-        guard let newest = sorted.last else { return }
-        lastReading = newest
-        if sorted.count >= 2 { previousReading = sorted[sorted.count - 2] }
+        // The response arrived, so a failed one before it no longer describes the site. String?
+        // is Equatable, so an unchanged nil notifies nobody.
         lastError = nil
-        tick()
+        guard let newest = sorted.last else { return }
+        if lastReading != newest {
+            lastReading = newest
+            // Kept with the change: the 30 s tick already moves the clock, and a poll that
+            // changes nothing has nothing new to age.
+            tick()
+        }
+        if sorted.count >= 2, previousReading != sorted[sorted.count - 2] {
+            previousReading = sorted[sorted.count - 2]
+        }
     }
 
     private var windowStart: Date {

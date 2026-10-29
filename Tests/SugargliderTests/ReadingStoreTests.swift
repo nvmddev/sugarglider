@@ -384,4 +384,101 @@ extension SugargliderTests {
         settings.baseURL = "   "
         try await waitUntil("the reconnect") { store.lastReading == nil && store.readings.isEmpty }
     }
+
+    // MARK: - T2: future-dated entries
+
+    @Test func entriesDatedAheadAreDroppedFromThePoll() {
+        let now = Date.now
+        let fresh = reading(120, from: now)
+        let skew = reading(130, minutesAgo: -120, from: now)   // two hours ahead of the Mac's clock
+        #expect(ReadingStore.keepingPlausible([fresh, skew], now: now) == [fresh])
+        // Inside the tolerance the entry still counts: a few minutes of skew are ordinary.
+        #expect(ReadingStore.keepingPlausible([reading(120, minutesAgo: -4, from: now)], now: now).count == 1)
+    }
+
+    /// A site whose uploader posts an entry dated ahead used to pin the menu bar to it forever:
+    /// every poll returned it as the newest, and its negative age could never go stale.
+    @Test func pollWithOnlyFutureDatedEntriesKeepsThePreviousReading() async throws {
+        let server = StubbedSite(json: """
+            [{"sgv":130,"direction":"Flat","date":\(epochMillis(.now.addingTimeInterval(2 * 3600)))}]
+            """)
+        let store = server.store(Self.makeSettings())
+        store.lastReading = reading(110, minutesAgo: 30)
+        store.previousReading = reading(105, minutesAgo: 35)
+
+        await store.refresh()
+        #expect(store.lastReading?.sgv == 110)
+        #expect(store.previousReading?.sgv == 105)
+        #expect(store.lastError == nil)
+        #expect(store.readings.isEmpty)
+        #expect(store.isStale)   // the kept reading ages into the stale warning
+    }
+
+    @Test func historyDropsFutureDatedEntries() async throws {
+        let server = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 600_000)},
+             {"sgv":130,"direction":"Flat","date":\(epochMillis(.now.addingTimeInterval(2 * 3600)))}]
+            """)
+        let store = server.store(Self.makeSettings())
+
+        await store.refreshHistory(force: true)
+        #expect(store.readings.map(\.sgv) == [120])
+        #expect(store.lastReading?.sgv == 120)
+        #expect(store.previousReading == nil)
+    }
+
+    // MARK: - T2: notifications without a value change
+
+    /// Observation skips equal assignments only for Equatable members; `Reading` is Equatable now,
+    /// so a poll that changes nothing must not notify the menu bar label or an open dropdown.
+    @Test func anUnchangedPollWritesNothingObservable() async throws {
+        let nowMs = epochMillis(.now)
+        let server = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(nowMs)},
+             {"sgv":110,"direction":"Flat","date":\(nowMs - 300_000)}]
+            """)
+        let store = server.store(Self.makeSettings())
+        await store.refresh()
+        #expect(store.lastReading?.sgv == 120)
+        #expect(store.previousReading?.sgv == 110)
+        #expect(store.readings.isEmpty)   // a poll only merges into an existing, contiguous history
+
+        let notified = Atomic(false)
+        withObservationTracking { _ = (store.lastReading, store.previousReading, store.readings, store.now) }
+            onChange: { notified.store(true, ordering: .relaxed) }
+        await store.refresh()
+        for _ in 0..<1000 where !notified.load(ordering: .relaxed) { await Task.yield() }
+        let didNotify = notified.load(ordering: .relaxed)
+        #expect(!didNotify)
+    }
+
+    // MARK: - T2: debounce and refresh paths
+
+    /// A drag out and back within the debounce covered the range again: the scheduled task must
+    /// re-check and fetch nothing, or every quick drag wasted a force fetch.
+    @Test func wideningCanceledByRestoringTheRangeFetchesNothing() async throws {
+        let server = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 300_000)}]
+            """)
+        let settings = Self.makeSettings()
+        let store = server.store(settings)
+        await store.refreshHistory(force: true)
+        let requestsBefore = server.requests.count
+
+        settings.rangeHours = 24
+        store.ensureHistoryCoverage()
+        settings.rangeHours = 6
+        store.ensureHistoryCoverage()
+        try await Task.sleep(for: .milliseconds(600))   // past the 400 ms debounce
+        #expect(server.requests.count == requestsBefore)
+    }
+
+    /// The Refresh button's one call: everything, once, in one task.
+    @Test func refreshAllFetchesThePollTheHistoryAndTheDetails() async throws {
+        let server = StubbedSite(json: "[]")
+        let store = server.store(Self.makeSettings())
+
+        await store.refreshAll(force: true)
+        #expect(server.requests.count == 4)   // the poll's two entries, history, device status, treatments
+    }
 }

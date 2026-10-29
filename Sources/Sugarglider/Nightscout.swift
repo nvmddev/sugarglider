@@ -1,7 +1,7 @@
 import Foundation
 
 /// `sgv` is always mg/dL, Nightscout's native unit.
-struct Reading {
+struct Reading: Equatable {
     let sgv: Int
     /// Nil when the uploader has none ("NONE", "NOT COMPUTABLE", "RATE OUT OF RANGE").
     let direction: Direction?
