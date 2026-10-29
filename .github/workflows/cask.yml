@@ -114,8 +114,11 @@ jobs:
           git remote set-url origin \
             "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git"
           # -u origin HEAD: a tap created without a commit clones to an unborn
-          # branch with no upstream.
+          # branch with no upstream. The release is already published by the
+          # time this runs, so a failed push warns instead of failing the run:
+          # the manual retry below is the visible follow-up either way.
           if ! git push -u origin HEAD; then
-            echo "::error::Push to ${TAP_REPO} failed. HOMEBREW_TAP_TOKEN needs contents:write on that repository."
-            exit 1
+            echo "::warning::Push to ${TAP_REPO} failed. HOMEBREW_TAP_TOKEN needs contents:write on that repository."
+            echo "Push to ${TAP_REPO} failed. Re-run this job after fixing the token:" >> "$GITHUB_STEP_SUMMARY"
+            echo "gh workflow run cask.yml -f version=${VERSION}" >> "$GITHUB_STEP_SUMMARY"
           fi

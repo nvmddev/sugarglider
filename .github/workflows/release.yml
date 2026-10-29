@@ -35,6 +35,7 @@ jobs:
     permissions:
       contents: write # tag, release assets, changelog branch
       pull-requests: write # the changelog PR
+      id-token: write # sign the build provenance attestation
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -228,6 +229,15 @@ jobs:
           path: dist/
           retention-days: 14
           if-no-files-found: error
+
+      # Ties the release downloads to this workflow run and the tagged commit:
+      # `gh attestation verify` then proves the byte files came from here, which
+      # neither the signature nor the notarization alone can say.
+      - name: Attest the release artifacts
+        if: ${{ !inputs.dry_run }}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: "dist/Sugarglider-${{ steps.version.outputs.version }}.zip,dist/Sugarglider-${{ steps.version.outputs.version }}.dmg"
 
       - name: Create tag
         if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run }}
