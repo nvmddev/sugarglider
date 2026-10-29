@@ -46,7 +46,10 @@ struct KeychainTokenStore: TokenStorage {
     func save(_ token: String) -> Bool {
         guard !token.isEmpty else {
             // Both, or load() would resurrect the stray copy of a token the user just deleted.
-            return Self.remove(dataProtection: true) && Self.remove(dataProtection: false)
+            // Both are attempted, so one refusal doesn't leave the other copy behind.
+            let primary = Self.remove(dataProtection: true)
+            let other = Self.remove(dataProtection: false)
+            return primary && other
         }
         guard Self.write(token, dataProtection: Self.usesDataProtection) else { return false }
         // The copy in the other Keychain is stale now, like load() removes it after its write.

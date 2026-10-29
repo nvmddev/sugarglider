@@ -106,11 +106,14 @@ struct GeneralTab: View {
     }
 
     /// http is allowed, since a self-hosted Nightscout may only speak it; the token would travel
-    /// in the clear, so the row warns. A host without a scheme counts as http.
-    private var isInsecureURL: Bool {
-        let trimmed = settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let components = URLComponents(string: trimmed), components.host != nil else { return false }
-        return (components.scheme?.lowercased() ?? "http") != "https"
+    /// in the clear, so the row warns. A URL without a scheme counts as http: ATS only speaks
+    /// plain http to it.
+    private var isInsecureURL: Bool { Self.usesInsecureScheme(settings.baseURL) }
+
+    static func usesInsecureScheme(_ url: String) -> Bool {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return URLComponents(string: trimmed)?.scheme?.lowercased() != "https"
     }
 
     private func intervalField(_ prefix: LocalizedStringKey, value: Binding<Int>,
