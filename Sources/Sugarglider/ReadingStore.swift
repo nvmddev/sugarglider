@@ -54,7 +54,7 @@ final class ReadingStore {
     private static let reservoirChangeEvent = "Insulin Change"
     private static let batteryChangeEvent = "Pump Battery Change"
 
-    init(settings: AppSettings, session: URLSession = Nightscout.sharedSession) {
+    init(settings: AppSettings, session: URLSession = Nightscout.pollingSession) {
         self.settings = settings
         self.session = session
     }

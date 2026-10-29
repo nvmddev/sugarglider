@@ -83,13 +83,26 @@ struct Nightscout {
     var token: String
     var session = Nightscout.sharedSession
 
-    /// The 15 s timeout keeps a stalled request from holding up the next poll.
-    static let sharedSession: URLSession = {
+    /// 15 s of idle time between bytes, and 60 s for the whole request: a server that answers
+    /// and then trickles its body could otherwise hold the serial poll loop indefinitely.
+    /// The cache is off, since a polled answer is always stale, and the poll URL is stable.
+    private static func makeSession(waitsForConnectivity: Bool) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 60
+        configuration.urlCache = nil
+        configuration.waitsForConnectivity = waitsForConnectivity
         configuration.httpAdditionalHeaders = ["Accept": "application/json"]
         return URLSession(configuration: configuration)
-    }()
+    }
+
+    /// For the Settings probe, which must fail fast on a dead host, not wait for connectivity.
+    static let sharedSession = makeSession(waitsForConnectivity: false)
+
+    /// For the store: the first poll after a wake runs before the network is up. It waits for
+    /// connectivity within the resource timeout instead of failing and showing an error until
+    /// the next interval.
+    static let pollingSession = makeSession(waitsForConnectivity: true)
 
     private static let decoder = JSONDecoder()
 
