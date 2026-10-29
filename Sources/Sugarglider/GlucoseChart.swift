@@ -8,6 +8,8 @@ struct GlucoseChart: View {
     let settings: AppSettings
     let windowEnd: Date
     var treatments: [Treatment] = []
+    /// The name VoiceOver speaks for the chart; the Colors preview says it shows sample data.
+    var accessibilityTitle: LocalizedStringKey = "Glucose"
 
     static let laneHeight: CGFloat = 22
 
@@ -252,7 +254,7 @@ struct GlucoseChart: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
-        .accessibilityLabel("Glucose")
+        .accessibilityLabel(accessibilityTitle)
     }
 
     /// A point of an area, which is drawn as one `AreaPlot` rather than a mark per point.

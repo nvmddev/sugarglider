@@ -14,6 +14,7 @@ struct MenuBarContentView: View {
         Double(AppSettings.rangeHoursLimits.lowerBound)...Double(AppSettings.rangeHoursLimits.upperBound)
 
     var body: some View {
+        let hours = Duration.seconds(Double(settings.rangeHours) * 3600)
         VStack(alignment: .leading, spacing: Self.spacing) {
             GlucoseChart(readings: store.readings, rangeHours: settings.rangeHours, settings: settings,
                         windowEnd: store.now, treatments: store.treatments)
@@ -23,8 +24,8 @@ struct MenuBarContentView: View {
                 Slider(value: $settings.rangeHours.sliderValue, in: Self.rangeSliderBounds) { Text("Chart range") }
                     .labelsHidden()
                     .tint(settings.sliderColor)
-                    .accessibilityValue("\(settings.rangeHours) hours")
-                Text("\(settings.rangeHours) h")
+                    .accessibilityValue(Text(verbatim: hours.formatted(.units(allowed: [.hours], width: .wide))))
+                Text(hours.formatted(.units(allowed: [.hours], width: .narrow)))
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .frame(width: 30, alignment: .trailing)

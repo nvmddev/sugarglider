@@ -103,13 +103,15 @@ struct PumpDetailsView: View {
         let ages = settings.showChangeAge
         if settings.showReservoir, let value = status.reservoirMessage ?? status.reservoir.map(PumpFormat.reservoir) {
             let age = ages ? reservoirChanged?.age(at: now, units: 2) : nil
+            let spokenAge = ages ? reservoirChanged?.age(at: now, units: 2, width: .wide) : nil
             rows.append(Row(label: String(localized: "Reservoir"), value: value, note: age,
-                            help: age.map { String(localized: "Reservoir changed \($0) ago") }))
+                            help: spokenAge.map { String(localized: "Reservoir changed \($0) ago") }))
         }
         if settings.showPumpBattery, let percent = status.batteryPercent {
             let age = ages ? batteryChanged?.age(at: now, units: 2) : nil
+            let spokenAge = ages ? batteryChanged?.age(at: now, units: 2, width: .wide) : nil
             rows.append(Row(label: String(localized: "Pump battery"), value: PumpFormat.battery(percent), note: age,
-                            help: age.map { String(localized: "Battery changed \($0) ago") }))
+                            help: spokenAge.map { String(localized: "Battery changed \($0) ago") }))
         }
         return rows
     }

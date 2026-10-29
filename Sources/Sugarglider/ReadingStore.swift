@@ -369,10 +369,10 @@ extension ReadingStore {
 
 extension Date {
     /// "13m", "1d 4h": the time from this date to `now` in at most `units` units, rounded down so an age
-    /// never overstates.
-    func age(at now: Date, units: Int = 1) -> String {
+    /// never overstates. `width` lets VoiceOver's text use the spoken words while the title stays compact.
+    func age(at now: Date, units: Int = 1, width: Duration.UnitsFormatStyle.UnitWidth = .narrow) -> String {
         Duration.seconds(max(0, now.timeIntervalSince(self))).formatted(
-            .units(allowed: [.days, .hours, .minutes], width: .narrow,
+            .units(allowed: [.days, .hours, .minutes], width: width,
                    maximumUnitCount: units, fractionalPart: .hide(rounded: .down)))
     }
 

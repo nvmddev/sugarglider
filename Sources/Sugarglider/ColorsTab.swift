@@ -21,9 +21,11 @@ struct ColorsTab: View {
             GroupBox {
                 VStack(spacing: 8) {
                     let treatments = sampleTreatments
+                    let hours = Duration.seconds(Double(previewHours) * 3600)
                     // Grows by the lane like the dropdown's chart, so the lane doesn't squeeze the plot.
                     GlucoseChart(readings: sampleReadings, rangeHours: previewHours,
-                                settings: settings, windowEnd: sampleEnd, treatments: treatments)
+                                settings: settings, windowEnd: sampleEnd, treatments: treatments,
+                                accessibilityTitle: "Glucose, sample data")
                         .frame(height: 95 + GlucoseChart.laneSpace(for: treatments, settings: settings))
                     HStack(spacing: 8) {
                         Slider(value: $previewHours.sliderValue, in: Self.previewHoursBounds) {
@@ -31,8 +33,8 @@ struct ColorsTab: View {
                         }
                         .labelsHidden()
                         .tint(settings.sliderColor)
-                        .accessibilityValue("\(previewHours) hours, preview only")
-                        Text("\(previewHours) h")
+                        .accessibilityValue(Text("\(hours.formatted(.units(allowed: [.hours], width: .wide))) · \(String(localized: "preview only"))"))
+                        Text(hours.formatted(.units(allowed: [.hours], width: .narrow)))
                             .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                             .frame(width: 30, alignment: .trailing)
@@ -119,8 +121,8 @@ struct ColorsTab: View {
             Section("Latest reading dot") {
                 sizeRow("Size", value: $settings.dotRadius, range: AppSettings.dotRadiusLimits)
                 sizeRow("Halo", value: $settings.dotHaloRadius, range: AppSettings.dotHaloRadiusLimits)
-                choiceRow("Color", selection: $settings.dotUsesZoneColor, color: $settings.dotColor,
-                          customEnabled: !settings.dotUsesZoneColor) {
+                choiceRow("Color", wellLabel: "Dot color", selection: $settings.dotUsesZoneColor,
+                          color: $settings.dotColor, customEnabled: !settings.dotUsesZoneColor) {
                     Text("Zone color").tag(true)
                     Text("Custom").tag(false)
                 }
@@ -207,10 +209,11 @@ struct ColorsTab: View {
     private static let swatchSpacing: CGFloat = 34
 
     // A mode menu plus the well it unlocks.
-    private func choiceRow<Value: Hashable>(_ label: LocalizedStringKey, selection: Binding<Value>, color: Binding<Color>,
+    private func choiceRow<Value: Hashable>(_ label: LocalizedStringKey, wellLabel: LocalizedStringKey? = nil,
+                                            selection: Binding<Value>, color: Binding<Color>,
                                             customEnabled: Bool,
                                             @ViewBuilder options: () -> some View) -> some View {
-        wellRow(label, color: color, enabled: customEnabled) {
+        wellRow(label, wellLabel: wellLabel, color: color, enabled: customEnabled) {
             Picker(label, selection: selection, content: options)
                 .labelsHidden()
                 .fixedSize()
@@ -218,12 +221,13 @@ struct ColorsTab: View {
     }
 
     // A control and the well it unlocks, flush with the trailing edge like the swatch rows' last well.
-    private func wellRow(_ label: LocalizedStringKey, color: Binding<Color>, enabled: Bool,
+    private func wellRow(_ label: LocalizedStringKey, wellLabel: LocalizedStringKey? = nil,
+                         color: Binding<Color>, enabled: Bool,
                          @ViewBuilder control: () -> some View) -> some View {
         LabeledContent(label) {
             HStack(spacing: 8) {
                 control()
-                ColorPicker("\(Text(label)) color", selection: color)
+                ColorPicker(wellLabel ?? "\(Text(label)) color", selection: color)
                     .labelsHidden()
                     .disabled(!enabled)
             }

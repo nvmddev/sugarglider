@@ -551,7 +551,8 @@ extension SugargliderTests {
         #expect(reservoirRow()?.note == nil)
         settings.showChangeAge = true
         #expect(reservoirRow()?.note == "1d 1h")
-        #expect(reservoirRow()?.help == "Reservoir changed 1d 1h ago")
+        // The note stays narrow for the row; the help is spoken, so it uses the wide units.
+        #expect(reservoirRow()?.help == "Reservoir changed 1 day, 1 hour ago")
     }
 
     @Test func dailyRowsUseTheDisplayUnit() {
