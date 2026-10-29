@@ -17,8 +17,15 @@ final class AppSettings {
     /// as the user.
     var token: String = "" {
         didSet {
-            guard !isLoading, oldValue != token else { return }
+            // The flag also retries: after a refused save, re-entering the same token used to
+            // skip the save and leave the token memory-only.
+            guard !isLoading, oldValue != token || tokenStorageFailed else { return }
             tokenStorageFailed = !tokens.save(token)
+            if !tokenStorageFailed {
+                // The plist copy goes once the Keychain accepted a value: a cleared token must
+                // not come back from a plist a refused first migration left behind.
+                defaults.removeObject(forKey: "token")
+            }
         }
     }
 

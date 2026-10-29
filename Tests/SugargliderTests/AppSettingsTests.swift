@@ -712,4 +712,42 @@ extension SugargliderTests {
         s.token = "monitor-def"
         #expect(!s.tokenStorageFailed)
     }
+
+    /// A refused first migration keeps the plist copy. Clearing the token then used to save an
+    /// empty store without touching the plist, so the next launch re-migrated the deleted token.
+    @Test func clearedTokenStaysGoneWhenTheMigrationWasRefused() {
+        let defaults = Self.makeDefaults()
+        defaults.set("monitor-legacy", forKey: "token")
+        let tokens = InMemoryTokenStore()
+        tokens.refuseWrites = true
+        let s = Self.makeSettings(defaults: defaults, tokens: tokens)
+        #expect(s.token == "monitor-legacy")
+        #expect(s.tokenStorageFailed)
+        #expect(defaults.string(forKey: "token") == "monitor-legacy")   // the only copy stays
+
+        tokens.refuseWrites = false
+        s.token = ""   // the user clears the token
+        #expect(!s.tokenStorageFailed)
+        #expect(defaults.string(forKey: "token") == nil)   // nothing to resurrect
+
+        let relaunch = Self.makeSettings(defaults: defaults, tokens: InMemoryTokenStore())
+        #expect(relaunch.token == "")
+        #expect(!relaunch.tokenStorageFailed)
+    }
+
+    /// After a refused save the flag used to clear only for a different value; re-entering the
+    /// same token skipped the save and left the token memory-only.
+    @Test func reenteringTheSameTokenRetriesAfterARefusedSave() {
+        let tokens = InMemoryTokenStore()
+        let s = Self.makeSettings(tokens: tokens)
+        tokens.refuseWrites = true
+        s.token = "monitor-abc"
+        #expect(s.tokenStorageFailed)
+        #expect(tokens.stored.isEmpty)
+
+        tokens.refuseWrites = false
+        s.token = "monitor-abc"   // the same value: the flag lets the save through
+        #expect(!s.tokenStorageFailed)
+        #expect(tokens.stored == "monitor-abc")
+    }
 }

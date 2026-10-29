@@ -79,4 +79,18 @@ extension SugargliderTests {
         #expect(AppInfo.licenseURL.absoluteString
                 == "https://github.com/nvmddev/sugarglider/blob/main/LICENSE")
     }
+
+    @Test(arguments: [
+        ("https://ns.example", false),
+        ("https://ns.example/api", false),
+        ("http://tower.local", true),
+        ("http://192.168.0.5", true),
+        ("tower", true),               // no scheme: ATS speaks plain http to it
+        ("nightscout.local", true),
+        ("", false),
+        ("   ", false),
+    ])
+    func insecureSchemeDetection(url: String, insecure: Bool) {
+        #expect(GeneralTab.usesInsecureScheme(url) == insecure)
+    }
 }
