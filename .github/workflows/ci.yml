@@ -19,10 +19,12 @@ jobs:
     # The oldest supported toolchain. Image and Xcode are pinned so a runner
     # update can't turn a green branch red overnight; bump them deliberately.
     runs-on: macos-26
+    # A hung job would otherwise hold a runner for GitHub's 360-minute default.
+    timeout-minutes: 30
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Show toolchain
         run: |
@@ -55,7 +57,7 @@ jobs:
           ditto -c -k --keepParent Sugarglider.app dist/Sugarglider.zip
 
       - name: Upload build
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Sugarglider-${{ github.sha }}
           path: dist/Sugarglider.zip
@@ -68,12 +70,13 @@ jobs:
   test-newest:
     name: Build & test (newest Xcode)
     runs-on: xcode-27
+    timeout-minutes: 30
     env:
       # The image's default Xcode lags the newest release. Bump together with
       # the runner label.
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Show toolchain
         run: |
@@ -89,8 +92,9 @@ jobs:
   lint:
     name: Lint shell scripts & workflows
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Preinstalled on the runner image, unlike actionlint.
       - name: shellcheck
@@ -114,8 +118,9 @@ jobs:
   release-scripts:
     name: Smoke-test release scripts
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 

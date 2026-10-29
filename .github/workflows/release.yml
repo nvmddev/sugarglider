@@ -28,6 +28,8 @@ jobs:
   release:
     name: Build & publish
     runs-on: macos-26
+    # Two sequential notarizations of up to 30 min each; 90 min leaves room.
+    timeout-minutes: 90
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     permissions:
@@ -36,7 +38,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # version + changelog need the full tag/commit history
 
@@ -220,7 +222,7 @@ jobs:
           cat "${RUNNER_TEMP}/notes.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Sugarglider-${{ steps.version.outputs.version }}
           path: dist/
@@ -326,4 +328,7 @@ jobs:
     uses: ./.github/workflows/cask.yml
     with:
       version: ${{ needs.release.outputs.version }}
-    secrets: inherit
+    # Named, not inherit: the cask job uses exactly one secret, and inherit
+    # would hand it the whole signing and notarization set.
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

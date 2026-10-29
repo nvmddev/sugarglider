@@ -10,6 +10,10 @@ on:
         description: "Version to publish, without the leading v"
         required: true
         type: string
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        description: "Fine-grained PAT with contents:write on the tap repo. Unset = skip."
+        required: false
   workflow_dispatch:
     inputs:
       version:
@@ -29,8 +33,9 @@ jobs:
   cask:
     name: Push cask to tap
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Resolve version and checksum
         id: resolve
@@ -47,6 +52,13 @@ jobs:
             version="${version#v}"
             echo "No version given. Using the latest release: ${version}"
           fi
+
+          # The value flows into sed replacements and shell paths below: a
+          # malformed one must fail here, not corrupt the published cask.
+          [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::invalid version '${version}': expected MAJOR.MINOR.PATCH"
+            exit 1
+          }
 
           # Read from the release itself, so the cask describes what is published.
           gh release download "v${version}" --repo "${GITHUB_REPOSITORY}" \
