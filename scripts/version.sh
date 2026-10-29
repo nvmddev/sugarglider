@@ -34,8 +34,9 @@ latest_tag() {
 # commit yet, hence the fallback to the newest other tag.
 previous_tag() {
     local exclude="$1" tag prev
-    if prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${exclude}^" 2>/dev/null)" \
-        && [[ "${prev}" != *-* ]]; then
+    # Prereleases are excluded here, not matched and rejected: the fallback below
+    # takes the newest plain tag anywhere, which a side-branch tag would win.
+    if prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' "${exclude}^" 2>/dev/null)"; then
         printf '%s' "${prev}"
         return 0
     fi
@@ -55,9 +56,11 @@ detect_bump() {
         record="${record#$'\n'}"
         subject="${record%%$'\x1f'*}"
         body="${record#*$'\x1f'}"
-        # The same shape changelog.sh parses: types are not case-sensitive, the ! sits
-        # right before the colon, and a description must follow.
-        if [[ "${subject}" =~ ^([a-zA-Z]+)(\([^\)]*\))?(!)?:[[:space:]]*(.+)$ ]]; then
+        # The exact shape changelog.sh parses: types are not case-sensitive, the ! sits
+        # right before the colon, and a description must follow. The nested scope group
+        # matters: bash drops unmatched trailing groups from BASH_REMATCH, and without
+        # it the bang slot would hold the description for a scope-less subject.
+        if [[ "${subject}" =~ ^([a-zA-Z]+)(\(([^\)]+)\))?(!)?:[[:space:]]*(.+)$ ]]; then
             type="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
             bang="${BASH_REMATCH[4]}"
         else

@@ -116,7 +116,7 @@ while IFS= read -r -d $'\x1e' record; do
 
     printf '%s\n' "${entry}" >> "${WORK}/${section}"
     count=$((count + 1))
-done < <(git log --no-merges --format='%H%x1f%s%x1f%b%x1e' "${RANGE}")
+done < "${WORK}/records"
 
 render() {
     local section
@@ -165,13 +165,18 @@ HEADER
         # and its diff guard relies on a second run changing nothing. The section line renders
         # with or without a link, depending on whether an origin remote is known.
         if [[ -n "${first_release}" ]] \
-            && sed -n "${first_release}p" CHANGELOG.md | grep -qE "^## (\[)?${VERSION}(\])? "; then
+            && sed -n "${first_release}p" CHANGELOG.md | grep -qE "^## \[${VERSION}\]|^## ${VERSION} "; then
             echo "CHANGELOG.md already has ${VERSION}."
             exit 0
         fi
         if [[ -n "${first_release}" ]]; then
             printf '\n' >> "${NEW}"
             tail -n "+${first_release}" CHANGELOG.md >> "${NEW}"
+        else
+            # No section header: not a generated changelog. Keep its content rather
+            # than replacing it with just the new release.
+            printf '\n' >> "${NEW}"
+            cat CHANGELOG.md >> "${NEW}"
         fi
     fi
 

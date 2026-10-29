@@ -58,6 +58,9 @@ git init -q -b main "${WORK}/repo"
 cd "${WORK}/repo"
 git config user.email "smoke@example.com"
 git config user.name "smoke"
+# An origin makes changelog.sh render linked headers and commit links, the shape
+# CI also produces through GITHUB_SERVER_URL and GITHUB_REPOSITORY.
+git remote add origin "git@github.com:example/t8test.git"
 mkdir -p Sources Resources Sugarglider.xcodeproj
 touch Sources/App.swift
 mkdir -p scripts
@@ -65,11 +68,10 @@ cp "${HERE}/scripts/version.sh" "${HERE}/scripts/changelog.sh" scripts/
 
 commit() { # subject [body line ...]
     local subject="$1"; shift
-    if [[ $# -gt 0 ]]; then
-        git commit -q --allow-empty -m "${subject}" -m "$@"
-    else
-        git commit -q --allow-empty -m "${subject}"
-    fi
+    local -a args=(-m "${subject}")
+    local body
+    for body in "$@"; do args+=(-m "${body}"); done
+    git commit -q --allow-empty "${args[@]}"
 }
 
 commit "feat: first feature"
@@ -77,6 +79,7 @@ commit "fix: a fix"
 git tag v0.1.0
 commit "docs: note that this is not a BREAKING CHANGE"
 commit "feat(pump): pump data"
+git tag v0.2.0-rc.1   # a prerelease between two releases: previous must skip it
 commit "Feat: case insensitive feature"
 commit "feat!stuff"
 commit "feat:"
@@ -98,6 +101,11 @@ commit "docs: mention an upcoming BREAKING CHANGE"
 commit "Feat: another case insensitive feature"
 commit "feat:"
 commit "feat!stuff again"
+
+# No breaking record in the range: the capitalized feat is a minor bump, and the
+# prose, the description-less subject and the colon-less bang change nothing.
+expect "1.1.0" "$(scripts/version.sh next auto)" "next auto without a breaking record"
+
 commit "fix!: break it again"
 commit "fix: more" "BREAKING CHANGE: api gone"
 commit "chore: more" "BREAKING-CHANGE: api gone"
@@ -110,7 +118,7 @@ notes="$(scripts/changelog.sh notes 1.1.0 v1.0.0 "$(git rev-parse HEAD~3)")"
 expect_not "Breaking changes" "${notes}" "prose mention is not breaking"
 grep -q "another case insensitive feature" <<<"${notes}" || {
     echo "::error::smoke: capitalized feat not under Features"; exit 1; }
-grep -q "^- feat:$" <<<"${notes}" || {
+grep -q "^- feat: " <<<"${notes}" || {
     echo "::error::smoke: description-less feat not under Other changes"; exit 1; }
 echo "ok: capitalized feat -> Features, description-less feat -> Other changes"
 

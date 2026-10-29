@@ -36,11 +36,13 @@ else
         # xcodebuild only finds installed profiles, in the folder that opening
         # one in Finder puts it in.
         UUID="$(security cms -D -i "${PROFILE}" | plutil -extract UUID raw -o - -)"
-        # A profile without keychain-access-groups yields an app that signs cleanly and
-        # is then killed at launch by AMFI, so check before using it.
+        # A profile without keychain-access-groups, or with groups for another app,
+        # yields an app that signs cleanly and is then killed at launch by AMFI, so
+        # check before using it.
         security cms -D -i "${PROFILE}" \
-            | plutil -extract Entitlements.keychain-access-groups xml1 -o - - > /dev/null || {
-            echo "error: ${PROFILE} grants no keychain-access-groups" >&2
+            | plutil -extract Entitlements.keychain-access-groups xml1 -o - - \
+            | grep -qE '<string>[^<]*(dev\.nevermind\.sugarglider|\.\*)</string>' || {
+            echo "error: ${PROFILE} grants no keychain-access-groups for this app" >&2
             exit 1
         }
         PROFILES="${HOME}/Library/Developer/Xcode/UserData/Provisioning Profiles"

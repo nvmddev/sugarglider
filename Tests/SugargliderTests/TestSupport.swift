@@ -112,6 +112,9 @@ private final class SiteProtocol: URLProtocol {
 
     static let sites = Mutex<[String: Site]>([:])
 
+    /// Set by stopLoading: a request cancelled during the delay window must get no callbacks.
+    private let cancelled = Mutex(false)
+
     static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SiteProtocol.self]
@@ -131,12 +134,14 @@ private final class SiteProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
             return
         }
-        let answer = { [client] in
+        let answer = { [site, url] in
+            guard !self.cancelled.withLock({ $0 }) else { return }
+            guard let client = self.client else { return }
             let response = HTTPURLResponse(url: url, statusCode: site.status, httpVersion: "HTTP/1.1",
                                            headerFields: ["Content-Type": "application/json"])!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: site.body)
-            client?.urlProtocolDidFinishLoading(self)
+            client.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client.urlProtocol(self, didLoad: site.body)
+            client.urlProtocolDidFinishLoading(self)
         }
         if site.delay > 0 {
             DispatchQueue.global().asyncAfter(deadline: .now() + site.delay, execute: answer)
@@ -145,7 +150,9 @@ private final class SiteProtocol: URLProtocol {
         }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        cancelled.withLock { $0 = true }
+    }
 }
 
 /// `ReadingStore` fetches in `Task`s nothing can await, so tests poll for the effect.

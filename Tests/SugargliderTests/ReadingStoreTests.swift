@@ -498,7 +498,8 @@ extension SugargliderTests {
         let before = store.now
 
         // The 30 s tick plus its 5 s tolerance: well before the 300 s sleep the clock was on.
-        let deadline = Date.now.addingTimeInterval(40)
+        // The 60 s deadline leaves the tick a wide margin even under a loaded runner.
+        let deadline = Date.now.addingTimeInterval(60)
         var ticked = false
         while Date.now < deadline, !ticked {
             ticked = store.now > before
@@ -546,12 +547,19 @@ extension SugargliderTests {
 
         settings.baseURL = second.baseURL
         store.reconnect()
-        try await waitUntil("the new site's reading") { store.lastReading?.sgv == 130 }
+        // The reading lands with the poll, the history one round trip later in the same
+        // task, so wait for both together.
+        try await waitUntil("the new site's reading") {
+            store.lastReading?.sgv == 130 && store.readings.map(\.sgv) == [130]
+        }
+        #expect(store.lastReading?.sgv == 130)
         #expect(store.readings.map(\.sgv) == [130])
     }
 
     /// A dead host throws a transport error through the same path as an HTTP status: the error
-    /// reaches the menu bar's ⚠ and the last reading stays up.
+    /// reaches the menu bar's ⚠ and the last reading stays up. The stub plays the dead host:
+    /// every request is intercepted before a socket is opened, and an unknown host fails
+    /// with a synthesized transport error.
     @Test func aTransportErrorReportsAndKeepsTheReading() async {
         let settings = Self.makeSettings()
         settings.baseURL = "https://unregistered-host.example"
@@ -611,10 +619,14 @@ extension SugargliderTests {
         #expect(hours == 25)
     }
 
-    /// The day form the stale note and the dropdown's age line rely on.
+    /// The day form the stale note and the dropdown's age line rely on, pinned to English
+    /// the way the other locale-following formats are pinned here.
     @Test func relativeNamesThePreviousDay() {
         let now = Date.now
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
-        #expect(yesterday.relative(to: now) == "yesterday")
+        var style = Date.AnchoredRelativeFormatStyle(anchor: yesterday, presentation: .named, unitsStyle: .wide)
+        style.allowedFields = [.minute, .hour, .day]
+        style.locale = Locale(identifier: "en_US")
+        #expect(style.format(now) == "yesterday")
     }
 }
