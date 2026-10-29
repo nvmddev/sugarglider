@@ -47,8 +47,10 @@ immediate exit 137 when the binary is started directly. Three one-time steps:
 
 Apple grants the profile `keychain-access-groups` as the team wildcard
 `TEAMID.*`, which covers the concrete group in
-`Resources/Sugarglider.entitlements`. Worth checking before building, because a profile that lacks it
-yields an app that signs cleanly and then refuses to launch:
+`Resources/Sugarglider.entitlements`. `build.sh` checks that before it signs: a
+profile without the entitlement is refused with an error, since it would
+otherwise sign cleanly and be killed at launch. To inspect a downloaded profile
+yourself:
 
 ```sh
 security cms -D -i Resources/embedded.provisionprofile | plutil -p -

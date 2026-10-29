@@ -72,9 +72,12 @@ token in the Keychain; it just has to ask for access once after each update.
 
 All of these are set on this repository, so releases come out signed and
 notarized and the release notes carry no Gatekeeper workaround. Without them
-the workflow degrades instead of failing: no certificate means an ad-hoc build,
-no `APPLE_ID` means signed but not notarized, and the job warns either way. When
-it does notarize, `scripts/verify-notarization.sh` checks the stapled tickets on
+the workflow mostly degrades instead of failing: no certificate means an ad-hoc
+build, no `APPLE_ID` means signed but not notarized, and the job warns either
+way. One combination fails on purpose: an `APPLE_ID` without
+`APPLE_TEAM_ID` or `APPLE_APP_PASSWORD` can't notarize, so the workflow stops at
+that step rather than publishing something it can't verify. When it does
+notarize, `scripts/verify-notarization.sh` checks the stapled tickets on
 the app, on the copy inside the zip and on the DMG, plus Gatekeeper's verdict,
 and fails the release before anything is published if one is missing.
 
