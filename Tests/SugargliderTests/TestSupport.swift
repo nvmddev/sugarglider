@@ -13,6 +13,18 @@ struct SugargliderTests {
     static func makeDefaults() -> UserDefaults {
         UserDefaults(suiteName: DefaultsCleanup.directory.appending(path: UUID().uuidString).path)!
     }
+
+    /// The largest per-channel difference and how many bytes differ between two raw renders.
+    /// Rasterization is reproducible only to ±1 per channel, so equality asserts must allow that.
+    static func channelDifference(_ a: Data, _ b: Data) -> (max: Int, differing: Int) {
+        guard a.count == b.count else { return (Int.max, Int.max) }
+        var max = 0, differing = 0
+        for (x, y) in zip(a, b) where x != y {
+            max = Swift.max(max, abs(Int(x) - Int(y)))
+            differing += 1
+        }
+        return (max, differing)
+    }
 }
 
 /// A suite named by a path keeps its plist at that path, so the tests' suites live in a temporary directory
@@ -65,6 +77,13 @@ final class StubbedSite: Sendable {
     /// Path and query of every request, as sent.
     var requests: [String] { SiteProtocol.sites.withLock { $0[host]?.requests ?? [] } }
 
+    /// Delays every answer, so a slow response to a replaced site can be tested.
+    /// Set it before the request starts.
+    var delay: TimeInterval {
+        get { SiteProtocol.sites.withLock { $0[host]?.delay ?? 0 } }
+        set { SiteProtocol.sites.withLock { $0[host]?.delay = newValue } }
+    }
+
     init(status: Int = 200, json: String) {
         baseURL = "https://\(host)"
         SiteProtocol.sites.withLock { $0[host] = .init(status: status, body: Data(json.utf8)) }
@@ -87,6 +106,7 @@ private final class SiteProtocol: URLProtocol {
     struct Site {
         var status: Int
         var body: Data
+        var delay: TimeInterval = 0
         var requests: [String] = []
     }
 
@@ -111,11 +131,18 @@ private final class SiteProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
             return
         }
-        let response = HTTPURLResponse(url: url, statusCode: site.status, httpVersion: "HTTP/1.1",
-                                       headerFields: ["Content-Type": "application/json"])!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: site.body)
-        client?.urlProtocolDidFinishLoading(self)
+        let answer = { [client] in
+            let response = HTTPURLResponse(url: url, statusCode: site.status, httpVersion: "HTTP/1.1",
+                                           headerFields: ["Content-Type": "application/json"])!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: site.body)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+        if site.delay > 0 {
+            DispatchQueue.global().asyncAfter(deadline: .now() + site.delay, execute: answer)
+        } else {
+            answer()
+        }
     }
 
     override func stopLoading() {}
@@ -124,11 +151,18 @@ private final class SiteProtocol: URLProtocol {
 /// `ReadingStore` fetches in `Task`s nothing can await, so tests poll for the effect.
 @MainActor
 func waitUntil(_ what: String, _ condition: () -> Bool) async throws {
-    for _ in 0..<200 {
+    for _ in 0..<400 {
         if condition() { return }
         try await Task.sleep(for: .milliseconds(10))
     }
-    Issue.record("timed out waiting for \(what)")
+    throw WaitTimedOut(what: what)
+}
+
+/// The wait ended without the state: throw, so the test fails once at the wait
+/// instead of running on against a state that never arrived.
+struct WaitTimedOut: LocalizedError {
+    var what: String
+    var errorDescription: String? { "Timed out waiting for \(what)" }
 }
 
 /// Rounded the way `Nightscout.entries` rounds its date filter.

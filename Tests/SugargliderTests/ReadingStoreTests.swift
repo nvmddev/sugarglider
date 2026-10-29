@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftUI
 import Synchronization
 @testable import Sugarglider
 
@@ -447,7 +448,8 @@ extension SugargliderTests {
         withObservationTracking { _ = (store.lastReading, store.previousReading, store.readings, store.now) }
             onChange: { notified.store(true, ordering: .relaxed) }
         await store.refresh()
-        for _ in 0..<1000 where !notified.load(ordering: .relaxed) { await Task.yield() }
+        // The access-tracking callback fires during the mutation, so by now a buggy
+        // notification would already be recorded; nothing runs later that could set it.
         let didNotify = notified.load(ordering: .relaxed)
         #expect(!didNotify)
     }
@@ -503,5 +505,116 @@ extension SugargliderTests {
             if !ticked { try await Task.sleep(for: .milliseconds(100)) }
         }
         #expect(ticked)
+    }
+
+    // MARK: - T6: races and seams
+
+    /// The generation guard is the whole protection against a slow answer from a replaced site
+    /// repopulating the store. Without it, the old site's glucose would show with the new
+    /// site's settings.
+    @Test func aSlowAnswerFromAReplacedSiteIsDropped() async throws {
+        let nowMs = epochMillis(.now)
+        let old = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(nowMs)}]
+            """)
+        old.delay = 0.2
+        let settings = Self.makeSettings()
+        let store = old.store(settings)
+        let refresh = Task { await store.refresh() }
+        try await waitUntil("the slow request started") { !old.requests.isEmpty }
+        settings.baseURL = ""   // keeps the debounced re-fetch off the network
+        store.reconnect()
+        await refresh.value
+        #expect(store.lastReading == nil)
+        #expect(store.readings.isEmpty)
+    }
+
+    /// Changing the URL must show the new site's data after the 500 ms debounce: the generation
+    /// bump lets the new answers through and the cleared throttle makes history fetchable.
+    @Test func reconnectFetchesFromTheNewSite() async throws {
+        let nowMs = epochMillis(.now)
+        let first = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(nowMs)}]
+            """)
+        let second = StubbedSite(json: """
+            [{"sgv":130,"direction":"Flat","date":\(nowMs)}]
+            """)
+        let settings = Self.makeSettings()
+        let store = first.store(settings)
+        await store.refresh()
+        #expect(store.lastReading?.sgv == 120)
+
+        settings.baseURL = second.baseURL
+        store.reconnect()
+        try await waitUntil("the new site's reading") { store.lastReading?.sgv == 130 }
+        #expect(store.readings.map(\.sgv) == [130])
+    }
+
+    /// A dead host throws a transport error through the same path as an HTTP status: the error
+    /// reaches the menu bar's ⚠ and the last reading stays up.
+    @Test func aTransportErrorReportsAndKeepsTheReading() async {
+        let settings = Self.makeSettings()
+        settings.baseURL = "https://unregistered-host.example"
+        let store = ReadingStore(settings: settings, session: StubbedSite.session)
+        store.lastReading = reading(110, minutesAgo: 5)
+
+        await store.refresh()
+        #expect(store.lastError == URLError(.cannotFindHost).localizedDescription)
+        #expect(store.lastReading?.sgv == 110)
+    }
+
+    /// A user who opened the dropdown at 6 h and drags to 72 h depends on this branch to
+    /// back-fill treatments for the whole widened window.
+    @Test func wideningTheRangeFetchesTheMissingTreatments() async throws {
+        let server = StubbedSite(json: """
+            [{"_id":"t1","eventType":"Temp Basal","created_at":"2030-01-01T08:00:00.000Z",
+              "duration":30,"rate":1,"absolute":1}]
+            """)
+        let settings = Self.makeSettings()
+        let store = server.store(settings)
+
+        await store.refreshTreatments(force: true)
+        #expect(store.treatments.count == 1)
+
+        settings.rangeHours = 24
+        store.ensureHistoryCoverage()
+        try await waitUntil("the widened treatments") {
+            ReadingStore.covers(store.treatmentsWindowStart, from: .now.addingTimeInterval(-24 * 3600))
+        }
+    }
+
+    /// The Pump tab asks the site even with every switch off; a nil answer (no pump on the site)
+    /// must clear a stale status, not leave the previous site's rows up.
+    @Test func aSiteWithoutPumpDataClearsAStaleStatus() async {
+        let server = StubbedSite(json: """
+            [{"created_at":"2030-01-01T11:55:00.000Z","uploader":{"battery":80}}]
+            """)
+        let settings = Self.makeSettings()
+        let store = server.store(settings)
+        store.pumpStatus = PumpStatus(date: .now, reservoir: 120)
+        #expect(store.reportedPumpExtras.isEmpty)
+
+        await store.refreshPumpStatus(force: true, evenIfSwitchedOff: true)
+        #expect(store.pumpStatus == nil)
+        #expect(store.reportedPumpExtras.isEmpty)
+    }
+
+    /// Both range sliders round through this binding; a switch to a stepped slider would draw
+    /// tick marks and change macOS' rendering.
+    @Test func sliderValueRoundsHalfUpAndSnapsToAnInt() {
+        var hours = 6
+        let slider = Binding<Int>(get: { hours }, set: { hours = $0 }).sliderValue
+        #expect(slider.wrappedValue == 6)
+        slider.wrappedValue = 24.4
+        #expect(hours == 24)
+        slider.wrappedValue = 24.6
+        #expect(hours == 25)
+    }
+
+    /// The day form the stale note and the dropdown's age line rely on.
+    @Test func relativeNamesThePreviousDay() {
+        let now = Date.now
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+        #expect(yesterday.relative(to: now) == "yesterday")
     }
 }

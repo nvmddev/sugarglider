@@ -626,6 +626,19 @@ extension SugargliderTests {
         #expect(PumpFormat.bolus(1) == "1.0 U")
         #expect(PumpFormat.bolus(0.05) == "0.05 U")
     }
+
+    /// The fallback id is the dedupe key: two id-less uploads at different times must stay two
+    /// chart marks.
+    @Test func recordsWithoutAnIdGetDistinctFallbackIds() throws {
+        let first = try #require(Treatment(record: [
+            "eventType": "Correction Bolus", "created_at": "2030-01-01T08:00:00.000Z", "insulin": 2.0,
+        ]))
+        #expect(first.id == "Correction Bolus@\(first.date.timeIntervalSince1970)")
+        let second = try #require(Treatment(record: [
+            "eventType": "Correction Bolus", "created_at": "2030-01-01T09:00:00.000Z", "insulin": 2.0,
+        ]))
+        #expect(first.id != second.id)
+    }
 }
 
 // MARK: - Settings

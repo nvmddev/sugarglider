@@ -124,4 +124,21 @@ extension SugargliderTests {
     @Test func probeReportsAnInvalidURL() async {
         #expect(await Nightscout(baseURL: "http://exa mple.com", token: "").probe() == .failed("Invalid URL"))
     }
+
+    @Test func probeReportsAnUnconfiguredURL() async {
+        #expect(await Nightscout(baseURL: "   ", token: "").probe() == .failed("Not configured"))
+    }
+
+    /// The store's wake-from-sleep behavior and the stale-cache fix live in these numbers; a
+    /// "simplification" that reuses the probe session for polling would bring both bugs back.
+    @Test func sessionsCarryTheLoadBearingConfigurations() {
+        let polling = Nightscout.pollingSession.configuration
+        let probe = Nightscout.sharedSession.configuration
+        #expect(polling.waitsForConnectivity)
+        #expect(!probe.waitsForConnectivity)
+        #expect(polling.timeoutIntervalForRequest == 15)
+        #expect(polling.timeoutIntervalForResource == 60)
+        #expect(polling.urlCache == nil)
+        #expect(probe.urlCache == nil)
+    }
 }
