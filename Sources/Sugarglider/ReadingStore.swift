@@ -37,6 +37,7 @@ final class ReadingStore {
     @ObservationIgnored private var polling: Task<Void, Never>?
     @ObservationIgnored private var reconnecting: Task<Void, Never>?
     @ObservationIgnored private var widening: Task<Void, Never>?
+    @ObservationIgnored private var ticking: Task<Void, Never>?
 
     private let settings: AppSettings
     private let session: URLSession
@@ -66,6 +67,7 @@ final class ReadingStore {
     /// Polls, keeps the clock and follows the settings the fetches depend on, for the app's lifetime.
     /// Weak captures: the loops never end on their own, so a strong one would keep the store alive forever.
     func start() {
+        restartTicker()
         Task { [weak self] in
             for await seconds in Observations({ self?.settings.pollIntervalSeconds }) {
                 guard let self, let seconds else { return }
@@ -85,10 +87,15 @@ final class ReadingStore {
                 ensureHistoryCoverage()
             }
         }
-        Task { [weak self] in
+    }
+
+    /// The clock that ages the reading and drives the stale check. Slow while nothing reads it,
+    /// and restarted when the first reading lands, or its residual long sleep would freeze `now`.
+    private func restartTicker() {
+        ticking?.cancel()
+        ticking = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                // Nothing reads `now` before the first reading: a slower tick then saves wakeups.
                 let interval: Duration = self.lastReading == nil ? .seconds(300) : .seconds(30)
                 try? await Task.sleep(for: interval, tolerance: .seconds(5))
                 self.tick()
@@ -327,10 +334,14 @@ final class ReadingStore {
         lastError = nil
         guard let newest = sorted.last else { return }
         if lastReading != newest {
+            let wasWithoutAReading = lastReading == nil
             lastReading = newest
             // Kept with the change: the 30 s tick already moves the clock, and a poll that
             // changes nothing has nothing new to age.
             tick()
+            // The clock was on its slow unconfigured sleep; restart it, or the residual long
+            // sleep would freeze the age and the stale check.
+            if wasWithoutAReading { restartTicker() }
         }
         if sorted.count >= 2, previousReading != sorted[sorted.count - 2] {
             previousReading = sorted[sorted.count - 2]

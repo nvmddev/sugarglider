@@ -481,4 +481,27 @@ extension SugargliderTests {
         await store.refreshAll(force: true)
         #expect(server.requests.count == 4)   // the poll's two entries, history, device status, treatments
     }
+
+    /// The unconfigured clock ticks slowly to save wakeups; the first reading restarts it, or the
+    /// residual long sleep would freeze the age and the stale check for up to five minutes.
+    @Test func theFirstReadingRestartsTheClockToItsSteadyInterval() async throws {
+        let server = StubbedSite(json: """
+            [{"sgv":120,"direction":"Flat","date":\(epochMillis(.now) - 300_000)}]
+            """)
+        let settings = Self.makeSettings()
+        settings.pollIntervalSeconds = 300   // keep the poll itself out of the way
+        let store = server.store(settings)
+        store.start()
+        try await waitUntil("the first poll") { store.lastReading != nil }
+        let before = store.now
+
+        // The 30 s tick plus its 5 s tolerance: well before the 300 s sleep the clock was on.
+        let deadline = Date.now.addingTimeInterval(40)
+        var ticked = false
+        while Date.now < deadline, !ticked {
+            ticked = store.now > before
+            if !ticked { try await Task.sleep(for: .milliseconds(100)) }
+        }
+        #expect(ticked)
+    }
 }
