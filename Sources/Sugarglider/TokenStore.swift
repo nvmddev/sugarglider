@@ -97,7 +97,9 @@ struct KeychainTokenStore: TokenStorage {
         return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
     }
 
-    /// True when the item is gone; a failed delete must report the token as memory-only.
+    /// True when the item is gone; a failed delete must report the token as memory-only. The
+    /// cleanup calls after a write ignore the result on purpose.
+    @discardableResult
     private static func remove(dataProtection: Bool) -> Bool {
         let status = SecItemDelete(baseQuery(dataProtection: dataProtection) as CFDictionary)
         return status == errSecSuccess || status == errSecItemNotFound
