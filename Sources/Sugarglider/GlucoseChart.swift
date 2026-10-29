@@ -154,6 +154,14 @@ struct GlucoseChart: View {
                             .foregroundStyle(settings.announcementColor)
                     }
                     .offset(y: 3)
+                    // Hidden from VoiceOver: its plotted y is the axis' top, which would put a
+                    // nonexistent 22.5 into the group summary, and its time label would lose to a
+                    // reading of the same minute. The clear rule below carries the note instead.
+                    .accessibilityHidden(true)
+                // A y-less rule never joins the time groups, so the note is spoken as its own
+                // element. Undocumented behavior, so re-check after Xcode updates.
+                RuleMark(x: .value("Time", note.date))
+                    .foregroundStyle(.clear)
                     .accessibilityLabel(Text(note.date, format: p.timeStyle))
                     .accessibilityValue(note.noteText ?? "")
             }
@@ -173,9 +181,21 @@ struct GlucoseChart: View {
                         .opacity(0.9)
                         .accessibilityLabel(Text(reading.date, format: p.timeStyle))
                         .accessibilityValue(reading.text(in: p.units, withUnit: true))
-                        // A run starts on the reading the previous one ended on, which that one already lists.
-                        .accessibilityHidden(index > 0 && runs[index - 1].readings.last?.date == reading.date)
+                        // A run starts on the reading the previous one ended on, which that one
+                        // already lists; a LOW or HIGH mark sits at the clamp, which would put a
+                        // false value into the group summary. Its rule below carries the reading.
+                        .accessibilityHidden((index > 0 && runs[index - 1].readings.last?.date == reading.date)
+                                             || reading.outOfRange != nil)
                 }
+            }
+
+            // LOW and HIGH as their own elements: a mark at the clamped y would make the group
+            // summary say "2.3 the entire time" for a reading the chart labels LOW.
+            ForEach(p.visible.filter { $0.outOfRange != nil }, id: \.date) { reading in
+                RuleMark(x: .value("Time", reading.date))
+                    .foregroundStyle(.clear)
+                    .accessibilityLabel(Text(reading.date, format: p.timeStyle))
+                    .accessibilityValue(reading.text(in: p.units, withUnit: true))
             }
 
             ForEach(segments.filter { $0.count == 1 }.flatMap(\.self), id: \.date) { reading in
@@ -184,6 +204,8 @@ struct GlucoseChart: View {
                     .foregroundStyle(ChartMath.color(for: reading.sgv, zones: p.zones))
                     .accessibilityLabel(Text(reading.date, format: p.timeStyle))
                     .accessibilityValue(reading.text(in: p.units, withUnit: true))
+                    // The out-of-range rule above carries a lone LOW or HIGH reading.
+                    .accessibilityHidden(reading.outOfRange != nil)
             }
         }
         .chartXScale(domain: p.start...p.end)
@@ -293,11 +315,13 @@ struct GlucoseChart: View {
 
             ForEach(p.boluses, id: \.id) { bolus in
                 let units = bolus.bolusUnits ?? 0
-                BarMark(x: .value("Time", bolus.date), yStart: .value("Base", 0.0),
-                        yEnd: .value("Units", max(min(units / largestBolus, 1), 0.15) * topRate),
-                        width: .fixed(2.5))
+                // A round-capped rule instead of a bar: the bar's plotted units scale made the
+                // group summaries read "1, 2 series", while the rule is spoken as its own
+                // element like the note. The same y bounds, so only the caps' pixels differ.
+                RuleMark(x: .value("Time", bolus.date), yStart: .value("Base", 0.0),
+                         yEnd: .value("Units", max(min(units / largestBolus, 1), 0.15) * topRate))
                     .foregroundStyle(settings.bolusColor)
-                    .clipShape(Capsule())
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
                     .accessibilityLabel(Text(bolus.date, format: p.timeStyle))
                     .accessibilityValue(Self.bolusText(units))
             }
