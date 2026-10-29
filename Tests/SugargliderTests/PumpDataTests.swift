@@ -154,6 +154,45 @@ extension SugargliderTests {
         #expect(PumpStatus.merged([]) == nil)
     }
 
+    /// A record dated ahead of the Mac's clock used to become the merge's anchor and push every
+    /// real record out of mergeSpan, so the panel showed the skewed record alone. A site whose
+    /// clock alone is skewed still shows what it sends, like Nightscout does.
+    @Test func aFutureDatedStatusDoesNotHideTheCurrentOne() throws {
+        let now = Date.now
+        let current = PumpStatus(date: now.addingTimeInterval(-60), reservoir: 120)
+        let skewed = PumpStatus(date: now.addingTimeInterval(2 * 3600), insulinOnBoard: 1)
+        let merged = try #require(PumpStatus.merged([current, skewed], now: now))
+        #expect(merged.date == current.date)
+        #expect(merged.reservoir == 120)
+        #expect(merged.insulinOnBoard == nil)
+
+        let alone = try #require(PumpStatus.merged([skewed], now: now))
+        #expect(alone.date == skewed.date)
+        #expect(alone.insulinOnBoard == 1)
+    }
+
+    /// A JSON boolean in a numeric slot must not parse as 1 or 0; the number helper's CF guard
+    /// still keeps a genuine zero.
+    @Test func jsonBooleansAreNotPumpNumbers() throws {
+        let booleans = try #require(PumpStatus(record: record("""
+            {"created_at":"2030-01-01T12:00:00Z","pump":{"iob":{"iob":true},"reservoir":false}}
+            """)))
+        #expect(booleans.insulinOnBoard == nil)
+        #expect(booleans.reservoir == nil)
+
+        let zero = try #require(PumpStatus(record: record(
+            #"{"created_at":"2030-01-01T12:00:00Z","pump":{"iob":{"iob":0}}}"#)))
+        #expect(zero.insulinOnBoard == 0)
+    }
+
+    /// Some uploaders send only `date` (epoch ms) and rely on the server to add `created_at`.
+    @Test func pumpStatusTakesTheEpochMsDateKey() throws {
+        let status = try #require(PumpStatus(record: record(
+            #"{"date":1893499200000,"pump":{"reservoir":120}}"#)))
+        #expect(status.date == Date(timeIntervalSince1970: 1_893_499_200))
+        #expect(status.reservoir == 120)
+    }
+
     @Test func extrasAreTheValuesOnlySomeUploadersSend() throws {
         #expect(try #require(PumpStatus(record: record(camapsRecord))).extras == Set(PumpStatus.Extra.allCases))
         let standard = try #require(PumpStatus(record: record("""

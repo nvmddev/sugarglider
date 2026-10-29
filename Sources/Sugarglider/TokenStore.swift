@@ -46,11 +46,12 @@ struct KeychainTokenStore: TokenStorage {
     func save(_ token: String) -> Bool {
         guard !token.isEmpty else {
             // Both, or load() would resurrect the stray copy of a token the user just deleted.
-            Self.remove(dataProtection: true)
-            Self.remove(dataProtection: false)
-            return true
+            return Self.remove(dataProtection: true) && Self.remove(dataProtection: false)
         }
-        return Self.write(token, dataProtection: Self.usesDataProtection)
+        guard Self.write(token, dataProtection: Self.usesDataProtection) else { return false }
+        // The copy in the other Keychain is stale now, like load() removes it after its write.
+        Self.remove(dataProtection: !Self.usesDataProtection)
+        return true
     }
 
     private static func baseQuery(dataProtection: Bool) -> [CFString: Any] {
@@ -93,7 +94,9 @@ struct KeychainTokenStore: TokenStorage {
         return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
     }
 
-    private static func remove(dataProtection: Bool) {
-        SecItemDelete(baseQuery(dataProtection: dataProtection) as CFDictionary)
+    /// True when the item is gone; a failed delete must report the token as memory-only.
+    private static func remove(dataProtection: Bool) -> Bool {
+        let status = SecItemDelete(baseQuery(dataProtection: dataProtection) as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 }

@@ -67,17 +67,24 @@ struct PumpStatus: Equatable {
 
     /// Each field from the newest record within `mergeSpan` that has it; nil when no record has data.
     /// The reservoir message only from the newest: a cleared one must not linger.
-    static func merged(_ records: [PumpStatus]) -> PumpStatus? {
+    static func merged(_ records: [PumpStatus], now: Date = .now) -> PumpStatus? {
         let newestFirst = records.filter(\.hasData).sorted { $0.date > $1.date }
         guard let newest = newestFirst.first else { return nil }
-        let recent = newestFirst.filter { newest.date.timeIntervalSince($0.date) <= mergeSpan }
+        // A record dated ahead of this Mac's clock would anchor the window and push every real
+        // record out of `mergeSpan`. The newest plausible record anchors instead; a site whose
+        // clock alone is skewed still shows what it sends, like Nightscout does.
+        let tolerance = now.addingTimeInterval(5 * 60)
+        let anchor = newestFirst.first { $0.date <= tolerance } ?? newest
+        let recent = newestFirst.filter {
+            anchor.date.timeIntervalSince($0.date) <= mergeSpan && $0.date <= anchor.date
+        }
         func latest<Value>(_ field: KeyPath<PumpStatus, Value?>) -> Value? {
             recent.lazy.compactMap { $0[keyPath: field] }.first
         }
-        return PumpStatus(date: newest.date,
+        return PumpStatus(date: anchor.date,
                           insulinOnBoard: latest(\.insulinOnBoard),
                           reservoir: latest(\.reservoir),
-                          reservoirMessage: newest.reservoirMessage,
+                          reservoirMessage: anchor.reservoirMessage,
                           batteryPercent: latest(\.batteryPercent),
                           mode: latest(\.mode),
                           deliveryRate: latest(\.deliveryRate),
@@ -107,6 +114,7 @@ extension PumpStatus {
     /// block a CamAPS FX uploader adds), and a strict decode would drop a record over one odd field.
     init?(record: [String: Any]) {
         guard let date = NightscoutTime.date(record["created_at"]) ?? NightscoutTime.date(record["mills"])
+            ?? NightscoutTime.date(record["date"])
         else { return nil }
         self.init(date: date)
         let pump = record.object("pump")
@@ -256,8 +264,10 @@ private extension [String: Any] {
 }
 
 /// A finite JSON number, or a string holding one. No `is Bool` guard: `NSNumber` casts to `Bool`
-/// whenever it holds 0 or 1, so the guard would drop every insulin on board of 0.
+/// whenever it holds 0 or 1, so the guard would drop every insulin on board of 0. A JSON
+/// boolean is told apart by its CF type instead, so `true` cannot pass for 1.
 private func jsonNumber(_ value: Any?) -> Double? {
+    if let object = value as? AnyObject, CFGetTypeID(object) == CFBooleanGetTypeID() { return nil }
     let number = (value as? Double) ?? (value as? String).flatMap { Double($0.trimmingCharacters(in: .whitespaces)) }
     guard let number, number.isFinite else { return nil }
     return number
