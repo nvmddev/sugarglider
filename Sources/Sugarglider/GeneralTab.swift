@@ -104,7 +104,9 @@ struct GeneralTab: View {
                                unit: LocalizedStringKey, limits: ClosedRange<Int>) -> some View {
         HStack(spacing: 4) {
             Text(prefix)
-            TextField("", value: value, format: .number)
+            // The title is hidden visually but stays the control's name, so VoiceOver reads
+            // "Every, text field" instead of only the row's title.
+            TextField(prefix, value: value, format: .number)
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 .frame(width: 36)

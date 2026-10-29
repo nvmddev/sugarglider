@@ -238,7 +238,9 @@ struct ColorsTab: View {
         )
         return LabeledContent(label) {
             HStack(spacing: 8) {
-                Slider(value: halfPoints, in: range)
+                // The label is hidden visually but stays the control's name for VoiceOver.
+                Slider(value: halfPoints, in: range) { Text(label) }
+                    .labelsHidden()
                 Text(value.wrappedValue.formatted())
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)

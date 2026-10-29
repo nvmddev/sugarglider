@@ -30,9 +30,8 @@ struct PumpDetailsView: View {
                                 Text(row.label)
                                     .foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                valueText(row)
+                                valueCell(row)
                                     .gridColumnAlignment(.trailing)
-                                    .help(row.help ?? "")
                             }
                         }
                     }
@@ -44,6 +43,15 @@ struct PumpDetailsView: View {
             }
             .font(.subheadline)
             .monospacedDigit()
+        }
+    }
+
+    // Conditional so a row without a help text gets no empty help attribute.
+    @ViewBuilder private func valueCell(_ row: Row) -> some View {
+        if let help = row.help {
+            valueText(row).help(help)
+        } else {
+            valueText(row)
         }
     }
 
