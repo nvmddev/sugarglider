@@ -31,6 +31,11 @@ struct GeneralTab: View {
                         Text("The Keychain refused to store the token, so Sugarglider will forget it when it quits.")
                             .foregroundStyle(.red)
                     }
+                    if isInsecureURL {
+                        Label("The connection is not secure. Prefer an https:// URL so the token is not sent in the clear.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
                 }
                 .foregroundStyle(.secondary)
             }
@@ -100,11 +105,24 @@ struct GeneralTab: View {
         loginItem = SMAppService.mainApp.status
     }
 
+    /// http is allowed, since a self-hosted Nightscout may only speak it; the token would travel
+    /// in the clear, so the row warns. A URL without a scheme counts as http: ATS only speaks
+    /// plain http to it.
+    private var isInsecureURL: Bool { Self.usesInsecureScheme(settings.baseURL) }
+
+    static func usesInsecureScheme(_ url: String) -> Bool {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return URLComponents(string: trimmed)?.scheme?.lowercased() != "https"
+    }
+
     private func intervalField(_ prefix: LocalizedStringKey, value: Binding<Int>,
                                unit: LocalizedStringKey, limits: ClosedRange<Int>) -> some View {
         HStack(spacing: 4) {
             Text(prefix)
-            TextField("", value: value, format: .number)
+            // The title is hidden visually but stays the control's name, so VoiceOver reads
+            // "Every, text field" instead of only the row's title.
+            TextField(prefix, value: value, format: .number)
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 .frame(width: 36)

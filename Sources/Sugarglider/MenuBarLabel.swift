@@ -11,16 +11,18 @@ struct MenuBarLabel: View {
             .accessibilityLabel(spokenTitle)
     }
 
-    var title: String { text(trend: { " \($0.arrow)" }) }
+    var title: String { text(trend: { " \($0.arrow)" }, ageWidth: .narrow) }
 
-    var spokenTitle: String { text(trend: { ", \($0.spokenName)" }) }
+    var spokenTitle: String { text(trend: { ", \($0.spokenName)" }, ageWidth: .wide) }
 
-    private func text(trend: (Reading.Direction) -> String) -> String {
+    private func text(trend: (Reading.Direction) -> String,
+                      ageWidth: Duration.UnitsFormatStyle.UnitWidth) -> String {
         guard settings.isConfigured else { return "CGM ⚙" }
         guard let reading = store.lastReading else { return store.lastError == nil ? "CGM …" : "CGM ⚠" }
         let arrow = reading.direction.map(trend) ?? ""
         let delta = settings.deltaDisplay == .menuAndStatusBar ? store.deltaText().map { "  (\($0))" } : nil
-        let age = store.isStale ? " ⚠ \(reading.date.age(at: store.now))" : ""
+        // The age stays narrow in the title; VoiceOver spells the letters of the narrow units.
+        let age = store.isStale ? " ⚠ \(reading.date.age(at: store.now, width: ageWidth))" : ""
         return "\(reading.text(in: settings.units))\(arrow)\(delta ?? "")\(age)"
     }
 }
