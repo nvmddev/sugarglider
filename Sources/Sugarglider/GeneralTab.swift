@@ -31,6 +31,11 @@ struct GeneralTab: View {
                         Text("The Keychain refused to store the token, so Sugarglider will forget it when it quits.")
                             .foregroundStyle(.red)
                     }
+                    if isInsecureURL {
+                        Label("The connection is not secure. Prefer an https:// URL so the token is not sent in the clear.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
                 }
                 .foregroundStyle(.secondary)
             }
@@ -98,6 +103,14 @@ struct GeneralTab: View {
             loginItemError = error.localizedDescription
         }
         loginItem = SMAppService.mainApp.status
+    }
+
+    /// http is allowed, since a self-hosted Nightscout may only speak it; the token would travel
+    /// in the clear, so the row warns. A host without a scheme counts as http.
+    private var isInsecureURL: Bool {
+        let trimmed = settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let components = URLComponents(string: trimmed), components.host != nil else { return false }
+        return (components.scheme?.lowercased() ?? "http") != "https"
     }
 
     private func intervalField(_ prefix: LocalizedStringKey, value: Binding<Int>,
