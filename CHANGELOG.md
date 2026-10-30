@@ -4,9 +4,9 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are generated
 from [Conventional Commits](https://www.conventionalcommits.org/) by
-`scripts/changelog.sh` — edit commit messages, not this file.
+`scripts/changelog.sh`, so edit commit messages, not this file.
 
-## [0.5.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.5.0) — 2026-08-30
+## [0.5.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.5.0) (2026-08-30)
 
 ### Features
 
@@ -27,7 +27,7 @@ from [Conventional Commits](https://www.conventionalcommits.org/) by
 
 **Full changelog**: https://github.com/nvmddev/sugarglider/compare/v0.4.0...v0.5.0
 
-## [0.4.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.4.0) — 2026-08-06
+## [0.4.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.4.0) (2026-08-06)
 
 ### Features
 
@@ -39,7 +39,7 @@ from [Conventional Commits](https://www.conventionalcommits.org/) by
 
 **Full changelog**: https://github.com/nvmddev/sugarglider/compare/v0.3.0...v0.4.0
 
-## [0.3.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.3.0) — 2026-08-03
+## [0.3.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.3.0) (2026-08-03)
 
 ### Features
 
@@ -64,7 +64,7 @@ from [Conventional Commits](https://www.conventionalcommits.org/) by
 
 **Full changelog**: https://github.com/nvmddev/sugarglider/compare/v0.2.0...v0.3.0
 
-## [0.2.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.2.0) — 2026-07-31
+## [0.2.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.2.0) (2026-07-31)
 
 ### Features
 
@@ -98,7 +98,7 @@ from [Conventional Commits](https://www.conventionalcommits.org/) by
 
 **Full changelog**: https://github.com/nvmddev/sugarglider/compare/v0.1.0...v0.2.0
 
-## [0.1.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.1.0) — 2026-07-31
+## [0.1.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.1.0) (2026-07-31)
 
 ### Features
 

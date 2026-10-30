@@ -16,7 +16,7 @@ their own condition. This isn't the place for it.
 
 ## Scope
 
-Applies to issues, pull requests, discussions, commit messages, and anywhere
+Applies to issues, pull requests, commit messages, and anywhere
 someone is representing the project.
 
 ## Reporting
@@ -31,5 +31,5 @@ document, and may block repeat offenders.
 
 ## Attribution
 
-Adapted from the [Contributor Covenant](https://www.contributor-covenant.org),
-version 2.1.
+This Code of Conduct is adapted from the Contributor Covenant, version 2.1,
+available at https://www.contributor-covenant.org/version/2/1/code_of_conduct.html.

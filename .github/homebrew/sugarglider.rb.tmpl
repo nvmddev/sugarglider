@@ -1,5 +1,5 @@
 # Rendered into <tap>/Casks/sugarglider.rb by .github/workflows/cask.yml.
-# Placeholders are substituted with sed — keep them literal.
+# Placeholders are substituted with sed; keep them literal.
 cask "sugarglider" do
   version "__VERSION__"
   sha256 "__SHA256__"
@@ -9,16 +9,18 @@ cask "sugarglider" do
   desc "Nightscout blood glucose in the macOS menu bar"
   homepage "https://github.com/__REPO__"
 
-  # @Observable / the Observation framework put the floor at macOS 14.
-  # A bare symbol already means "this version or newer"; the ">= :sonoma"
-  # string form is deprecated in Homebrew.
-  depends_on macos: :sonoma
+  # A bare symbol means "this version or newer".
+  depends_on macos: :tahoe
+  depends_on arch: :arm64
 
   app "Sugarglider.app"
 
   uninstall quit: "dev.nevermind.sugarglider"
 
   zap trash: [
+    # The app is sandboxed, so everything it writes lives in the container. The
+    # bare paths cover installs from before the sandbox.
+    "~/Library/Containers/dev.nevermind.sugarglider",
     "~/Library/Preferences/dev.nevermind.sugarglider.plist",
     "~/Library/Caches/dev.nevermind.sugarglider",
     "~/Library/HTTPStorages/dev.nevermind.sugarglider",

@@ -1,12 +1,8 @@
 name: Homebrew cask
 
-# Publishes the cask for an already-released version to the tap.
-#
-# Two triggers, one definition: `release.yml` calls it as the last step of a
-# release, and it can be run by hand for a version whose release exists but
-# whose cask didn't make it — without re-releasing anything. That manual path is
-# also the only way to actually *test* this job, since a release is otherwise
-# needed to reach it.
+# Publishes the cask of an existing release to the tap. release.yml calls it as
+# its last step; the manual trigger retries a cask that didn't make it without
+# re-releasing, and is the only way to test this job.
 on:
   workflow_call:
     inputs:
@@ -14,6 +10,10 @@ on:
         description: "Version to publish, without the leading v"
         required: true
         type: string
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        description: "Fine-grained PAT with contents:write on the tap repo. Unset = skip."
+        required: false
   workflow_dispatch:
     inputs:
       version:
@@ -24,7 +24,7 @@ on:
 permissions:
   contents: read
 
-# The tap is a single file; two concurrent updates would just fight each other.
+# Queued: two concurrent updates of the one cask file would fight each other.
 concurrency:
   group: homebrew-cask
   cancel-in-progress: false
@@ -33,8 +33,9 @@ jobs:
   cask:
     name: Push cask to tap
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Resolve version and checksum
         id: resolve
@@ -43,20 +44,23 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          # `--repo` throughout: `gh release` otherwise infers the repository
-          # from the checkout's git remote, which makes this step depend on the
-          # working directory rather than on its inputs.
+          # --repo throughout: gh would otherwise infer the repository from the
+          # checkout's git remote.
           version="${INPUT_VERSION}"
           if [[ -z "${version}" ]]; then
             version="$(gh release view --repo "${GITHUB_REPOSITORY}" --json tagName --jq '.tagName')"
             version="${version#v}"
-            echo "No version given — using the latest release: ${version}"
+            echo "No version given. Using the latest release: ${version}"
           fi
 
-          # The checksum comes from the release's own checksums.txt rather than
-          # being passed in from the build: whatever is published is what the
-          # cask must describe, and it keeps this workflow independent of the
-          # job that built it.
+          # The value flows into sed replacements and shell paths below: a
+          # malformed one must fail here, not corrupt the published cask.
+          [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::invalid version '${version}': expected MAJOR.MINOR.PATCH"
+            exit 1
+          }
+
+          # Read from the release itself, so the cask describes what is published.
           gh release download "v${version}" --repo "${GITHUB_REPOSITORY}" \
             --pattern checksums.txt --dir "${RUNNER_TEMP}"
           zip="Sugarglider-${version}.zip"
@@ -80,7 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${GH_TOKEN}" ]]; then
-            echo "::notice::HOMEBREW_TAP_TOKEN not set — skipping the cask update."
+            echo "::notice::HOMEBREW_TAP_TOKEN not set, so the cask update is skipped."
             exit 0
           fi
           TAP_REPO="${TAP_REPO:-${GITHUB_REPOSITORY_OWNER}/homebrew-tap}"
@@ -95,9 +99,8 @@ jobs:
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Stage first, then compare against the index: a plain `git diff` only
-          # looks at tracked files, so a run where the cask is a new untracked
-          # file would read as "nothing changed".
+          # Compared staged: a plain git diff ignores the cask while it's a new,
+          # untracked file.
           git add Casks/sugarglider.rb
           if git diff --cached --quiet; then
             echo "Cask already at ${VERSION}."
@@ -105,16 +108,17 @@ jobs:
           fi
           git commit -m "sugarglider ${VERSION}"
 
-          # `GH_TOKEN` is the gh CLI's credential, not git's. `gh repo clone`
-          # authenticates the clone itself, but the remote URL it leaves behind
-          # carries nothing, so `git push` finds no credentials and — with no TTY
-          # to prompt on — dies with "could not read Username for github.com".
-          # Putting the token in the push URL is what makes the push work.
+          # GH_TOKEN authenticates gh, not git, and the remote gh repo clone
+          # leaves behind carries no credential: without the token in the URL
+          # the push dies with "could not read Username".
           git remote set-url origin \
             "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git"
-          # -u origin HEAD rather than a bare push: a tap repo created without an
-          # initial commit clones to an unborn branch with no upstream.
+          # -u origin HEAD: a tap created without a commit clones to an unborn
+          # branch with no upstream. The release is already published by the
+          # time this runs, so a failed push warns instead of failing the run:
+          # the manual retry below is the visible follow-up either way.
           if ! git push -u origin HEAD; then
-            echo "::error::Push to ${TAP_REPO} failed. HOMEBREW_TAP_TOKEN needs contents:write on that repository."
-            exit 1
+            echo "::warning::Push to ${TAP_REPO} failed. HOMEBREW_TAP_TOKEN needs contents:write on that repository."
+            echo "Push to ${TAP_REPO} failed. Re-run this job after fixing the token:" >> "$GITHUB_STEP_SUMMARY"
+            echo "gh workflow run cask.yml -f version=${VERSION}" >> "$GITHUB_STEP_SUMMARY"
           fi

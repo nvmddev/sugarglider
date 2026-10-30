@@ -1,31 +1,65 @@
 import Foundation
 
-/// One glucose reading. `sgv` is always mg/dL, Nightscout's internal unit.
-struct Reading {
+/// `sgv` is always mg/dL, Nightscout's native unit.
+struct Reading: Equatable {
     let sgv: Int
-    let direction: String
+    /// Nil when the uploader has none ("NONE", "NOT COMPUTABLE", "RATE OUT OF RANGE").
+    let direction: Direction?
     let date: Date
 
-    func value(in units: AppSettings.Units) -> Double { units.value(fromMgdl: sgv) }
-    func text(in units: AppSettings.Units) -> String { units.text(fromMgdl: sgv) }
+    enum Direction: String {
+        case doubleUp = "DoubleUp", singleUp = "SingleUp", fortyFiveUp = "FortyFiveUp", flat = "Flat"
+        case fortyFiveDown = "FortyFiveDown", singleDown = "SingleDown", doubleDown = "DoubleDown"
 
-    /// Doubles use paired single glyphs (`↑↑`) rather than `⇈`/`⇊`, which render
-    /// thin and small.
-    var trendArrow: String {
-        switch direction {
-        case "DoubleUp":      return "↑↑"
-        case "SingleUp":      return "↑"
-        case "FortyFiveUp":   return "↗"
-        case "Flat":          return "→"
-        case "FortyFiveDown": return "↘"
-        case "SingleDown":    return "↓"
-        case "DoubleDown":    return "↓↓"
-        default:              return ""   // NONE / NOT COMPUTABLE / RATE OUT OF RANGE
+        /// Paired arrows for the doubles, because ⇈ and ⇊ render too thin.
+        var arrow: String {
+            switch self {
+            case .doubleUp: "↑↑"
+            case .singleUp: "↑"
+            case .fortyFiveUp: "↗"
+            case .flat: "→"
+            case .fortyFiveDown: "↘"
+            case .singleDown: "↓"
+            case .doubleDown: "↓↓"
+            }
+        }
+
+        /// For VoiceOver, which reads the arrows by their character names ("north east arrow").
+        var spokenName: String {
+            switch self {
+            case .doubleUp: String(localized: "rising quickly")
+            case .singleUp: String(localized: "rising")
+            case .fortyFiveUp: String(localized: "rising slowly")
+            case .flat: String(localized: "steady")
+            case .fortyFiveDown: String(localized: "falling slowly")
+            case .singleDown: String(localized: "falling")
+            case .doubleDown: String(localized: "falling quickly")
+            }
+        }
+    }
+
+    /// Nightscout's markers for a value beyond the sensor's range, one step past each bound. Only
+    /// the side is known, so its own client shows LOW and HIGH in either unit.
+    enum OutOfRange: Int {
+        case low = 39
+        case high = 401
+    }
+
+    var outOfRange: OutOfRange? { OutOfRange(rawValue: sgv) }
+
+    func value(in units: AppSettings.Units) -> Double { units.value(fromMgdl: Double(sgv)) }
+
+    /// LOW and HIGH have no value, so no unit either.
+    func text(in units: AppSettings.Units, withUnit: Bool = false, locale: Locale = .autoupdatingCurrent) -> String {
+        switch outOfRange {
+        case .low: String(localized: "LOW")
+        case .high: String(localized: "HIGH")
+        case nil: withUnit ? "\(units.text(fromMgdl: sgv, locale: locale)) \(units.label)" : units.text(fromMgdl: sgv, locale: locale)
         }
     }
 }
 
-enum NightscoutError: LocalizedError {
+nonisolated enum NightscoutError: LocalizedError, Equatable {
     case notConfigured
     case badURL
     case http(Int)
@@ -34,36 +68,46 @@ enum NightscoutError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: return "Not configured"
-        case .badURL:        return "Invalid URL"
-        case .http(let c):   return "HTTP \(c)"
-        case .empty:         return "No readings"
-        case .decode:        return "Bad response"
+        case .notConfigured:  String(localized: "Not configured")
+        case .badURL:         String(localized: "Invalid URL")
+        case .http(let code): String(localized: "HTTP \(code)")
+        case .empty:          String(localized: "No readings")
+        case .decode:         String(localized: "Bad response")
         }
     }
 }
 
-/// A pure HTTP client: connection info is passed in by the caller rather than
-/// read from `AppSettings` here. `@MainActor` because the only caller is;
-/// the network wait itself still happens inside `URLSession`, off the main
-/// thread.
-@MainActor
-enum Nightscout {
-    /// The 15s timeout keeps a stalled request from pinning the poll timer.
-    private static let session: URLSession = {
-        let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 15
-        cfg.waitsForConnectivity = false
-        cfg.httpAdditionalHeaders = ["Accept": "application/json"]
-        return URLSession(configuration: cfg)
-    }()
+/// A Nightscout site. `token` is empty for a site that allows unauthenticated reads.
+struct Nightscout {
+    var baseURL: String
+    var token: String
+    var session = Nightscout.sharedSession
+
+    /// 15 s of idle time between bytes, and 60 s for the whole request: a server that answers
+    /// and then trickles its body could otherwise hold the serial poll loop indefinitely.
+    /// The cache is off, since a polled answer is always stale, and the poll URL is stable.
+    private static func makeSession(waitsForConnectivity: Bool) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 60
+        configuration.urlCache = nil
+        configuration.waitsForConnectivity = waitsForConnectivity
+        configuration.httpAdditionalHeaders = ["Accept": "application/json"]
+        return URLSession(configuration: configuration)
+    }
+
+    /// For the Settings probe, which must fail fast on a dead host, not wait for connectivity.
+    static let sharedSession = makeSession(waitsForConnectivity: false)
+
+    /// For the store: the first poll after a wake runs before the network is up. It waits for
+    /// connectivity within the resource timeout instead of failing and showing an error until
+    /// the next interval.
+    static let pollingSession = makeSession(waitsForConnectivity: true)
 
     private static let decoder = JSONDecoder()
 
-    /// One raw row of `entries/sgv.json`, decoded field by field so a single odd
-    /// row can't fail the whole response the way a strict `Decodable` would: a
-    /// missing `direction` is routine, and some sites emit a non-numeric `sgv`.
-    /// `sgv` is a `Double` because fractional mg/dL happens.
+    /// Decoded field by field, so one odd row can't fail the whole response: a missing
+    /// direction is routine, some sites send a non-numeric sgv, and fractional mg/dL happens.
     private struct Entry: Decodable {
         let sgv: Double?
         let direction: String?
@@ -78,52 +122,84 @@ enum Nightscout {
             millis = try? row.decodeIfPresent(Double.self, forKey: .date)
         }
 
-        /// Nil for a row missing either field a plottable reading needs.
         var reading: Reading? {
             guard let sgv, let millis else { return nil }
-            return Reading(sgv: Int(sgv.rounded()), direction: direction ?? "",
+            return Reading(sgv: Int(sgv.rounded()), direction: direction.flatMap(Reading.Direction.init),
                            date: Date(timeIntervalSince1970: millis / 1000))
         }
     }
 
-    /// Fetches up to `count` recent SGV entries, oldest-first so they plot
-    /// left to right.
-    ///
-    /// `since` restricts the response to entries newer than that instant
-    /// (Nightscout's Mongo-style `find[date][$gt]`), which is what makes topping
-    /// up a cached history cheap. An empty response is an error only for a full
-    /// fetch: with `since` set, "nothing new" is the expected answer.
-    static func fetchEntries(count: Int, since: Date? = nil,
-                             baseURL: String, token: String) async throws -> [Reading] {
-        var base = baseURL.trimmingCharacters(in: .whitespaces)
-        guard !base.isEmpty else { throw NightscoutError.notConfigured }
-        while base.hasSuffix("/") { base.removeLast() }
+    /// With `since` set this is a top-up, where nothing new is a valid answer.
+    func entries(count: Int, since: Date? = nil) async throws -> [Reading] {
+        var query = [URLQueryItem(name: "count", value: String(count))]
+        if let since {
+            let millis = Int64((since.timeIntervalSince1970 * 1000).rounded())
+            query.append(URLQueryItem(name: "find[date][$gt]", value: String(millis)))
+        }
+        let data = try await get("api/v1/entries/sgv.json", query: query)
+        guard let entries = try? Self.decoder.decode([Entry].self, from: data) else {
+            throw NightscoutError.decode
+        }
+        let readings = entries.compactMap(\.reading).sorted { $0.date < $1.date }
+        guard !readings.isEmpty || since != nil else { throw NightscoutError.empty }
+        return readings
+    }
 
-        guard var comps = URLComponents(string: base + "/api/v1/entries/sgv.json") else {
+    /// More than one, because an uploader may spread its data over several records and a CGM app
+    /// (xDrip+) posts its phone's battery in between; `PumpStatus.mergeSpan` keeps the older ones
+    /// from passing for current.
+    static let deviceStatusCount = 30
+
+    /// Records dated further ahead than this are dropped by the store, and the pump merge
+    /// anchors on the newest record within it instead of a skewed one.
+    static let futureTolerance: TimeInterval = 5 * 60
+
+    /// Nil rather than an error for a site without pump data: most only have a CGM uploading.
+    func pumpStatus() async throws -> PumpStatus? {
+        let data = try await get("api/v1/devicestatus.json",
+                                 query: [URLQueryItem(name: "count", value: String(Self.deviceStatusCount))])
+        return PumpStatus.merged(try Self.records(in: data).compactMap(PumpStatus.init(record:)))
+    }
+
+    func treatments(count: Int, since: Date) async throws -> [Treatment] {
+        let data = try await get("api/v1/treatments.json", query: [
+            URLQueryItem(name: "count", value: String(count)),
+            URLQueryItem(name: "find[created_at][$gte]", value: NightscoutTime.string(since)),
+        ])
+        return try Self.records(in: data).compactMap(Treatment.init(record:)).sorted { $0.date < $1.date }
+    }
+
+    /// `since` is required: without a date filter, Nightscout searches only the last two days.
+    func latestEvent(_ eventType: String, since: Date) async throws -> Date? {
+        let data = try await get("api/v1/treatments.json", query: [
+            URLQueryItem(name: "count", value: "1"),
+            URLQueryItem(name: "find[eventType]", value: eventType),
+            URLQueryItem(name: "find[created_at][$gte]", value: NightscoutTime.string(since)),
+        ])
+        return try Self.records(in: data).compactMap { NightscoutTime.date($0["created_at"]) }.max()
+    }
+
+    private static func records(in data: Data) throws -> [[String: Any]] {
+        guard let array = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
+            throw NightscoutError.decode
+        }
+        return array.compactMap { $0 as? [String: Any] }
+    }
+
+    private func get(_ path: String, query: [URLQueryItem]) async throws -> Data {
+        let base = baseURL.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(["/"]))
+        guard !base.isEmpty else { throw NightscoutError.notConfigured }
+        let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = token.isEmpty ? query : query + [URLQueryItem(name: "token", value: token)]
+        guard let url = URL(string: base)?.appending(path: path).appending(queryItems: items) else {
             throw NightscoutError.badURL
         }
-        var items = [URLQueryItem(name: "count", value: String(count))]
-        if let since {
-            let ms = (since.timeIntervalSince1970 * 1000).rounded()
-            items.append(URLQueryItem(name: "find[date][$gt]", value: String(Int64(ms))))
-        }
-        let token = token.trimmingCharacters(in: .whitespaces)
-        if !token.isEmpty { items.append(URLQueryItem(name: "token", value: token)) }
-        comps.queryItems = items
-
-        guard let url = comps.url else { throw NightscoutError.badURL }
 
         let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw NightscoutError.http(http.statusCode)
         }
-        guard let entries = try? decoder.decode([Entry].self, from: data) else {
-            throw NightscoutError.decode
-        }
-        let readings = entries.compactMap(\.reading).sorted { $0.date < $1.date }
-
-        guard !readings.isEmpty || since != nil else { throw NightscoutError.empty }
-        return readings
+        return data
     }
 
     enum ProbeResult: Equatable {
@@ -131,19 +207,14 @@ enum Nightscout {
         case failed(String)
     }
 
-    /// Whether `baseURL`/`token` reach a site the token can read from. A site
-    /// with no readings yet still counts as connected: the credentials work,
-    /// there's just no data.
-    static func probe(baseURL: String, token: String) async -> ProbeResult {
+    func probe() async -> ProbeResult {
         do {
-            _ = try await fetchEntries(count: 1, baseURL: baseURL, token: token)
+            _ = try await entries(count: 1)
             return .connected
         } catch NightscoutError.empty {
-            return .connected
+            return .connected  // the credentials work, the site just has no readings yet
         } catch NightscoutError.http(401), NightscoutError.http(403) {
-            return .failed("Authentication failed — check the token")
-        } catch let error as NightscoutError {
-            return .failed(error.errorDescription ?? "Connection failed")
+            return .failed(String(localized: "Authentication failed. Check the token."))
         } catch {
             return .failed(error.localizedDescription)
         }

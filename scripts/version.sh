@@ -1,41 +1,44 @@
 #!/bin/bash
-# Semantic version helper driven by git tags + Conventional Commits.
+# Version helper driven by git tags and Conventional Commits.
 #
-#   scripts/version.sh latest              → newest release tag ("v1.2.0"), empty if none
-#   scripts/version.sh previous <tag>      → the tag released before <tag>, empty if none
+#   scripts/version.sh latest             newest release tag ("v1.2.0"), empty if none
+#   scripts/version.sh previous <tag>     the tag released before <tag>, empty if none
 #   scripts/version.sh next [auto|patch|minor|major]
-#                                          → next version *without* the "v" prefix
-#   scripts/version.sh app-changed [tag]   → exit 0 if the built app would differ
-#                                            from <tag> (default: newest), else 1
+#                                         next version, without the "v"
+#   scripts/version.sh app-changed [tag]  exit 0 if the app would differ from <tag>
+#                                         (default: the newest), else 1
 #
-# "auto" derives the bump from the commits since the newest tag:
-#   a `!` marker or a BREAKING CHANGE trailer → major
-#   any feat:                                 → minor
-#   otherwise                                 → patch
-#
-# `next` always answers with a number. Whether a release is warranted at all is
-# `app-changed`'s job, so the two can be used separately.
+# auto bumps major for a "!" or a BREAKING CHANGE trailer, minor for any feat,
+# patch otherwise.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Tags newest-first. Avoids a pipe so `set -o pipefail` can't trip over SIGPIPE.
+WORK="$(mktemp -d)"
+trap 'rm -rf "${WORK}"' EXIT
+
 all_tags() {
-    git tag --list 'v[0-9]*' --sort=-v:refname
+    # Plain releases only: the two-dot glob alone still matches v1.2.3-beta.1, and a
+    # prerelease as `latest` would fail every `next` call until the tag is deleted.
+    # Only tags on this branch count: an experiment tag on a side branch must not
+    # drive the next released version.
+    git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname --merged HEAD | grep -v -- '-' || true
 }
 
+# No `| head -n1`: under pipefail, git dying of SIGPIPE would fail the script.
 latest_tag() {
     local tags
     tags="$(all_tags)"
     printf '%s' "${tags%%$'\n'*}"
 }
 
+# The nearest tag reachable from <exclude>'s parent, so a higher version tagged
+# on a side branch doesn't win. On the workflow_dispatch path <exclude> isn't a
+# commit yet, hence the fallback to the newest other tag.
 previous_tag() {
     local exclude="$1" tag prev
-    # The release <exclude> actually follows: the nearest tag reachable from its
-    # parent, so a higher version tagged on a side branch doesn't win. Fails when
-    # <exclude> isn't a commit yet, which is the workflow_dispatch path computing
-    # the previous tag before creating the new one, hence the fallback below.
-    if prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${exclude}^" 2>/dev/null)"; then
+    # Prereleases are excluded here, not matched and rejected: the fallback below
+    # takes the newest plain tag on this branch.
+    if prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' "${exclude}^" 2>/dev/null)"; then
         printf '%s' "${prev}"
         return 0
     fi
@@ -46,26 +49,39 @@ previous_tag() {
     done <<< "$(all_tags)"
 }
 
-# Highest bump level implied by the commits in <range>.
 detect_bump() {
-    local range="$1" bump="patch" record subject body
+    local range="$1" bump="patch" record subject body type bang
+    # Written through a file: `set -e` doesn't see a failing git log inside a process
+    # substitution, and a silent empty log would pass for "no changes".
+    git log --no-merges --format='%s%x1f%b%x1e' "${range}" > "${WORK}/records"
     while IFS= read -r -d $'\x1e' record; do
         record="${record#$'\n'}"
         subject="${record%%$'\x1f'*}"
         body="${record#*$'\x1f'}"
-        # `feat!:` / `fix(scope)!:` and the BREAKING CHANGE trailer both mean major.
-        if [[ "${subject}" =~ ^[a-zA-Z]+(\([^\)]*\))?! ]] || [[ "${body}" == *"BREAKING CHANGE"* ]]; then
+        # The exact shape changelog.sh parses: types are not case-sensitive, the ! sits
+        # right before the colon, and a description must follow. The nested scope group
+        # matters: bash drops unmatched trailing groups from BASH_REMATCH, and without
+        # it the bang slot would hold the description for a scope-less subject.
+        if [[ "${subject}" =~ ^([a-zA-Z]+)(\(([^\)]+)\))?(!)?:[[:space:]]*(.+)$ ]]; then
+            type="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
+            bang="${BASH_REMATCH[4]}"
+        else
+            type="other"
+            bang=""
+        fi
+        # The footer tokens, at line starts only: prose that merely mentions the phrase
+        # must not break. BREAKING-CHANGE is the spec's synonym.
+        if [[ -n "${bang}" ]] || grep -qE '^BREAKING CHANGE: |^BREAKING-CHANGE: ' <<<"${body}"; then
             printf 'major'
             return 0
         fi
-        [[ "${subject}" =~ ^feat(\([^\)]*\))?: ]] && bump="minor"
-    done < <(git log --no-merges --format='%s%x1f%b%x1e' "${range}")
+        [[ "${type}" == "feat" ]] && bump="minor"
+    done < "${WORK}/records"
     printf '%s' "${bump}"
 }
 
-# Paths whose contents end up in the shipped bundle. Everything else (CI,
-# scripts, docs) can change without altering a single byte of the app.
-APP_PATHS=(Sources Resources Package.swift)
+# Everything the shipped bundle is built from.
+APP_PATHS=(Sources Resources Sugarglider.xcodeproj)
 
 case "${1:-}" in
 app-changed)
@@ -74,7 +90,12 @@ app-changed)
         echo "changed (no release tag yet)"
         exit 0
     fi
-    # git diff --quiet exits 1 when there are differences, hence the inversion.
+    # Without this, a mistyped tag answers "changed" and exits 0: git diff's 128
+    # would read as a difference.
+    git rev-parse -q --verify "${tag}^{commit}" >/dev/null || {
+        echo "error: '${tag}' is not a commit" >&2
+        exit 1
+    }
     if git diff --quiet "${tag}" HEAD -- "${APP_PATHS[@]}"; then
         echo "unchanged since ${tag}"
         exit 1
@@ -94,8 +115,6 @@ previous)
 next)
     bump="${2:-auto}"
     tag="$(latest_tag)"
-
-    # No tag yet: the first release is 0.1.0 regardless of the requested bump.
     if [[ -z "${tag}" ]]; then
         echo "0.1.0"
         exit 0

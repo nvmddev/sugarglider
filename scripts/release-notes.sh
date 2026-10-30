@@ -1,10 +1,9 @@
 #!/bin/bash
-# Compose the body of a GitHub release: generated changelog + install section.
+# Composes a GitHub release body: the generated changelog plus install notes.
 #
 #   scripts/release-notes.sh <version> [from-ref] [to-ref]
 #
-# NOTARIZED=true drops the Gatekeeper workaround, which only applies to
-# ad-hoc-signed builds.
+# NOTARIZED=true leaves out the Gatekeeper workaround.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -22,17 +21,17 @@ cat <<EOF
 ## Install
 
 Download \`Sugarglider-${VERSION}.dmg\` (or the \`.zip\`) below, drag
-**Sugarglider.app** into \`/Applications\`, and launch it. Universal binary
-(Apple silicon + Intel), macOS 14 (Sonoma) or newer.
+**Sugarglider.app** into \`/Applications\`, and launch it. Needs a Mac with
+Apple silicon and macOS 26 (Tahoe) or newer. Intel Macs are no longer supported.
 EOF
 
 if [[ "${NOTARIZED}" != "true" ]]; then
     cat <<'EOF'
 
 > [!IMPORTANT]
-> This build is **ad-hoc signed and not notarized** by Apple, so macOS puts it in
-> quarantine on first launch. Either right-click the app → **Open** → **Open**, or
-> clear the flag yourself:
+> This build is **not notarized** by Apple, so macOS blocks it on first launch.
+> Either allow it under **System Settings → Privacy & Security → Open Anyway**, or
+> clear the quarantine flag yourself:
 >
 > ```sh
 > xattr -dr com.apple.quarantine /Applications/Sugarglider.app
