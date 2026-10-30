@@ -5,6 +5,7 @@ xcuserdata/
 .DS_Store
 .vscode/
 .scratch/
+.kilo/
 
 # Account-specific, so it stays out of the repo (docs/signing.md).
 Resources/embedded.provisionprofile
