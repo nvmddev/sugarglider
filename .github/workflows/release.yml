@@ -143,10 +143,6 @@ jobs:
             exit 0
           fi
           printf '%s' "${PROFILE}" | base64 --decode > Resources/embedded.provisionprofile
-          # A profile without keychain-access-groups yields an app that signs
-          # cleanly and is then killed at launch by AMFI, so check before using it.
-          security cms -D -i Resources/embedded.provisionprofile \
-            | plutil -extract Entitlements.keychain-access-groups xml1 -o - - > /dev/null
           echo "Provisioning profile installed"
 
       - name: Build app bundle

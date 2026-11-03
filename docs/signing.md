@@ -69,9 +69,9 @@ base64 -i Resources/embedded.provisionprofile \
   | gh secret set MACOS_PROVISION_PROFILE
 ```
 
-`release.yml` writes it back out, checks that it really grants
-`keychain-access-groups`, and hands `build.sh` the `TEAM_ID` it already has from
-`APPLE_TEAM_ID`. Without the secret the release still builds, signs and
+`release.yml` writes it back out and hands `build.sh` the `TEAM_ID` it already
+has from `APPLE_TEAM_ID`. `build.sh` then checks that the profile grants
+`keychain-access-groups` for this app. Without the secret the release still builds, signs and
 notarizes; the app just falls back to the login Keychain and asks for access once
 after each update.
 

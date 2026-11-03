@@ -17,7 +17,7 @@ cd "$(dirname "$0")"
 APP="Sugarglider.app"
 ARCHIVE=".build/Sugarglider.xcarchive"
 
-VERSION="${VERSION:-$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null | grep -v -- '-' | sed 's/^v//' || true)}"
+VERSION="${VERSION:-$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' 2>/dev/null | sed 's/^v//' || true)}"
 VERSION="${VERSION:-0.0.0-dev}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
