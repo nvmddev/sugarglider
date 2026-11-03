@@ -139,7 +139,9 @@ struct Nightscout {
     }
 
     /// With `since` set this is a top-up, where nothing new is a valid answer. Entries dated
-    /// ahead are left on the server: they would fill `count` and hide the real ones.
+    /// ahead are left on the server: they would fill `count` and hide the real ones. Any date
+    /// filter turns off Nightscout's default lower bound, so a site idle for days still answers
+    /// with its last entry, which then shows its age.
     func entries(count: Int, since: Date? = nil, now: Date = .now) async throws -> Page<Reading> {
         var query = [URLQueryItem(name: "count", value: String(count)),
                      URLQueryItem(name: "find[date][$lte]",
