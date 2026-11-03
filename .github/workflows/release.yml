@@ -36,6 +36,7 @@ jobs:
       contents: write # tag, release assets, changelog branch
       pull-requests: write # the changelog PR
       id-token: write # sign the build provenance attestation
+      attestations: write # store the attestation
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -237,7 +238,7 @@ jobs:
         if: ${{ !inputs.dry_run }}
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
-          subject-path: "dist/Sugarglider-${{ steps.version.outputs.version }}.zip,dist/Sugarglider-${{ steps.version.outputs.version }}.dmg"
+          subject-checksums: dist/checksums.txt
 
       - name: Create tag
         if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run }}
