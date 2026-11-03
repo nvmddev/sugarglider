@@ -14,31 +14,19 @@ extension View {
     /// dropdown opens over whichever app is in front.
     func windowShowsToolTipsWhenInactive() -> some View {
         // Zero-sized because ImageRenderer draws an NSViewRepresentable as a yellow placeholder.
-        background(WindowConfigurator { $0.allowsToolTipsWhenApplicationIsInactive = true }.frame(width: 0, height: 0))
+        background(ToolTipsWhenInactive().frame(width: 0, height: 0))
     }
 }
 
-private struct WindowConfigurator: NSViewRepresentable {
-    var configure: (NSWindow) -> Void
+private struct ToolTipsWhenInactive: NSViewRepresentable {
+    func makeNSView(context: Context) -> OptInView { OptInView() }
 
-    func makeNSView(context: Context) -> ConfiguratorView { ConfiguratorView() }
+    func updateNSView(_ view: OptInView, context: Context) {}
 
-    func updateNSView(_ view: ConfiguratorView, context: Context) {
-        view.configure = configure
-    }
-
-    final class ConfiguratorView: NSView {
-        var configure: ((NSWindow) -> Void)? {
-            didSet { apply() }
-        }
-
+    final class OptInView: NSView {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            apply()
-        }
-
-        private func apply() {
-            if let window { configure?(window) }
+            window?.allowsToolTipsWhenApplicationIsInactive = true
         }
     }
 }
