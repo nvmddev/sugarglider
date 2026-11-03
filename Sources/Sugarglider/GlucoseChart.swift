@@ -222,7 +222,9 @@ struct GlucoseChart: View {
         .chartYScale(domain: p.axis.lower...p.axis.upper)
         .chartXAxis {
             AxisMarks(preset: .inset, values: [p.start, p.latest.date]) { value in
-                AxisValueLabel(format: p.timeStyle, anchor: value.index == 0 ? .bottomLeading : .bottomTrailing)
+                // Close together the start wins; the age line already tells how old the newest is.
+                AxisValueLabel(format: p.timeStyle, anchor: value.index == 0 ? .bottomLeading : .bottomTrailing,
+                               collisionResolution: .greedy(priority: value.index == 0 ? 1 : 0))
                     .font(.caption2)
                     .foregroundStyle(Self.axisLabel)
             }
