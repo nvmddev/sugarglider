@@ -134,7 +134,7 @@ final class ReadingStore {
         guard settings.isConfigured else { return }
         let (site, generation) = (site, generation)
         do {
-            let latest = Self.keepingPlausible(try await site.entries(count: 2))
+            let latest = Self.keepingPlausible(try await site.entries(count: 2).items)
             guard generation == self.generation else { return }
             showNewest(of: latest)
             if Self.joinsUp(latest, with: readings) { merge(latest) }
@@ -168,16 +168,16 @@ final class ReadingStore {
         // Never nil, not even for a covered but empty cache: that would be an unfiltered request.
         let since = (covered ? readings.last?.date : nil) ?? start
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        guard let fetched = await fetch({ try await $0.entries(count: count, since: since) }) else { return }
+        guard let page = await fetch({ try await $0.entries(count: count, since: since) }) else { return }
         fetchedAt[.history] = .now
         if !covered {
             historyWindowStart = historyWindowStart.map { min($0, start) } ?? start
-        } else if fetched.count >= count {
+        } else if page.isFull {
             // A full top-up is the newest `count` rows, so after a long gap it may stop short of
             // the cached ones. Coverage then starts where it arrived, and widening fills the gap.
-            historyWindowStart = fetched.first?.date
+            historyWindowStart = page.items.first?.date
         }
-        merge(Self.keepingPlausible(fetched))
+        merge(Self.keepingPlausible(page.items))
     }
 
     /// A cap, not a selector: the date filter picks the window, this only bounds a site that
@@ -249,15 +249,15 @@ final class ReadingStore {
         let since = Self.treatmentsSince(windowStart: start, covered: covered,
                                          newestCached: treatments.last?.date)
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        guard let fetched = await fetch({ try await $0.treatments(count: count, since: since) }) else { return }
+        guard let page = await fetch({ try await $0.treatments(count: count, since: since) }) else { return }
         fetchedAt[.treatments] = .now
         if !covered {
             treatmentsWindowStart = treatmentsWindowStart.map { min($0, start) } ?? start
-        } else if fetched.count >= count {
+        } else if page.isFull {
             // As in refreshHistory; the marker is a window start, which the request precedes.
-            treatmentsWindowStart = fetched.first?.date.addingTimeInterval(Self.tempBasalLookback)
+            treatmentsWindowStart = page.items.first?.date.addingTimeInterval(Self.tempBasalLookback)
         }
-        treatments = Self.merged(treatments, with: fetched)
+        treatments = Self.merged(treatments, with: page.items)
     }
 
     static func treatmentsSince(windowStart: Date, covered: Bool, newestCached: Date?) -> Date {

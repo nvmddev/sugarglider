@@ -23,7 +23,7 @@ extension SugargliderTests {
              {"sgv":100,"direction":"FortyFiveUp","date":1700000000000}]
             """)
 
-        let readings = try await site.nightscout().entries(count: 10)
+        let readings = try await site.nightscout().entries(count: 10).items
         #expect(readings.map(\.sgv) == [100, 150])
         #expect(readings.first?.direction == .fortyFiveUp)
         #expect(readings.first?.date == Date(timeIntervalSince1970: 1_700_000_000))
@@ -39,7 +39,7 @@ extension SugargliderTests {
              {}]
             """)
 
-        let readings = try await site.nightscout().entries(count: 10)
+        let readings = try await site.nightscout().entries(count: 10).items
         #expect(readings.map(\.sgv) == [100, 110])
         #expect(readings.last?.direction == nil)
     }
@@ -52,7 +52,20 @@ extension SugargliderTests {
              {"sgv":39,"date":1700000200000}]
             """)
 
-        #expect(try await site.nightscout().entries(count: 10).map(\.sgv) == [39])
+        #expect(try await site.nightscout().entries(count: 10).items.map(\.sgv) == [39])
+    }
+
+    /// Full counts what the server sent, so a capped page stays full after unusable rows are dropped.
+    @Test func aPageIsFullByWhatTheServerSent() async throws {
+        let site = StubbedSite(json: """
+            [{"sgv":100,"date":1700000000000},
+             {"sgv":20,"date":1700000100000}]
+            """)
+
+        let page = try await site.nightscout().entries(count: 2)
+        #expect(page.items.map(\.sgv) == [100])
+        #expect(page.isFull)
+        #expect(try await site.nightscout().entries(count: 3).isFull == false)
     }
 
     @Test func fetchRoundsFractionalSgv() async throws {
@@ -61,7 +74,7 @@ extension SugargliderTests {
              {"sgv":100.5,"direction":"Flat","date":1700000100000}]
             """)
 
-        #expect(try await site.nightscout().entries(count: 10).map(\.sgv) == [100, 101])
+        #expect(try await site.nightscout().entries(count: 10).items.map(\.sgv) == [100, 101])
     }
 
     @Test func fetchOfASiteWithoutReadingsThrowsEmpty() async throws {
@@ -75,7 +88,7 @@ extension SugargliderTests {
     @Test func fetchSinceAcceptsAnEmptyAnswer() async throws {
         let site = StubbedSite(json: "[]")
 
-        #expect(try await site.nightscout().entries(count: 10, since: .now).isEmpty)
+        #expect(try await site.nightscout().entries(count: 10, since: .now).items.isEmpty)
     }
 
     /// Entries dated past the tolerance stay on the server, or they would fill `count`.

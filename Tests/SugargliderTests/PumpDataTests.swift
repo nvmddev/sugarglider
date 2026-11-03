@@ -299,7 +299,7 @@ extension SugargliderTests {
              {"_id":"1","eventType":"Temp Basal","created_at":"2030-01-01T11:35:00Z","absolute":1,"duration":30}]
             """)
         let since = try #require(NightscoutTime.date("2030-01-01T06:00:00.000Z"))
-        let treatments = try await server.nightscout().treatments(count: 500, since: since)
+        let treatments = try await server.nightscout().treatments(count: 500, since: since).items
         #expect(treatments.map(\.id) == ["1", "2"])
         let line = try #require(server.requests.first)
         #expect(line.contains("/api/v1/treatments.json"))

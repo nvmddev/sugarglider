@@ -83,6 +83,13 @@ struct Nightscout {
     var token: String
     var session = Nightscout.sharedSession
 
+    /// A capped answer. Full when the server stopped at the count, before rows the app can't use
+    /// were dropped: rows older than these may then exist.
+    struct Page<Item> {
+        var items: [Item]
+        var isFull: Bool
+    }
+
     /// 15 s of idle time between bytes, and 60 s for the whole request: a server that answers
     /// and then trickles its body could otherwise hold the serial poll loop indefinitely.
     /// The cache is off, since a polled answer is always stale, and the poll URL is stable.
@@ -133,7 +140,7 @@ struct Nightscout {
 
     /// With `since` set this is a top-up, where nothing new is a valid answer. Entries dated
     /// ahead are left on the server: they would fill `count` and hide the real ones.
-    func entries(count: Int, since: Date? = nil, now: Date = .now) async throws -> [Reading] {
+    func entries(count: Int, since: Date? = nil, now: Date = .now) async throws -> Page<Reading> {
         var query = [URLQueryItem(name: "count", value: String(count)),
                      URLQueryItem(name: "find[date][$lte]",
                                   value: Self.millis(now.addingTimeInterval(Self.futureTolerance)))]
@@ -146,7 +153,7 @@ struct Nightscout {
         }
         let readings = entries.compactMap(\.reading).sorted { $0.date < $1.date }
         guard !readings.isEmpty || since != nil else { throw NightscoutError.empty }
-        return readings
+        return Page(items: readings, isFull: entries.count >= count)
     }
 
     /// More than one, because an uploader may spread its data over several records and a CGM app
@@ -165,12 +172,14 @@ struct Nightscout {
         return PumpStatus.merged(try Self.records(in: data).compactMap(PumpStatus.init(record:)))
     }
 
-    func treatments(count: Int, since: Date) async throws -> [Treatment] {
+    func treatments(count: Int, since: Date) async throws -> Page<Treatment> {
         let data = try await get("api/v1/treatments.json", query: [
             URLQueryItem(name: "count", value: String(count)),
             URLQueryItem(name: "find[created_at][$gte]", value: NightscoutTime.string(since)),
         ])
-        return try Self.records(in: data).compactMap(Treatment.init(record:)).sorted { $0.date < $1.date }
+        let records = try Self.records(in: data)
+        return Page(items: records.compactMap(Treatment.init(record:)).sorted { $0.date < $1.date },
+                    isFull: records.count >= count)
     }
 
     /// `since` is required: without a date filter, Nightscout searches only the last two days.
