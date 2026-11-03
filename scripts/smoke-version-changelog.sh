@@ -144,11 +144,15 @@ grep -q "break it again" <<<"${breaking}" || {
     echo "::error::smoke: bang entry missing from the changelog"; exit 1; }
 
 scripts/changelog.sh prepend 2.0.0 v1.0.0 HEAD >/dev/null
+first="$(shasum CHANGELOG.md)"
 scripts/changelog.sh prepend 2.0.0 v1.0.0 HEAD | grep -q "already has 2.0.0" || {
     echo "::error::smoke: a second prepend is not idempotent"; exit 1; }
-git diff --quiet -- CHANGELOG.md || {
-    echo "::error::smoke: a second prepend changed CHANGELOG.md"; exit 1; }
-echo "ok: prepend is idempotent"
+expect "${first}" "$(shasum CHANGELOG.md)" "a second prepend leaves CHANGELOG.md alone"
+
+scripts/changelog.sh prepend 2.0.1 v1.0.0 HEAD >/dev/null
+expect "2.0.1 2.0.0" "$(grep '^## ' CHANGELOG.md | sed -E 's/^## \[?([0-9.]+).*/\1/' | paste -sd' ' -)" \
+    "a new section goes above the older one"
+expect "2" "$(grep -c 'break it again' CHANGELOG.md)" "the older section keeps its entries"
 
 expect_fail "a bogus range fails loudly" scripts/changelog.sh notes 9.9.9 v9.9.9.9 HEAD
 
