@@ -144,7 +144,8 @@ final class ReadingStore {
 
     /// Drops entries dated ahead of `now` beyond `Nightscout.futureTolerance`: a site whose
     /// uploader's clock runs ahead would otherwise pin the menu bar and the chart's window to a
-    /// future date forever. Dropped, never clamped: a clamped date would be invented data.
+    /// future date forever. Dropped, never clamped: a clamped date would be invented data. The
+    /// request already filters them; this keeps a server that ignores the filter in check.
     static func keepingPlausible(_ readings: [Reading], now: Date = .now) -> [Reading] {
         readings.filter { $0.date <= now.addingTimeInterval(Nightscout.futureTolerance) }
     }

@@ -44,6 +44,17 @@ extension SugargliderTests {
         #expect(readings.last?.direction == nil)
     }
 
+    /// Nightscout keeps Dexcom's error codes below LOW, and one absurd value must not trap.
+    @Test func fetchDropsErrorCodesAndValuesOutOfReach() async throws {
+        let site = StubbedSite(json: """
+            [{"sgv":38,"date":1700000000000},
+             {"sgv":1e20,"date":1700000100000},
+             {"sgv":39,"date":1700000200000}]
+            """)
+
+        #expect(try await site.nightscout().entries(count: 10).map(\.sgv) == [39])
+    }
+
     @Test func fetchRoundsFractionalSgv() async throws {
         let site = StubbedSite(json: """
             [{"sgv":100.4,"direction":"Flat","date":1700000000000},
@@ -67,19 +78,25 @@ extension SugargliderTests {
         #expect(try await site.nightscout().entries(count: 10, since: .now).isEmpty)
     }
 
-    @Test func fetchSinceSendsTheDateFilterInMilliseconds() async throws {
+    /// Entries dated past the tolerance stay on the server, or they would fill `count`.
+    @Test func fetchSendsTheDateFiltersInMilliseconds() async throws {
         let site = StubbedSite(json: oneReading)
+        let now = Date(timeIntervalSince1970: 1_700_000_600)
 
-        _ = try await site.nightscout().entries(count: 10, since: Date(timeIntervalSince1970: 1_700_000_000))
-        #expect(site.requests == ["/api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$gt%5D=1700000000000"])
+        _ = try await site.nightscout().entries(count: 10, since: Date(timeIntervalSince1970: 1_700_000_000), now: now)
+        #expect(site.requests == [
+            "/api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$lte%5D=1700000900000"
+                + "&find%5Bdate%5D%5B$gt%5D=1700000000000",
+        ])
     }
 
     @Test(arguments: [("   ", ""), (" secret ", "&token=secret")])
     func fetchTrimsTheSiteURLAndToken(token: String, tokenQuery: String) async throws {
         let site = StubbedSite(json: oneReading)
 
-        _ = try await site.nightscout(token: token, baseURL: site.baseURL + "///").entries(count: 10)
-        #expect(site.requests == ["/api/v1/entries/sgv.json?count=10\(tokenQuery)"])
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        _ = try await site.nightscout(token: token, baseURL: site.baseURL + "///").entries(count: 10, now: now)
+        #expect(site.requests == ["/api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$lte%5D=1700000300000\(tokenQuery)"])
     }
 
     @Test(arguments: ["not json at all", #"{"foo":1}"#])

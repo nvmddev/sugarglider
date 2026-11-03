@@ -122,19 +122,23 @@ struct Nightscout {
             millis = try? row.decodeIfPresent(Double.self, forKey: .date)
         }
 
+        /// Below LOW, Nightscout keeps Dexcom's error codes (?SN, ???, ?RF), not glucose.
         var reading: Reading? {
-            guard let sgv, let millis else { return nil }
-            return Reading(sgv: Int(sgv.rounded()), direction: direction.flatMap(Reading.Direction.init),
+            guard let sgv, let millis, let mgdl = Int(exactly: sgv.rounded()),
+                  mgdl >= Reading.OutOfRange.low.rawValue else { return nil }
+            return Reading(sgv: mgdl, direction: direction.flatMap(Reading.Direction.init),
                            date: Date(timeIntervalSince1970: millis / 1000))
         }
     }
 
-    /// With `since` set this is a top-up, where nothing new is a valid answer.
-    func entries(count: Int, since: Date? = nil) async throws -> [Reading] {
-        var query = [URLQueryItem(name: "count", value: String(count))]
+    /// With `since` set this is a top-up, where nothing new is a valid answer. Entries dated
+    /// ahead are left on the server: they would fill `count` and hide the real ones.
+    func entries(count: Int, since: Date? = nil, now: Date = .now) async throws -> [Reading] {
+        var query = [URLQueryItem(name: "count", value: String(count)),
+                     URLQueryItem(name: "find[date][$lte]",
+                                  value: Self.millis(now.addingTimeInterval(Self.futureTolerance)))]
         if let since {
-            let millis = Int64((since.timeIntervalSince1970 * 1000).rounded())
-            query.append(URLQueryItem(name: "find[date][$gt]", value: String(millis)))
+            query.append(URLQueryItem(name: "find[date][$gt]", value: Self.millis(since)))
         }
         let data = try await get("api/v1/entries/sgv.json", query: query)
         guard let entries = try? Self.decoder.decode([Entry].self, from: data) else {
@@ -150,7 +154,7 @@ struct Nightscout {
     /// from passing for current.
     static let deviceStatusCount = 30
 
-    /// Records dated further ahead than this are dropped by the store, and the pump merge
+    /// Entries dated further ahead than this are neither requested nor kept, and the pump merge
     /// anchors on the newest record within it instead of a skewed one.
     static let futureTolerance: TimeInterval = 5 * 60
 
@@ -184,6 +188,10 @@ struct Nightscout {
             throw NightscoutError.decode
         }
         return array.compactMap { $0 as? [String: Any] }
+    }
+
+    private static func millis(_ date: Date) -> String {
+        String(Int64((date.timeIntervalSince1970 * 1000).rounded()))
     }
 
     private func get(_ path: String, query: [URLQueryItem]) async throws -> Data {
