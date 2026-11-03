@@ -98,10 +98,11 @@ struct KeychainTokenStore: TokenStorage {
     }
 
     /// True when the item is gone; a failed delete must report the token as memory-only. The
-    /// cleanup calls after a write ignore the result on purpose.
+    /// cleanup calls after a write ignore the result on purpose. A build without the entitlement
+    /// can't reach the data-protection Keychain at all, so nothing there could come back.
     @discardableResult
     private static func remove(dataProtection: Bool) -> Bool {
         let status = SecItemDelete(baseQuery(dataProtection: dataProtection) as CFDictionary)
-        return status == errSecSuccess || status == errSecItemNotFound
+        return [errSecSuccess, errSecItemNotFound, errSecMissingEntitlement].contains(status)
     }
 }
