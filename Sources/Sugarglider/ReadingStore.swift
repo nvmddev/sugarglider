@@ -30,8 +30,9 @@ final class ReadingStore {
     @ObservationIgnored var tickInterval: Duration = .seconds(30)
     @ObservationIgnored var idleTickInterval: Duration = .seconds(300)
 
-    /// Start of the earliest window a full fetch requested, which is what the cache covers.
-    /// Only moves earlier: a request that finished late never narrows what an earlier fetch covered.
+    /// Start of the earliest window a full fetch requested, which is what the cache covers. A full
+    /// fetch only moves it earlier, so one that finished late never narrows what an earlier fetch
+    /// covered. Only a top-up that hit its count cap moves it later, to the oldest row it brought.
     @ObservationIgnored private(set) var historyWindowStart: Date?
     @ObservationIgnored private(set) var treatmentsWindowStart: Date?
 
