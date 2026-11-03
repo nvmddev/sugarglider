@@ -27,6 +27,7 @@ struct MenuBarContentView: View {
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .frame(width: 30, alignment: .trailing)
+                    .accessibilityHidden(true)
             }
 
             Divider()

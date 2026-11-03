@@ -135,6 +135,19 @@ extension SugargliderTests {
         #expect(MenuBarLabel(settings: settings, store: store).spokenTitle(locale: Self.enUS) == "6.7, rising slowly")
     }
 
+    @Test func spokenTitleSaysWhatTheSymbolsMean() {
+        let settings = Self.makeSettings()
+        let store = ReadingStore(settings: settings)
+        let label = MenuBarLabel(settings: settings, store: store)
+        #expect(label.spokenTitle(locale: Self.enUS) == "CGM, not set up")
+        settings.baseURL = "https://ns.example"
+        #expect(label.spokenTitle(locale: Self.enUS) == "CGM, loading")
+        store.lastError = "HTTP 500"
+        #expect(label.spokenTitle(locale: Self.enUS) == "CGM, no reading")
+        store.lastReading = reading(120, direction: .fortyFiveUp, minutesAgo: 23, from: store.now)
+        #expect(label.spokenTitle(locale: Self.enUS) == "6.7, rising slowly, stale, 23 minutes ago")
+    }
+
     @Test func titleShowsTheDeltaOnlyWhenSetToTheStatusBar() {
         let settings = Self.makeSettings()
         settings.baseURL = "https://ns.example"

@@ -38,6 +38,7 @@ struct ColorsTab: View {
                             .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                             .frame(width: 30, alignment: .trailing)
+                            .accessibilityHidden(true)
                     }
                 }
                 .padding(5)
