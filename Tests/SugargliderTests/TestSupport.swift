@@ -161,12 +161,12 @@ private final class SiteProtocol: URLProtocol {
 
 /// `ReadingStore` fetches in `Task`s nothing can await, so tests poll for the effect.
 @MainActor
-func waitUntil(_ what: String, _ condition: () -> Bool) async throws {
-    for _ in 0..<400 {
-        if condition() { return }
+func waitUntil(_ what: String, timeout: Duration = .seconds(4), _ condition: () -> Bool) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while !condition() {
+        guard ContinuousClock.now < deadline else { throw WaitTimedOut(what: what) }
         try await Task.sleep(for: .milliseconds(10))
     }
-    throw WaitTimedOut(what: what)
 }
 
 /// The wait ended without the state: throw, so the test fails once at the wait

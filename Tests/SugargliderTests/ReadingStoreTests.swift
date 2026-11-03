@@ -538,7 +538,7 @@ extension SugargliderTests {
         store.ensureHistoryCoverage()
         settings.rangeHours = 6
         store.ensureHistoryCoverage()
-        try await Task.sleep(for: .milliseconds(600))   // past the 400 ms debounce
+        await store.widening?.value
         #expect(server.requests.count == requestsBefore)
     }
 
@@ -575,13 +575,7 @@ extension SugargliderTests {
         let before = store.now
 
         // The tick plus its 5 s tolerance: well before the 300 s sleep the clock was on.
-        let deadline = Date.now.addingTimeInterval(8)
-        var ticked = false
-        while Date.now < deadline, !ticked {
-            ticked = store.now > before
-            if !ticked { try await Task.sleep(for: .milliseconds(10)) }
-        }
-        #expect(ticked)
+        try await waitUntil("the steady tick", timeout: .seconds(8)) { store.now > before }
     }
 
     // MARK: - T6: races and seams
@@ -700,9 +694,6 @@ extension SugargliderTests {
     @Test func relativeNamesThePreviousDay() {
         let now = Date.now
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
-        var style = Date.AnchoredRelativeFormatStyle(anchor: yesterday, presentation: .named, unitsStyle: .wide)
-        style.allowedFields = [.minute, .hour, .day]
-        style.locale = Locale(identifier: "en_US")
-        #expect(style.format(now) == "yesterday")
+        #expect(yesterday.relative(to: now, locale: Self.enUS) == "yesterday")
     }
 }

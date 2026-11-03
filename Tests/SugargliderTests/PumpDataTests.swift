@@ -309,7 +309,7 @@ extension SugargliderTests {
 
     @Test func fetchTreatmentsRejectsAnythingButAnArray() async throws {
         let server = StubbedSite(json: #"{"status":401}"#)
-        await #expect(throws: NightscoutError.self) {
+        await #expect(throws: NightscoutError.decode) {
             try await server.nightscout().treatments(count: 10, since: .now)
         }
     }

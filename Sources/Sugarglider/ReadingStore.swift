@@ -43,7 +43,8 @@ final class ReadingStore {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var polling: Task<Void, Never>?
     @ObservationIgnored private var reconnecting: Task<Void, Never>?
-    @ObservationIgnored private var widening: Task<Void, Never>?
+    /// Readable so a test can await the debounce instead of sleeping past it.
+    @ObservationIgnored private(set) var widening: Task<Void, Never>?
     @ObservationIgnored private var ticking: Task<Void, Never>?
 
     private let settings: AppSettings
