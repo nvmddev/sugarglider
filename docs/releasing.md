@@ -8,9 +8,10 @@ Maintainers only. Two ways in, both landing in the same
 # last tag, then tag, build and publish:
 gh workflow run release.yml -f bump=auto
 
-# …or force a level, or rehearse without publishing anything:
+# …or force a level, or rehearse without publishing anything (a rehearsal
+# may run on any branch, a real release only on main):
 gh workflow run release.yml -f bump=minor
-gh workflow run release.yml -f bump=auto -f dry_run=true
+gh workflow run release.yml -f bump=auto -f dry_run=true --ref my-branch
 
 # …or just push a tag yourself:
 git tag v1.2.0 && git push origin v1.2.0

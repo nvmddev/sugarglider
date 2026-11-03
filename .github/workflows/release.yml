@@ -53,12 +53,19 @@ jobs:
         id: version
         env:
           BUMP: ${{ inputs.bump || 'auto' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             version="${GITHUB_REF_NAME#v}"
             previous="$(scripts/version.sh previous "${GITHUB_REF_NAME}")"
           else
+            # A real release tags and publishes the branch it ran on.
+            if [[ "${DRY_RUN}" != "true" && "${GITHUB_REF_NAME}" != "${DEFAULT_BRANCH}" ]]; then
+              echo "::error::Releases run from ${DEFAULT_BRANCH} only. Use dry_run to test another branch."
+              exit 1
+            fi
             version="$(scripts/version.sh next "${BUMP}")"
             previous="$(scripts/version.sh latest)"
             if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
