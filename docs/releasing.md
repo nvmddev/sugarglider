@@ -13,7 +13,7 @@ gh workflow run release.yml -f bump=auto
 gh workflow run release.yml -f bump=minor
 gh workflow run release.yml -f bump=auto -f dry_run=true --ref my-branch
 
-# …or just push a tag yourself:
+# …or push a tag on a commit in main yourself:
 git tag v1.2.0 && git push origin v1.2.0
 ```
 

@@ -57,11 +57,15 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
+          # A real release publishes what it built, so it comes from the default branch only.
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            if ! git merge-base --is-ancestor "${GITHUB_SHA}" "origin/${DEFAULT_BRANCH}"; then
+              echo "::error::${GITHUB_REF_NAME} is not on ${DEFAULT_BRANCH}. Releases run from ${DEFAULT_BRANCH} only."
+              exit 1
+            fi
             version="${GITHUB_REF_NAME#v}"
             previous="$(scripts/version.sh previous "${GITHUB_REF_NAME}")"
           else
-            # A real release tags and publishes the branch it ran on.
             if [[ "${DRY_RUN}" != "true" && "${GITHUB_REF_NAME}" != "${DEFAULT_BRANCH}" ]]; then
               echo "::error::Releases run from ${DEFAULT_BRANCH} only. Use dry_run to test another branch."
               exit 1
