@@ -50,11 +50,11 @@ struct Reading: Equatable {
     func value(in units: AppSettings.Units) -> Double { units.value(fromMgdl: Double(sgv)) }
 
     /// LOW and HIGH have no value, so no unit either.
-    func text(in units: AppSettings.Units, withUnit: Bool = false) -> String {
+    func text(in units: AppSettings.Units, withUnit: Bool = false, locale: Locale = .autoupdatingCurrent) -> String {
         switch outOfRange {
         case .low: String(localized: "LOW")
         case .high: String(localized: "HIGH")
-        case nil: withUnit ? "\(units.text(fromMgdl: sgv)) \(units.label)" : units.text(fromMgdl: sgv)
+        case nil: withUnit ? "\(units.text(fromMgdl: sgv, locale: locale)) \(units.label)" : units.text(fromMgdl: sgv, locale: locale)
         }
     }
 }
@@ -82,6 +82,13 @@ struct Nightscout {
     var baseURL: String
     var token: String
     var session = Nightscout.sharedSession
+
+    /// A capped answer. Full when the server stopped at the count, before rows the app can't use
+    /// were dropped: rows older than these may then exist.
+    struct Page<Item> {
+        var items: [Item]
+        var isFull: Bool
+    }
 
     /// 15 s of idle time between bytes, and 60 s for the whole request: a server that answers
     /// and then trickles its body could otherwise hold the serial poll loop indefinitely.
@@ -122,19 +129,25 @@ struct Nightscout {
             millis = try? row.decodeIfPresent(Double.self, forKey: .date)
         }
 
+        /// Below LOW, Nightscout keeps Dexcom's error codes (?SN, ???, ?RF), not glucose.
         var reading: Reading? {
-            guard let sgv, let millis else { return nil }
-            return Reading(sgv: Int(sgv.rounded()), direction: direction.flatMap(Reading.Direction.init),
+            guard let sgv, let millis, let mgdl = Int(exactly: sgv.rounded()),
+                  mgdl >= Reading.OutOfRange.low.rawValue else { return nil }
+            return Reading(sgv: mgdl, direction: direction.flatMap(Reading.Direction.init),
                            date: Date(timeIntervalSince1970: millis / 1000))
         }
     }
 
-    /// Oldest first. With `since` set this is a top-up, where nothing new is a valid answer.
-    func entries(count: Int, since: Date? = nil) async throws -> [Reading] {
-        var query = [URLQueryItem(name: "count", value: String(count))]
+    /// With `since` set this is a top-up, where nothing new is a valid answer. Entries dated
+    /// ahead are left on the server: they would fill `count` and hide the real ones. Any date
+    /// filter turns off Nightscout's default lower bound, so a site idle for days still answers
+    /// with its last entry, which then shows its age.
+    func entries(count: Int, since: Date? = nil, now: Date = .now) async throws -> Page<Reading> {
+        var query = [URLQueryItem(name: "count", value: String(count)),
+                     URLQueryItem(name: "find[date][$lte]",
+                                  value: Self.millis(now.addingTimeInterval(Self.futureTolerance)))]
         if let since {
-            let millis = Int64((since.timeIntervalSince1970 * 1000).rounded())
-            query.append(URLQueryItem(name: "find[date][$gt]", value: String(millis)))
+            query.append(URLQueryItem(name: "find[date][$gt]", value: Self.millis(since)))
         }
         let data = try await get("api/v1/entries/sgv.json", query: query)
         guard let entries = try? Self.decoder.decode([Entry].self, from: data) else {
@@ -142,13 +155,17 @@ struct Nightscout {
         }
         let readings = entries.compactMap(\.reading).sorted { $0.date < $1.date }
         guard !readings.isEmpty || since != nil else { throw NightscoutError.empty }
-        return readings
+        return Page(items: readings, isFull: entries.count >= count)
     }
 
     /// More than one, because an uploader may spread its data over several records and a CGM app
     /// (xDrip+) posts its phone's battery in between; `PumpStatus.mergeSpan` keeps the older ones
     /// from passing for current.
     static let deviceStatusCount = 30
+
+    /// Entries dated further ahead than this are neither requested nor kept, and the pump merge
+    /// anchors on the newest record within it instead of a skewed one.
+    static let futureTolerance: TimeInterval = 5 * 60
 
     /// Nil rather than an error for a site without pump data: most only have a CGM uploading.
     func pumpStatus() async throws -> PumpStatus? {
@@ -157,13 +174,14 @@ struct Nightscout {
         return PumpStatus.merged(try Self.records(in: data).compactMap(PumpStatus.init(record:)))
     }
 
-    /// Oldest first.
-    func treatments(count: Int, since: Date) async throws -> [Treatment] {
+    func treatments(count: Int, since: Date) async throws -> Page<Treatment> {
         let data = try await get("api/v1/treatments.json", query: [
             URLQueryItem(name: "count", value: String(count)),
             URLQueryItem(name: "find[created_at][$gte]", value: NightscoutTime.string(since)),
         ])
-        return try Self.records(in: data).compactMap(Treatment.init(record:)).sorted { $0.date < $1.date }
+        let records = try Self.records(in: data)
+        return Page(items: records.compactMap(Treatment.init(record:)).sorted { $0.date < $1.date },
+                    isFull: records.count >= count)
     }
 
     /// `since` is required: without a date filter, Nightscout searches only the last two days.
@@ -181,6 +199,10 @@ struct Nightscout {
             throw NightscoutError.decode
         }
         return array.compactMap { $0 as? [String: Any] }
+    }
+
+    private static func millis(_ date: Date) -> String {
+        String(Int64((date.timeIntervalSince1970 * 1000).rounded()))
     }
 
     private func get(_ path: String, query: [URLQueryItem]) async throws -> Data {

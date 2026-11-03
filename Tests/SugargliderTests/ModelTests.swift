@@ -28,8 +28,8 @@ extension SugargliderTests {
 
     @Test(arguments: [(AppSettings.Units.mgdl, 90, "90"), (.mmol, 90, "5.0"), (.mmol, 100, "5.6")])
     func glucoseTextHasOneDecimalInMmol(units: AppSettings.Units, mgdl: Int, expected: String) {
-        #expect(units.text(fromMgdl: mgdl) == expected)
-        #expect(reading(mgdl).text(in: units) == expected)
+        #expect(units.text(fromMgdl: mgdl, locale: Self.enUS) == expected)
+        #expect(reading(mgdl).text(in: units, locale: Self.enUS) == expected)
     }
 
     @Test(arguments: [AppSettings.Units.mmol, .mgdl])

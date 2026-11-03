@@ -25,7 +25,14 @@ final class ReadingStore {
     /// no value changes. They can't keep time themselves: a `TimelineView` hangs a `MenuBarExtra` label.
     private(set) var now = Date.now
 
-    /// Start of the window the last full fetch requested, which is what the cache covers.
+    /// The ticker intervals, injectable so tests can run the restart logic in milliseconds.
+    /// Not tracked: they are configuration, and a future write must not redraw every observer.
+    @ObservationIgnored var tickInterval: Duration = .seconds(30)
+    @ObservationIgnored var idleTickInterval: Duration = .seconds(300)
+
+    /// Start of the earliest window a full fetch requested, which is what the cache covers. A full
+    /// fetch only moves it earlier, so one that finished late never narrows what an earlier fetch
+    /// covered. Only a top-up that hit its count cap moves it later, to the oldest row it brought.
     @ObservationIgnored private(set) var historyWindowStart: Date?
     @ObservationIgnored private(set) var treatmentsWindowStart: Date?
 
@@ -36,7 +43,8 @@ final class ReadingStore {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var polling: Task<Void, Never>?
     @ObservationIgnored private var reconnecting: Task<Void, Never>?
-    @ObservationIgnored private var widening: Task<Void, Never>?
+    /// Readable so a test can await the debounce instead of sleeping past it.
+    @ObservationIgnored private(set) var widening: Task<Void, Never>?
     @ObservationIgnored private var ticking: Task<Void, Never>?
 
     private let settings: AppSettings
@@ -96,7 +104,7 @@ final class ReadingStore {
         ticking = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                let interval: Duration = self.lastReading == nil ? .seconds(300) : .seconds(30)
+                let interval: Duration = self.lastReading == nil ? self.idleTickInterval : self.tickInterval
                 try? await Task.sleep(for: interval, tolerance: .seconds(5))
                 self.tick()
             }
@@ -126,7 +134,7 @@ final class ReadingStore {
         guard settings.isConfigured else { return }
         let (site, generation) = (site, generation)
         do {
-            let latest = Self.keepingPlausible(try await site.entries(count: 2))
+            let latest = Self.keepingPlausible(try await site.entries(count: 2).items)
             guard generation == self.generation else { return }
             showNewest(of: latest)
             if Self.joinsUp(latest, with: readings) { merge(latest) }
@@ -136,14 +144,12 @@ final class ReadingStore {
         }
     }
 
-    /// How far ahead of this Mac's clock an entry may be dated and still count as plausible.
-    static let futureTolerance: TimeInterval = 5 * 60
-
-    /// Drops entries dated ahead of `now` beyond `futureTolerance`: a site whose uploader's clock
-    /// runs ahead would otherwise pin the menu bar and the chart's window to a future date
-    /// forever. Dropped, never clamped: a clamped date would be invented data.
+    /// Drops entries dated ahead of `now` beyond `Nightscout.futureTolerance`: a site whose
+    /// uploader's clock runs ahead would otherwise pin the menu bar and the chart's window to a
+    /// future date forever. Dropped, never clamped: a clamped date would be invented data. The
+    /// request already filters them; this keeps a server that ignores the filter in check.
     static func keepingPlausible(_ readings: [Reading], now: Date = .now) -> [Reading] {
-        readings.filter { $0.date <= now.addingTimeInterval(futureTolerance) }
+        readings.filter { $0.date <= now.addingTimeInterval(Nightscout.futureTolerance) }
     }
 
     /// Whether polled entries add to the history without a dropout. Entries beyond one stay
@@ -162,10 +168,16 @@ final class ReadingStore {
         // Never nil, not even for a covered but empty cache: that would be an unfiltered request.
         let since = (covered ? readings.last?.date : nil) ?? start
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        guard let fetched = await fetch({ try await $0.entries(count: count, since: since) }) else { return }
+        guard let page = await fetch({ try await $0.entries(count: count, since: since) }) else { return }
         fetchedAt[.history] = .now
-        if !covered { historyWindowStart = start }
-        merge(Self.keepingPlausible(fetched))
+        if !covered {
+            historyWindowStart = historyWindowStart.map { min($0, start) } ?? start
+        } else if page.isFull {
+            // A full top-up is the newest `count` rows, so after a long gap it may stop short of
+            // the cached ones. Coverage then starts where it arrived, and widening fills the gap.
+            historyWindowStart = page.items.first?.date
+        }
+        merge(Self.keepingPlausible(page.items))
     }
 
     /// A cap, not a selector: the date filter picks the window, this only bounds a site that
@@ -201,8 +213,9 @@ final class ReadingStore {
         }
     }
 
-    /// The Refresh button's one call: a single task so the parts don't overlap each other or a
-    /// poll's request for the same part.
+    /// The Refresh button's one call. The parts run in sequence, so they don't overlap each
+    /// other; a poll's `refresh()` can still race this, and the generation guard and idempotent
+    /// merges keep that harmless.
     func refreshAll(force: Bool) async {
         await refresh()
         await refreshHistory(force: force)
@@ -236,10 +249,15 @@ final class ReadingStore {
         let since = Self.treatmentsSince(windowStart: start, covered: covered,
                                          newestCached: treatments.last?.date)
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
-        guard let fetched = await fetch({ try await $0.treatments(count: count, since: since) }) else { return }
+        guard let page = await fetch({ try await $0.treatments(count: count, since: since) }) else { return }
         fetchedAt[.treatments] = .now
-        if !covered { treatmentsWindowStart = start }
-        treatments = Self.merged(treatments, with: fetched)
+        if !covered {
+            treatmentsWindowStart = treatmentsWindowStart.map { min($0, start) } ?? start
+        } else if page.isFull {
+            // As in refreshHistory; the marker is a window start, which the request precedes.
+            treatmentsWindowStart = page.items.first?.date.addingTimeInterval(Self.tempBasalLookback)
+        }
+        treatments = Self.merged(treatments, with: page.items)
     }
 
     static func treatmentsSince(windowStart: Date, covered: Bool, newestCached: Date?) -> Date {
@@ -339,7 +357,7 @@ final class ReadingStore {
             // Kept with the change: the 30 s tick already moves the clock, and a poll that
             // changes nothing has nothing new to age.
             tick()
-            // The clock was on its slow unconfigured sleep; restart it, or the residual long
+            // The clock was on its slow no-reading sleep; restart it, or the residual long
             // sleep would freeze the age and the stale check.
             if wasWithoutAReading { restartTicker() }
         }
@@ -361,7 +379,7 @@ final class ReadingStore {
 extension ReadingStore {
     /// Signed change since the previous reading, e.g. "+0.3"; nil when switched off, when the
     /// two readings aren't consecutive, or when either is LOW or HIGH, which have no value.
-    func deltaText() -> String? {
+    func deltaText(locale: Locale = .autoupdatingCurrent) -> String? {
         guard settings.deltaDisplay != .off,
               let current = lastReading, let previous = previousReading,
               current.outOfRange == nil, previous.outOfRange == nil else { return nil }
@@ -369,7 +387,7 @@ extension ReadingStore {
         guard gap > 0, gap < 12 * 60 else { return nil }
         let units = settings.units
         let delta = current.value(in: units) - previous.value(in: units)
-        return delta.formatted(.number.precision(.fractionLength(units == .mmol ? 1 : 0)).sign(strategy: .always()))
+        return delta.formatted(.number.locale(locale).precision(.fractionLength(units == .mmol ? 1 : 0)).sign(strategy: .always()))
     }
 
     var isStale: Bool {
@@ -381,16 +399,18 @@ extension ReadingStore {
 extension Date {
     /// "13m", "1d 4h": the time from this date to `now` in at most `units` units, rounded down so an age
     /// never overstates. `width` lets VoiceOver's text use the spoken words while the title stays compact.
-    func age(at now: Date, units: Int = 1, width: Duration.UnitsFormatStyle.UnitWidth = .narrow) -> String {
+    func age(at now: Date, units: Int = 1, width: Duration.UnitsFormatStyle.UnitWidth = .narrow,
+             locale: Locale = .autoupdatingCurrent) -> String {
         Duration.seconds(max(0, now.timeIntervalSince(self))).formatted(
             .units(allowed: [.days, .hours, .minutes], width: width,
-                   maximumUnitCount: units, fractionalPart: .hide(rounded: .down)))
+                   maximumUnitCount: units, fractionalPart: .hide(rounded: .down)).locale(locale))
     }
 
     /// "3 minutes ago", "this minute", "yesterday".
-    func relative(to now: Date) -> String {
+    func relative(to now: Date, locale: Locale = .autoupdatingCurrent) -> String {
         var style = Date.AnchoredRelativeFormatStyle(anchor: self, presentation: .named, unitsStyle: .wide)
         style.allowedFields = [.minute, .hour, .day]
+        style.locale = locale
         return style.format(now)
     }
 }

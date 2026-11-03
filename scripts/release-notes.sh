@@ -44,7 +44,7 @@ cat <<'EOF'
 Verify the download against `checksums.txt`:
 
 ```sh
-shasum -a 256 -c checksums.txt
+shasum -a 256 -c --ignore-missing checksums.txt
 ```
 
 ---

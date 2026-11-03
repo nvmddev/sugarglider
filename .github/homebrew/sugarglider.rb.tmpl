@@ -18,6 +18,9 @@ cask "sugarglider" do
   uninstall quit: "dev.nevermind.sugarglider"
 
   zap trash: [
+    # The app is sandboxed, so everything it writes lives in the container. The
+    # bare paths cover installs from before the sandbox.
+    "~/Library/Containers/dev.nevermind.sugarglider",
     "~/Library/Preferences/dev.nevermind.sugarglider.plist",
     "~/Library/Caches/dev.nevermind.sugarglider",
     "~/Library/HTTPStorages/dev.nevermind.sugarglider",
