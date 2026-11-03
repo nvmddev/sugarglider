@@ -339,6 +339,60 @@ extension SugargliderTests {
         #expect(server.requests.count >= 2)
     }
 
+    /// After a long gap a top-up capped at `count` stops short of the cached readings. The
+    /// marker must not claim the hole, or widening the range would never fill it.
+    @Test func aCappedTopUpMovesTheCoverageToWhatArrived() async throws {
+        let now = Date.now
+        let beforeTheGap = epochMillis(now) - 48 * 3_600_000
+        let cached = StubbedSite(json: #"[{"sgv":90,"date":\#(beforeTheGap)}]"#)
+        let settings = Self.makeSettings()
+        settings.rangeHours = 72
+        let store = cached.store(settings)
+        await store.refreshHistory(force: true)
+        settings.rangeHours = 2
+
+        let count = ReadingStore.historyCount(forRangeHours: 2)
+        let newest = epochMillis(now)
+        let rows = (0..<count).map { #"{"sgv":100,"date":\#(newest - Int64($0) * 60_000)}"# }
+        let capped = StubbedSite(json: "[\(rows.joined(separator: ","))]")
+        settings.baseURL = capped.baseURL
+        await store.refreshHistory(force: true)
+
+        #expect(capped.requests.count == 1)
+        #expect(capped.requests[0].contains("$gt%5D=\(beforeTheGap)"))
+        let oldestArrived = Date(timeIntervalSince1970: Double(newest - Int64(count - 1) * 60_000) / 1000)
+        #expect(store.historyWindowStart == oldestArrived)
+        #expect(ReadingStore.covers(store.historyWindowStart, from: now.addingTimeInterval(-2 * 3600)))
+        #expect(!ReadingStore.covers(store.historyWindowStart, from: now.addingTimeInterval(-72 * 3600)))
+    }
+
+    @Test func aCappedTreatmentsTopUpMovesTheCoverageToWhatArrived() async throws {
+        let now = Date.now
+        let cached = StubbedSite(json: """
+            [{"_id":"old","eventType":"Temp Basal","mills":\(epochMillis(now) - 48 * 3_600_000),
+              "duration":30,"absolute":1}]
+            """)
+        let settings = Self.makeSettings()
+        settings.rangeHours = 72
+        let store = cached.store(settings)
+        await store.refreshTreatments(force: true)
+        settings.rangeHours = 2
+
+        let count = ReadingStore.historyCount(forRangeHours: 2)
+        let newest = epochMillis(now)
+        let rows = (0..<count).map {
+            #"{"_id":"t\#($0)","eventType":"Temp Basal","mills":\#(newest - Int64($0) * 60_000),"duration":30,"absolute":1}"#
+        }
+        let capped = StubbedSite(json: "[\(rows.joined(separator: ","))]")
+        settings.baseURL = capped.baseURL
+        await store.refreshTreatments(force: true)
+
+        #expect(capped.requests.count == 1)
+        let oldestArrived = Date(timeIntervalSince1970: Double(newest - Int64(count - 1) * 60_000) / 1000)
+        #expect(store.treatmentsWindowStart == oldestArrived.addingTimeInterval(ReadingStore.tempBasalLookback))
+        #expect(!ReadingStore.covers(store.treatmentsWindowStart, from: now.addingTimeInterval(-72 * 3600)))
+    }
+
     @Test func reconnectForgetsThePreviousSite() async throws {
         let nowMs = epochMillis(.now)
         let server = StubbedSite(json: """

@@ -168,7 +168,13 @@ final class ReadingStore {
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
         guard let fetched = await fetch({ try await $0.entries(count: count, since: since) }) else { return }
         fetchedAt[.history] = .now
-        if !covered { historyWindowStart = historyWindowStart.map { min($0, start) } ?? start }
+        if !covered {
+            historyWindowStart = historyWindowStart.map { min($0, start) } ?? start
+        } else if fetched.count >= count {
+            // A full top-up is the newest `count` rows, so after a long gap it may stop short of
+            // the cached ones. Coverage then starts where it arrived, and widening fills the gap.
+            historyWindowStart = fetched.first?.date
+        }
         merge(Self.keepingPlausible(fetched))
     }
 
@@ -243,7 +249,12 @@ final class ReadingStore {
         let count = Self.historyCount(forRangeHours: settings.rangeHours)
         guard let fetched = await fetch({ try await $0.treatments(count: count, since: since) }) else { return }
         fetchedAt[.treatments] = .now
-        if !covered { treatmentsWindowStart = treatmentsWindowStart.map { min($0, start) } ?? start }
+        if !covered {
+            treatmentsWindowStart = treatmentsWindowStart.map { min($0, start) } ?? start
+        } else if fetched.count >= count {
+            // As in refreshHistory; the marker is a window start, which the request precedes.
+            treatmentsWindowStart = fetched.first?.date.addingTimeInterval(Self.tempBasalLookback)
+        }
         treatments = Self.merged(treatments, with: fetched)
     }
 
