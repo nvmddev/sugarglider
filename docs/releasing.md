@@ -8,11 +8,12 @@ Maintainers only. Two ways in, both landing in the same
 # last tag, then tag, build and publish:
 gh workflow run release.yml -f bump=auto
 
-# …or force a level, or rehearse without publishing anything:
+# …or force a level, or rehearse without publishing anything (a rehearsal
+# may run on any branch, a real release only on main):
 gh workflow run release.yml -f bump=minor
-gh workflow run release.yml -f bump=auto -f dry_run=true
+gh workflow run release.yml -f bump=auto -f dry_run=true --ref my-branch
 
-# …or just push a tag yourself:
+# …or push a tag on a commit in main yourself:
 git tag v1.2.0 && git push origin v1.2.0
 ```
 
@@ -72,9 +73,12 @@ token in the Keychain; it just has to ask for access once after each update.
 
 All of these are set on this repository, so releases come out signed and
 notarized and the release notes carry no Gatekeeper workaround. Without them
-the workflow degrades instead of failing: no certificate means an ad-hoc build,
-no `APPLE_ID` means signed but not notarized, and the job warns either way. When
-it does notarize, `scripts/verify-notarization.sh` checks the stapled tickets on
+the workflow mostly degrades instead of failing: no certificate means an ad-hoc
+build, no `APPLE_ID` means signed but not notarized, and the job warns either
+way. One combination fails on purpose: an `APPLE_ID` without
+`APPLE_TEAM_ID` or `APPLE_APP_PASSWORD` can't notarize, so the workflow stops at
+that step rather than publishing something it can't verify. When it does
+notarize, `scripts/verify-notarization.sh` checks the stapled tickets on
 the app, on the copy inside the zip and on the DMG, plus Gatekeeper's verdict,
 and fails the release before anything is published if one is missing.
 

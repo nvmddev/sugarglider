@@ -13,8 +13,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+WORK="$(mktemp -d)"
+trap 'rm -rf "${WORK}"' EXIT
+
 all_tags() {
-    git tag --list 'v[0-9]*' --sort=-v:refname
+    # Plain releases only: the two-dot glob alone still matches v1.2.3-beta.1, and a
+    # prerelease as `latest` would fail every `next` call until the tag is deleted.
+    # Only tags on this branch count: an experiment tag on a side branch must not
+    # drive the next released version.
+    git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname --merged HEAD | grep -v -- '-' || true
 }
 
 # No `| head -n1`: under pipefail, git dying of SIGPIPE would fail the script.
@@ -29,7 +36,9 @@ latest_tag() {
 # commit yet, hence the fallback to the newest other tag.
 previous_tag() {
     local exclude="$1" tag prev
-    if prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${exclude}^" 2>/dev/null)"; then
+    # Prereleases are excluded here, not matched and rejected: the fallback below
+    # takes the newest plain tag on this branch.
+    if prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' "${exclude}^" 2>/dev/null)"; then
         printf '%s' "${prev}"
         return 0
     fi
@@ -41,17 +50,33 @@ previous_tag() {
 }
 
 detect_bump() {
-    local range="$1" bump="patch" record subject body
+    local range="$1" bump="patch" record subject body type bang
+    # Written through a file: `set -e` doesn't see a failing git log inside a process
+    # substitution, and a silent empty log would pass for "no changes".
+    git log --no-merges --format='%s%x1f%b%x1e' "${range}" > "${WORK}/records"
     while IFS= read -r -d $'\x1e' record; do
         record="${record#$'\n'}"
         subject="${record%%$'\x1f'*}"
         body="${record#*$'\x1f'}"
-        if [[ "${subject}" =~ ^[a-zA-Z]+(\([^\)]*\))?! ]] || [[ "${body}" == *"BREAKING CHANGE"* ]]; then
+        # The exact shape changelog.sh parses: types are not case-sensitive, the ! sits
+        # right before the colon, and a description must follow. The nested scope group
+        # matters: bash drops unmatched trailing groups from BASH_REMATCH, and without
+        # it the bang slot would hold the description for a scope-less subject.
+        if [[ "${subject}" =~ ^([a-zA-Z]+)(\(([^\)]+)\))?(!)?:[[:space:]]*(.+)$ ]]; then
+            type="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
+            bang="${BASH_REMATCH[4]}"
+        else
+            type="other"
+            bang=""
+        fi
+        # The footer tokens, at line starts only: prose that merely mentions the phrase
+        # must not break. BREAKING-CHANGE is the spec's synonym.
+        if [[ -n "${bang}" ]] || grep -qE '^BREAKING CHANGE: |^BREAKING-CHANGE: ' <<<"${body}"; then
             printf 'major'
             return 0
         fi
-        [[ "${subject}" =~ ^feat(\([^\)]*\))?: ]] && bump="minor"
-    done < <(git log --no-merges --format='%s%x1f%b%x1e' "${range}")
+        [[ "${type}" == "feat" ]] && bump="minor"
+    done < "${WORK}/records"
     printf '%s' "${bump}"
 }
 
@@ -65,6 +90,12 @@ app-changed)
         echo "changed (no release tag yet)"
         exit 0
     fi
+    # Without this, a mistyped tag answers "changed" and exits 0: git diff's 128
+    # would read as a difference.
+    git rev-parse -q --verify "${tag}^{commit}" >/dev/null || {
+        echo "error: '${tag}' is not a commit" >&2
+        exit 1
+    }
     if git diff --quiet "${tag}" HEAD -- "${APP_PATHS[@]}"; then
         echo "unchanged since ${tag}"
         exit 1

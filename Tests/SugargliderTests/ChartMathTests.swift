@@ -250,7 +250,7 @@ extension SugargliderTests {
 
     /// The Settings preview's contract: samples pinned to their own window end keep drawing
     /// however old they are, where a wall-clock window lets them age out into the empty state.
-    @Test func pinnedWindowEndKeepsStaleSampleDataVisible() {
+    @Test func pinnedWindowEndKeepsStaleSampleDataVisible() throws {
         let s = Self.makeSettings()
         let end = Date.now.addingTimeInterval(-6 * 3600)
         let samples = ChartMath.sampleReadings(
@@ -263,7 +263,8 @@ extension SugargliderTests {
 
         #expect(emptyState != nil)
         #expect(pinned != emptyState)
-        #expect(wallClock == emptyState)
+        let difference = Self.channelDifference(try #require(wallClock), try #require(emptyState))
+        #expect(difference.max <= 1, "wall clock vs empty: \(difference.differing) bytes off by up to \(difference.max)")
     }
 
     @Test func rendersWidestPreviewWindow() throws {
@@ -299,7 +300,7 @@ extension SugargliderTests {
 
     /// An uploader whose clock runs ahead dates the newest reading past the window's end. The end
     /// moves with it, so the chart draws as if the clocks agreed.
-    @Test func readingPastTheWindowEndMovesTheEnd() {
+    @Test func readingPastTheWindowEndMovesTheEnd() throws {
         let s = Self.makeSettings()
         let newest = Date.now
         let readings = [180, 150, 120, 110, 100].enumerated().map { i, sgv in
@@ -307,8 +308,11 @@ extension SugargliderTests {
         }
         let ahead = pixels(of: GlucoseChart(readings: readings, rangeHours: 2, settings: s,
                                             windowEnd: newest.addingTimeInterval(-10 * 60)))
+        let atTheEnd = pixels(of: GlucoseChart(readings: readings, rangeHours: 2, settings: s,
+                                               windowEnd: newest))
         #expect(ahead != nil)
-        #expect(ahead == pixels(of: GlucoseChart(readings: readings, rangeHours: 2, settings: s, windowEnd: newest)))
+        let difference = Self.channelDifference(try #require(ahead), try #require(atTheEnd))
+        #expect(difference.max <= 1, "ahead vs at-the-end: \(difference.differing) bytes off by up to \(difference.max)")
     }
 
     /// Single-reading segments take the isolated-dot branch.

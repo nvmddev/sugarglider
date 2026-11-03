@@ -5,6 +5,10 @@ import Synchronization
 
 @Suite(.defaultsCleanup) @MainActor
 struct SugargliderTests {
+    /// Pinned to this locale only where a test asserts a formatted string, so the
+    /// expectations don't depend on this machine's region.
+    static let enUS = Locale(identifier: "en_US")
+
     static func makeSettings(defaults: UserDefaults? = nil,
                              tokens: any TokenStorage = InMemoryTokenStore()) -> AppSettings {
         AppSettings(defaults: defaults ?? makeDefaults(), tokens: tokens)
@@ -12,6 +16,18 @@ struct SugargliderTests {
 
     static func makeDefaults() -> UserDefaults {
         UserDefaults(suiteName: DefaultsCleanup.directory.appending(path: UUID().uuidString).path)!
+    }
+
+    /// The largest per-channel difference and how many bytes differ between two raw renders.
+    /// Rasterization is reproducible only to ±1 per channel, so equality asserts must allow that.
+    static func channelDifference(_ a: Data, _ b: Data) -> (max: Int, differing: Int) {
+        guard a.count == b.count else { return (Int.max, Int.max) }
+        var max = 0, differing = 0
+        for (x, y) in zip(a, b) where x != y {
+            max = Swift.max(max, abs(Int(x) - Int(y)))
+            differing += 1
+        }
+        return (max, differing)
     }
 }
 
@@ -65,6 +81,13 @@ final class StubbedSite: Sendable {
     /// Path and query of every request, as sent.
     var requests: [String] { SiteProtocol.sites.withLock { $0[host]?.requests ?? [] } }
 
+    /// Delays every answer, so a slow response to a replaced site can be tested.
+    /// Set it before the request starts.
+    var delay: TimeInterval {
+        get { SiteProtocol.sites.withLock { $0[host]?.delay ?? 0 } }
+        set { SiteProtocol.sites.withLock { $0[host]?.delay = newValue } }
+    }
+
     init(status: Int = 200, json: String) {
         baseURL = "https://\(host)"
         SiteProtocol.sites.withLock { $0[host] = .init(status: status, body: Data(json.utf8)) }
@@ -87,10 +110,14 @@ private final class SiteProtocol: URLProtocol {
     struct Site {
         var status: Int
         var body: Data
+        var delay: TimeInterval = 0
         var requests: [String] = []
     }
 
     static let sites = Mutex<[String: Site]>([:])
+
+    /// Set by stopLoading: a request cancelled during the delay window must get no callbacks.
+    private let cancelled = Mutex(false)
 
     static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
@@ -111,24 +138,42 @@ private final class SiteProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
             return
         }
-        let response = HTTPURLResponse(url: url, statusCode: site.status, httpVersion: "HTTP/1.1",
-                                       headerFields: ["Content-Type": "application/json"])!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: site.body)
-        client?.urlProtocolDidFinishLoading(self)
+        let answer = { [site, url] in
+            guard !self.cancelled.withLock({ $0 }) else { return }
+            guard let client = self.client else { return }
+            let response = HTTPURLResponse(url: url, statusCode: site.status, httpVersion: "HTTP/1.1",
+                                           headerFields: ["Content-Type": "application/json"])!
+            client.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client.urlProtocol(self, didLoad: site.body)
+            client.urlProtocolDidFinishLoading(self)
+        }
+        if site.delay > 0 {
+            DispatchQueue.global().asyncAfter(deadline: .now() + site.delay, execute: answer)
+        } else {
+            answer()
+        }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        cancelled.withLock { $0 = true }
+    }
 }
 
 /// `ReadingStore` fetches in `Task`s nothing can await, so tests poll for the effect.
 @MainActor
-func waitUntil(_ what: String, _ condition: () -> Bool) async throws {
-    for _ in 0..<200 {
-        if condition() { return }
+func waitUntil(_ what: String, timeout: Duration = .seconds(4), _ condition: () -> Bool) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while !condition() {
+        guard ContinuousClock.now < deadline else { throw WaitTimedOut(what: what) }
         try await Task.sleep(for: .milliseconds(10))
     }
-    Issue.record("timed out waiting for \(what)")
+}
+
+/// The wait ended without the state: throw, so the test fails once at the wait
+/// instead of running on against a state that never arrived.
+struct WaitTimedOut: LocalizedError {
+    var what: String
+    var errorDescription: String? { "Timed out waiting for \(what)" }
 }
 
 /// Rounded the way `Nightscout.entries` rounds its date filter.

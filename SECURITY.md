@@ -40,8 +40,10 @@ telemetry, no analytics and no other network traffic. Worth reporting:
 
 ## Verifying a download
 
-Releases are signed with a Developer ID and notarized by Apple, and each one
-publishes a `checksums.txt` with the SHA-256 of its downloads:
+Releases from this repository are signed with a Developer ID and notarized by
+Apple; a build that ships without the signing secrets is ad-hoc signed and says
+so in its release notes. Every release publishes a `checksums.txt` with the
+SHA-256 of its downloads:
 
 ```sh
 shasum -a 256 Sugarglider-1.0.0.dmg          # compare with checksums.txt

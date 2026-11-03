@@ -4,9 +4,11 @@ import SwiftUI
 struct GeneralTab: View {
     @Bindable var settings: AppSettings
     @State private var status = ConnectionStatus.unconfigured
-    // SMAppService's status isn't observable, so it's mirrored here and re-read after every change.
+    // SMAppService's status isn't observable, so it's mirrored here and re-read after every change
+    // and whenever the window turns active: login items are approved and removed in System Settings.
     @State private var loginItem = SMAppService.mainApp.status
     @State private var loginItemError: String?
+    @Environment(\.appearsActive) private var appearsActive
 
     private enum ConnectionStatus {
         case unconfigured
@@ -50,8 +52,8 @@ struct GeneralTab: View {
                 }
                 Picker("Show delta", selection: $settings.deltaDisplay) {
                     Text("Off").tag(AppSettings.DeltaDisplay.off)
-                    Text("In Dropdown").tag(AppSettings.DeltaDisplay.menu)
-                    Text("In Dropdown + Menu Bar").tag(AppSettings.DeltaDisplay.menuAndStatusBar)
+                    Text("In Dropdown").tag(AppSettings.DeltaDisplay.dropdown)
+                    Text("In Dropdown + Menu Bar").tag(AppSettings.DeltaDisplay.dropdownAndStatusBar)
                 }
                 LabeledContent("Refresh") {
                     intervalField("Every", value: $settings.pollIntervalSeconds,
@@ -88,7 +90,9 @@ struct GeneralTab: View {
         .formStyle(.grouped)
         .autocorrectionDisabled()
         .task(id: [settings.baseURL, settings.token]) { await checkConnection() }
-        .onAppear { loginItem = SMAppService.mainApp.status }
+        .onChange(of: appearsActive, initial: true) {
+            if appearsActive { loginItem = SMAppService.mainApp.status }
+        }
     }
 
     private func setOpensAtLogin(_ isOn: Bool) {
@@ -126,8 +130,8 @@ struct GeneralTab: View {
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 .frame(width: 36)
+                .help(Text("\(limits.lowerBound) to \(limits.upperBound) \(Text(unit))"))
             Text(unit)
-                .help(Text("\(limits.lowerBound)–\(limits.upperBound) \(Text(unit))"))
         }
     }
 

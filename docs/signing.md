@@ -47,8 +47,10 @@ immediate exit 137 when the binary is started directly. Three one-time steps:
 
 Apple grants the profile `keychain-access-groups` as the team wildcard
 `TEAMID.*`, which covers the concrete group in
-`Resources/Sugarglider.entitlements`. Worth checking before building, because a profile that lacks it
-yields an app that signs cleanly and then refuses to launch:
+`Resources/Sugarglider.entitlements`. `build.sh` checks that before it signs: a
+profile without the entitlement is refused with an error, since it would
+otherwise sign cleanly and be killed at launch. To inspect a downloaded profile
+yourself:
 
 ```sh
 security cms -D -i Resources/embedded.provisionprofile | plutil -p -
@@ -67,9 +69,9 @@ base64 -i Resources/embedded.provisionprofile \
   | gh secret set MACOS_PROVISION_PROFILE
 ```
 
-`release.yml` writes it back out, checks that it really grants
-`keychain-access-groups`, and hands `build.sh` the `TEAM_ID` it already has from
-`APPLE_TEAM_ID`. Without the secret the release still builds, signs and
+`release.yml` writes it back out and hands `build.sh` the `TEAM_ID` it already
+has from `APPLE_TEAM_ID`. `build.sh` then checks that the profile grants
+`keychain-access-groups` for this app. Without the secret the release still builds, signs and
 notarizes; the app just falls back to the login Keychain and asks for access once
 after each update.
 

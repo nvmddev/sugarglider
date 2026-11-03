@@ -52,7 +52,7 @@ extension SugargliderTests {
         #expect(s.token == "")
         #expect(s.units == .mmol)
         #expect(s.dropdownBackground == .glass)
-        #expect(s.deltaDisplay == .menu)
+        #expect(s.deltaDisplay == .dropdown)
         #expect(s.targetLow == 70)
         #expect(s.targetHigh == 180)
         #expect(s.extremeLow == 54)
@@ -104,7 +104,7 @@ extension SugargliderTests {
         #expect(s.dotRadius == 6.5)
         #expect(s.dotHaloRadius == 9)
         #expect(s.rangeHours == 24)
-        #expect(s.deltaDisplay == .menuAndStatusBar)
+        #expect(s.deltaDisplay == .dropdownAndStatusBar)
         #expect(s.pollIntervalSeconds == 30)
         #expect(s.staleAfterMinutes == 20)
         #expect(s.chartBackgroundEnabled)
@@ -154,7 +154,7 @@ extension SugargliderTests {
                              dotUsesZoneColor: false, dotRadius: 6.5, dotHaloRadius: 9)
         s.chartBackgroundEnabled = true
         s.rangeHours = 24
-        s.deltaDisplay = .menuAndStatusBar
+        s.deltaDisplay = .dropdownAndStatusBar
         s.pollIntervalSeconds = 30
         s.staleAfterMinutes = 20
         s.showActiveInsulin = false
@@ -202,7 +202,7 @@ extension SugargliderTests {
         let s = Self.makeSettings(defaults: defaults)
         #expect(s.units == .mmol)
         #expect(s.dropdownBackground == .glass)
-        #expect(s.deltaDisplay == .menu)
+        #expect(s.deltaDisplay == .dropdown)
         #expect(s.rangeHours == 6)
     }
 
@@ -210,7 +210,7 @@ extension SugargliderTests {
     @Test func loadingWritesNothingBack() {
         let defaults = Self.makeDefaults()
         _ = Self.makeSettings(defaults: defaults)
-        let written = (StoredSettings.keys + AppSettings.colorKeys + ["colorPresets", "token"])
+        let written = (StoredSettings.keys + AppSettings.colorSlots.map(\.key) + ["colorPresets", "token"])
             .filter { defaults.object(forKey: $0) != nil }
         #expect(written.isEmpty, "loading wrote \(written)")
     }
@@ -463,8 +463,8 @@ extension SugargliderTests {
 // MARK: - Color presets
 
 extension SugargliderTests {
-    @Test func colorKeysAreEveryConfigurableColor() {
-        #expect(AppSettings.colorKeys == [
+    @Test func colorSlotsCarryEveryConfigurableColor() {
+        #expect(AppSettings.colorSlots.map(\.key) == [
             "bandColor", "inRangeColor", "belowColor", "aboveColor",
             "extremeLowColor", "extremeHighColor", "lineShadingColor", "dotColor",
             "sliderColor", "chartBackgroundColor", "bolusColor", "deliveryRateColor", "announcementColor",
@@ -474,7 +474,6 @@ extension SugargliderTests {
     /// The load, the reset and the preset round-trip all read `colorSlots`.
     @Test func colorSlotsPointAtTheirOwnProperty() {
         let s = Self.makeSettings()
-        #expect(AppSettings.colorSlots.count == AppSettings.colorKeys.count)
         for slot in AppSettings.colorSlots {
             #expect(AppSettings.colorsMatch(s[keyPath: slot.keyPath], slot.defaultValue),
                     "\(slot.key) default mismatch")
@@ -490,12 +489,12 @@ extension SugargliderTests {
     /// report "Custom" forever.
     @Test func everyColorKeyRoundTripsThroughAPreset() throws {
         let s = Self.makeSettings()
-        let distinct = AppSettings.colorKeys.enumerated().reduce(into: [String: Color]()) { dict, pair in
-            dict[pair.element] = Color(red: Double(pair.offset) / 16, green: 0.3, blue: 0.7, opacity: 1)
+        let distinct = AppSettings.colorSlots.enumerated().reduce(into: [String: Color]()) { dict, pair in
+            dict[pair.element.key] = Color(red: Double(pair.offset) / 16, green: 0.3, blue: 0.7, opacity: 1)
         }
         s.apply(.init(name: "P", colors: distinct, backgroundEnabled: true))
         let snapshot = s.currentPreset(name: "P")
-        for key in AppSettings.colorKeys {
+        for key in AppSettings.colorSlots.map(\.key) {
             let expected = try #require(distinct[key])
             let actual = try #require(snapshot.colors[key], "\(key) missing from currentPreset")
             #expect(AppSettings.colorsMatch(actual, expected), "\(key) not applied")

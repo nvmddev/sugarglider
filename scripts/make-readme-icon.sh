@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ICTOOL="Applications/Icon Composer.app/Contents/Executables/ictool"
-DEVELOPER="${DEVELOPER_DIR:-$(xcode-select -p)}"
+DEVELOPER="${DEVELOPER_DIR:-$(xcode-select -p 2>/dev/null || true)}"
 if [[ ! -x "${DEVELOPER}/../${ICTOOL}" ]]; then
     for candidate in /Applications/Xcode*.app/Contents/Developer; do
         if [[ -x "${candidate}/../${ICTOOL}" ]]; then DEVELOPER="${candidate}"; break; fi

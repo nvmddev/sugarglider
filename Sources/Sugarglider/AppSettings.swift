@@ -49,8 +49,10 @@ final class AppSettings {
 
         func value(fromMgdl mgdl: Double) -> Double { self == .mmol ? mgdl / Self.mgdlPerMmol : mgdl }
         func mgdl(from value: Double) -> Double { self == .mmol ? value * Self.mgdlPerMmol : value }
-        func text(fromMgdl sgv: Int) -> String {
-            self == .mmol ? value(fromMgdl: Double(sgv)).formatted(.number.precision(.fractionLength(1))) : sgv.formatted()
+        func text(fromMgdl sgv: Int, locale: Locale = .autoupdatingCurrent) -> String {
+            self == .mmol
+                ? value(fromMgdl: Double(sgv)).formatted(.number.locale(locale).precision(.fractionLength(1)))
+                : sgv.formatted(.number.locale(locale))
         }
     }
 
@@ -82,11 +84,15 @@ final class AppSettings {
         didSet { persist(dropdownBackground.rawValue, "dropdownBackground") }
     }
 
-    enum DeltaDisplay: Int { case off = 0, menu = 1, menuAndStatusBar = 2 }
+    enum DeltaDisplay: Int { case off = 0, dropdown = 1, dropdownAndStatusBar = 2 }
 
-    var deltaDisplay: DeltaDisplay = .menu { didSet { persist(deltaDisplay.rawValue, "deltaDisplay") } }
+    var deltaDisplay: DeltaDisplay = .dropdown { didSet { persist(deltaDisplay.rawValue, "deltaDisplay") } }
 
     static let rangeHoursLimits: ClosedRange<Int> = 2...72
+
+    /// The same limits as a slider's range: the views would otherwise build it twice.
+    static let rangeHoursSliderBounds: ClosedRange<Double> =
+        Double(rangeHoursLimits.lowerBound)...Double(rangeHoursLimits.upperBound)
 
     var rangeHours: Int = 6 {
         didSet { writeThrough(\.rangeHours, key: "rangeHours", limits: Self.rangeHoursLimits) }
@@ -256,12 +262,11 @@ final class AppSettings {
         .init(key: "announcementColor", keyPath: \.announcementColor, defaultValue: defaultAnnouncementColor),
     ]
 
-    static var colorKeys: [String] { colorSlots.map(\.key) }
-
     struct ColorPreset {
         var name: String
-        /// Keyed by `colorKeys`. A preset saved before a color existed lacks its key, and that
-        /// color isn't part of it: `apply` leaves it alone and `matchingPreset()` ignores it.
+        /// Keyed by the color slots' keys. A preset saved before a color existed lacks its key,
+        /// and that color isn't part of it: `apply` leaves it alone and `matchingPreset()`
+        /// ignores it.
         var colors: [String: Color]
         var backgroundEnabled: Bool
         /// Nil for presets saved before appearances existed: they carry colors only.

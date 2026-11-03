@@ -23,7 +23,7 @@ extension SugargliderTests {
              {"sgv":100,"direction":"FortyFiveUp","date":1700000000000}]
             """)
 
-        let readings = try await site.nightscout().entries(count: 10)
+        let readings = try await site.nightscout().entries(count: 10).items
         #expect(readings.map(\.sgv) == [100, 150])
         #expect(readings.first?.direction == .fortyFiveUp)
         #expect(readings.first?.date == Date(timeIntervalSince1970: 1_700_000_000))
@@ -39,9 +39,33 @@ extension SugargliderTests {
              {}]
             """)
 
-        let readings = try await site.nightscout().entries(count: 10)
+        let readings = try await site.nightscout().entries(count: 10).items
         #expect(readings.map(\.sgv) == [100, 110])
         #expect(readings.last?.direction == nil)
+    }
+
+    /// Nightscout keeps Dexcom's error codes below LOW, and one absurd value must not trap.
+    @Test func fetchDropsErrorCodesAndValuesOutOfReach() async throws {
+        let site = StubbedSite(json: """
+            [{"sgv":38,"date":1700000000000},
+             {"sgv":1e20,"date":1700000100000},
+             {"sgv":39,"date":1700000200000}]
+            """)
+
+        #expect(try await site.nightscout().entries(count: 10).items.map(\.sgv) == [39])
+    }
+
+    /// Full counts what the server sent, so a capped page stays full after unusable rows are dropped.
+    @Test func aPageIsFullByWhatTheServerSent() async throws {
+        let site = StubbedSite(json: """
+            [{"sgv":100,"date":1700000000000},
+             {"sgv":20,"date":1700000100000}]
+            """)
+
+        let page = try await site.nightscout().entries(count: 2)
+        #expect(page.items.map(\.sgv) == [100])
+        #expect(page.isFull)
+        #expect(try await site.nightscout().entries(count: 3).isFull == false)
     }
 
     @Test func fetchRoundsFractionalSgv() async throws {
@@ -50,7 +74,7 @@ extension SugargliderTests {
              {"sgv":100.5,"direction":"Flat","date":1700000100000}]
             """)
 
-        #expect(try await site.nightscout().entries(count: 10).map(\.sgv) == [100, 101])
+        #expect(try await site.nightscout().entries(count: 10).items.map(\.sgv) == [100, 101])
     }
 
     @Test func fetchOfASiteWithoutReadingsThrowsEmpty() async throws {
@@ -64,22 +88,28 @@ extension SugargliderTests {
     @Test func fetchSinceAcceptsAnEmptyAnswer() async throws {
         let site = StubbedSite(json: "[]")
 
-        #expect(try await site.nightscout().entries(count: 10, since: .now).isEmpty)
+        #expect(try await site.nightscout().entries(count: 10, since: .now).items.isEmpty)
     }
 
-    @Test func fetchSinceSendsTheDateFilterInMilliseconds() async throws {
+    /// Entries dated past the tolerance stay on the server, or they would fill `count`.
+    @Test func fetchSendsTheDateFiltersInMilliseconds() async throws {
         let site = StubbedSite(json: oneReading)
+        let now = Date(timeIntervalSince1970: 1_700_000_600)
 
-        _ = try await site.nightscout().entries(count: 10, since: Date(timeIntervalSince1970: 1_700_000_000))
-        #expect(site.requests == ["/api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$gt%5D=1700000000000"])
+        _ = try await site.nightscout().entries(count: 10, since: Date(timeIntervalSince1970: 1_700_000_000), now: now)
+        #expect(site.requests == [
+            "/api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$lte%5D=1700000900000"
+                + "&find%5Bdate%5D%5B$gt%5D=1700000000000",
+        ])
     }
 
     @Test(arguments: [("   ", ""), (" secret ", "&token=secret")])
     func fetchTrimsTheSiteURLAndToken(token: String, tokenQuery: String) async throws {
         let site = StubbedSite(json: oneReading)
 
-        _ = try await site.nightscout(token: token, baseURL: site.baseURL + "///").entries(count: 10)
-        #expect(site.requests == ["/api/v1/entries/sgv.json?count=10\(tokenQuery)"])
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        _ = try await site.nightscout(token: token, baseURL: site.baseURL + "///").entries(count: 10, now: now)
+        #expect(site.requests == ["/api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$lte%5D=1700000300000\(tokenQuery)"])
     }
 
     @Test(arguments: ["not json at all", #"{"foo":1}"#])
@@ -123,5 +153,22 @@ extension SugargliderTests {
 
     @Test func probeReportsAnInvalidURL() async {
         #expect(await Nightscout(baseURL: "http://exa mple.com", token: "").probe() == .failed("Invalid URL"))
+    }
+
+    @Test func probeReportsAnUnconfiguredURL() async {
+        #expect(await Nightscout(baseURL: "   ", token: "").probe() == .failed("Not configured"))
+    }
+
+    /// The store's wake-from-sleep behavior and the stale-cache fix live in these numbers; a
+    /// "simplification" that reuses the probe session for polling would bring both bugs back.
+    @Test func sessionsCarryTheLoadBearingConfigurations() {
+        let polling = Nightscout.pollingSession.configuration
+        let probe = Nightscout.sharedSession.configuration
+        #expect(polling.waitsForConnectivity)
+        #expect(!probe.waitsForConnectivity)
+        #expect(polling.timeoutIntervalForRequest == 15)
+        #expect(polling.timeoutIntervalForResource == 60)
+        #expect(polling.urlCache == nil)
+        #expect(probe.urlCache == nil)
     }
 }

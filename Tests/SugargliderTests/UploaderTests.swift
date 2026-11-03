@@ -351,7 +351,7 @@ extension SugargliderTests {
         let deviceStatus = StubbedSite(json: fixture.deviceStatus)
         #expect(try await deviceStatus.nightscout().pumpStatus() == fixture.pumpStatus)
         let treatments = StubbedSite(json: fixture.treatments)
-        let kinds = try await treatments.nightscout().treatments(count: 100, since: .distantPast).map(\.kind)
+        let kinds = try await treatments.nightscout().treatments(count: 100, since: .distantPast).items.map(\.kind)
         #expect(kinds == fixture.kinds)
     }
 }
