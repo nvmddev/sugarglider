@@ -17,7 +17,7 @@ private enum StoredSettings {
     ]
     static let bools: [String: Bool] = [
         "chartBackgroundEnabled": true, "blendLineColors": true, "lineShadingEnabled": false,
-        "lineShadingUsesLineColor": false, "dotUsesZoneColor": false,
+        "lineShadingUsesLineColor": false, "dotUsesZoneColor": false, "showTimeInRange": false,
         "showActiveInsulin": false, "showPumpMode": false, "showDeliveryRate": false,
         "showReservoir": false, "showPumpBattery": false, "showChangeAge": true,
         "showCannulaAge": true, "showSensorAge": true,
@@ -58,6 +58,7 @@ extension SugargliderTests {
         #expect(s.targetHigh == 180)
         #expect(s.extremeLow == 54)
         #expect(s.extremeHigh == 250)
+        #expect(s.showTimeInRange)
         #expect(s.rangeHours == 6)
         #expect(s.pollIntervalSeconds == 60)
         #expect(s.staleAfterMinutes == 11)
@@ -104,6 +105,7 @@ extension SugargliderTests {
         #expect(s.targetHigh == 190)
         #expect(s.extremeLow == 50)
         #expect(s.extremeHigh == 260)
+        #expect(!s.showTimeInRange)
         #expect(s.dotRadius == 6.5)
         #expect(s.dotHaloRadius == 9)
         #expect(s.rangeHours == 24)
@@ -155,6 +157,7 @@ extension SugargliderTests {
         s.targetHigh = 190
         s.extremeLow = 50
         s.extremeHigh = 260
+        s.showTimeInRange = false
         s.appearance = .init(blendLineColors: true, lineShadingEnabled: false, lineShadingUsesLineColor: false,
                              dotUsesZoneColor: false, dotRadius: 6.5, dotHaloRadius: 9)
         s.chartBackgroundEnabled = true
