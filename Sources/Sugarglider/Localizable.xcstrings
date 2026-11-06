@@ -631,6 +631,16 @@
         }
       }
     },
+    "Each zone's share of the readings in the chart" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anteil der Werte pro Zone im Diagramm"
+          }
+        }
+      }
+    },
     "Ease-off" : {
       "localizations" : {
         "de" : {
@@ -784,6 +794,26 @@
         }
       }
     },
+    "High %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hoch %@"
+          }
+        }
+      }
+    },
+    "Hover it in the dropdown to see very low and very high on their own." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeige im Menü mit dem Mauszeiger darauf, um sehr tiefe und sehr hohe Werte einzeln zu sehen."
+          }
+        }
+      }
+    },
     "Hover the chart for the amounts and the announcement texts. Pump data is fetched when you open the dropdown or this tab, never in the background." : {
       "localizations" : {
         "de" : {
@@ -840,6 +870,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Im Ziel"
+          }
+        }
+      }
+    },
+    "In range %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Ziel %@"
           }
         }
       }
@@ -940,6 +980,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "TIEF"
+          }
+        }
+      }
+    },
+    "Low %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tief %@"
           }
         }
       }
@@ -1656,6 +1706,36 @@
         }
       }
     },
+    "Time in range" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeit im Zielbereich"
+          }
+        }
+      }
+    },
+    "Time in range (%@)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zielbereich (%@)"
+          }
+        }
+      }
+    },
+    "Time in range over the last %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeit im Zielbereich in den letzten %@"
+          }
+        }
+      }
+    },
     "Time since change" : {
       "localizations" : {
         "de" : {
@@ -1726,12 +1806,12 @@
         }
       }
     },
-    "Until these are in order (very low ≤ low < high ≤ very high), the chart can't color the zones or draw the optimal range." : {
+    "Until these are in order (very low ≤ low < high ≤ very high), the chart can't color the zones or draw the optimal range, and the dropdown shows no time in range." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Solange die Werte nicht in dieser Reihenfolge stehen (sehr tief ≤ tief < hoch ≤ sehr hoch), kann das Diagramm die Zonen nicht einfärben und den Zielbereich nicht zeichnen."
+            "value" : "Solange die Werte nicht in dieser Reihenfolge stehen (sehr tief ≤ tief < hoch ≤ sehr hoch), kann das Diagramm die Zonen nicht einfärben und den Zielbereich nicht zeichnen, und das Menü zeigt keine Zeit im Zielbereich."
           }
         }
       }
@@ -1782,6 +1862,16 @@
         }
       }
     },
+    "Very high %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sehr hoch %@"
+          }
+        }
+      }
+    },
     "Very high can't be below High." : {
       "localizations" : {
         "de" : {
@@ -1798,6 +1888,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sehr tief"
+          }
+        }
+      }
+    },
+    "Very low %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sehr tief %@"
           }
         }
       }

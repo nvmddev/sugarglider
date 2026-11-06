@@ -20,10 +20,22 @@ struct GlucoseTab: View {
                 } footer: {
                     Text("""
                         Until these are in order (very low ≤ low < high ≤ very high), the chart \
-                        can't color the zones or draw the optimal range.
+                        can't color the zones or draw the optimal range, and the dropdown shows no \
+                        time in range.
                         """)
                         .foregroundStyle(.secondary)
                 }
+            }
+            Section {
+                Toggle(isOn: $settings.showTimeInRange) {
+                    Text("Time in range")
+                    Text("Each zone's share of the readings in the chart")
+                }
+            } header: {
+                Text("Dropdown")
+            } footer: {
+                Text("Hover it in the dropdown to see very low and very high on their own.")
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

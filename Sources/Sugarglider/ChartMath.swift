@@ -50,6 +50,24 @@ enum ChartMath {
         zones.color(of: zones.thresholds.zone(of: sgv))
     }
 
+    /// Each zone's share of the readings, as a fraction of one; empty without readings. Counted
+    /// rather than timed: readings come at a steady pace, and a dropout then counts for nothing
+    /// instead of for the reading before it. LOW and HIGH count as very low and very high whatever
+    /// the thresholds, because the sensor only tells on which side it ran out.
+    static func timeInRange(of readings: [Reading], thresholds: Thresholds) -> [Zone: Double] {
+        guard !readings.isEmpty else { return [:] }
+        var counts = Dictionary(uniqueKeysWithValues: Zone.allCases.map { ($0, 0) })
+        for reading in readings {
+            let zone: Zone = switch reading.outOfRange {
+            case .low: .veryLow
+            case .high: .veryHigh
+            case nil: thresholds.zone(of: reading.sgv)
+            }
+            counts[zone, default: 0] += 1
+        }
+        return counts.mapValues { Double($0) / Double(readings.count) }
+    }
+
     /// The chart's time span: `hours` back from `end`, or from a reading dated later, which would
     /// otherwise fall off the chart.
     static func window(hours: Int, endingAt end: Date, readings: [Reading]) -> ClosedRange<Date> {

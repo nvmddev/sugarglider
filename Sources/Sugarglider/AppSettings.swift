@@ -78,6 +78,8 @@ final class AppSettings {
         return nil
     }
 
+    var showTimeInRange: Bool = true { didSet { persist(showTimeInRange, "showTimeInRange") } }
+
     var thresholdFormat: FloatingPointFormatStyle<Double> {
         .number.precision(.fractionLength(0...(units == .mmol ? 1 : 0))).grouping(.never)
     }
@@ -390,6 +392,7 @@ final class AppSettings {
         load(\.targetHigh, "targetHigh")
         load(\.extremeLow, "extremeLow")
         load(\.extremeHigh, "extremeHigh")
+        load(\.showTimeInRange, "showTimeInRange")
         load(\.dropdownBackground, "dropdownBackground")
         load(\.deltaDisplay, "deltaDisplay")
         load(\.rangeHours, "rangeHours")

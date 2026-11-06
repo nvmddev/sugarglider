@@ -37,7 +37,8 @@ struct MenuBarContentView: View {
                 ageText.font(.subheadline).foregroundStyle(.secondary)
             }
 
-            // No modifiers: without pump data this renders nothing, but a wrapper would still take a gap.
+            // No modifiers: without data these render nothing, but a wrapper would still take a gap.
+            TimeInRangeView(settings: settings, store: store)
             PumpDetailsView(settings: settings, store: store)
 
             Divider()
