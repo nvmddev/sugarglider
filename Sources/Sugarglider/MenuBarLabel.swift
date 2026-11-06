@@ -1,42 +1,46 @@
 import SwiftUI
 
-/// The status-bar item's title: the value, an enlarged trend arrow, the
-/// bracketed delta if it's enabled for the bar, and once a reading goes stale
-/// a warning glyph with its age.
 struct MenuBarLabel: View {
     var settings: AppSettings
     var store: ReadingStore
 
+    // MenuBarExtra turns the label into a plain status item title in the system font, so no Text
+    // styling would reach the menu bar.
     var body: some View {
-        Group {
-            if !settings.isConfigured {
-                Text("CGM ⚙")
-            } else if let r = store.lastReading {
-                barText(r)
-            } else if store.lastError != nil {
-                Text("CGM ⚠")
-            } else {
-                Text("CGM …")
-            }
-        }
-        .font(.system(size: 13, design: .monospaced))
+        Text(title)
+            .accessibilityLabel(spokenTitle)
     }
 
-    private func barText(_ r: Reading) -> Text {
-        var t = Text(r.text(in: settings.units)).font(.system(size: 13, design: .monospaced))
-        if !r.trendArrow.isEmpty {
-            t = t + Text(" \(r.trendArrow)").font(.system(size: 15, weight: .medium))
+    func title(locale: Locale = .autoupdatingCurrent) -> String {
+        text(spoken: false, locale: locale)
+    }
+
+    var title: String { title() }
+
+    /// Words where the title draws symbols: VoiceOver would read "gear" and "warning sign".
+    func spokenTitle(locale: Locale = .autoupdatingCurrent) -> String {
+        text(spoken: true, locale: locale)
+    }
+
+    var spokenTitle: String { spokenTitle() }
+
+    private func text(spoken: Bool, locale: Locale) -> String {
+        guard settings.isConfigured else {
+            return spoken ? String(localized: "CGM, not set up", locale: locale) : "CGM ⚙"
         }
-        if settings.deltaDisplay == .menuAndStatusBar, let delta = store.deltaText() {
-            t = t + Text("  (\(delta))").font(.system(size: 13, design: .monospaced))
+        guard let reading = store.lastReading else {
+            if store.lastError == nil { return spoken ? String(localized: "CGM, loading", locale: locale) : "CGM …" }
+            return spoken ? String(localized: "CGM, no reading", locale: locale) : "CGM ⚠"
         }
-        // The age, not just a glyph: it's what distinguishes a blip from a feed
-        // that stopped. This is the only escalation there is. The app never
-        // notifies, because short gaps are normal and it only sees the
-        // Nightscout site, so it can't tell a sensor gap from a network one.
+        let arrow = reading.direction.map { spoken ? ", \($0.spokenName)" : " \($0.arrow)" } ?? ""
+        let delta = settings.deltaDisplay == .dropdownAndStatusBar
+            ? store.deltaText(locale: locale).map { "  (\($0))" } : nil
+        var age = ""
         if store.isStale {
-            t = t + Text(" ⚠ \(ReadingStore.compactAge(r.date))").font(.system(size: 13, design: .monospaced))
+            // The age stays narrow in the title; VoiceOver spells the letters of the narrow units.
+            age = spoken ? String(localized: ", stale, \(reading.date.relative(to: store.now, locale: locale))", locale: locale)
+                : " ⚠ \(reading.date.age(at: store.now, locale: locale))"
         }
-        return t
+        return "\(reading.text(in: settings.units, locale: locale))\(arrow)\(delta ?? "")\(age)"
     }
 }
