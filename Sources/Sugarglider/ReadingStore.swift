@@ -18,8 +18,8 @@ final class ReadingStore {
     private(set) var reportedPumpExtras: Set<PumpStatus.Extra> = []
     /// The chart's treatments, oldest first.
     var treatments: [Treatment] = []
-    var reservoirChanged: Date?
-    var batteryChanged: Date?
+    /// When each change shown with an age last happened, within `changeLookback`.
+    var changed: [ChangeEvent: Date] = [:]
 
     /// What ages and the stale check are measured against, so the views redraw as time passes even when
     /// no value changes. They can't keep time themselves: a `TimelineView` hangs a `MenuBarExtra` label.
@@ -56,12 +56,9 @@ final class ReadingStore {
     /// How far a top-up reaches back past the newest cached treatment. Treatments land out of
     /// order: a bolus is dated when it was given and uploaded minutes later.
     static let treatmentOverlap: TimeInterval = 60 * 60
-    /// Older reservoir and battery changes aren't worth showing an age for.
+    /// Older changes aren't worth showing an age for.
     private static let changeLookback: TimeInterval = 60 * 86_400
     private static let widestWindow = TimeInterval(AppSettings.rangeHoursLimits.upperBound) * 3600
-    // Nightscout's own event types, the ones its age pills read.
-    private static let reservoirChangeEvent = "Insulin Change"
-    private static let batteryChangeEvent = "Pump Battery Change"
 
     init(settings: AppSettings, session: URLSession = Nightscout.pollingSession) {
         self.settings = settings
@@ -270,15 +267,23 @@ final class ReadingStore {
         guard settings.isConfigured, settings.needsChangeDates,
               force || !fetchedRecently(.changeDates) else { return }
         let since = Date.now.addingTimeInterval(-Self.changeLookback)
-        let (showsReservoir, showsBattery) = (settings.showReservoir, settings.showPumpBattery)
+        let wanted = ChangeEvent.allCases.filter { settings.showsAge(of: $0) }
         guard let dates = await fetch({ site in
-            async let reservoir = showsReservoir ? site.latestEvent(Self.reservoirChangeEvent, since: since) : nil
-            async let battery = showsBattery ? site.latestEvent(Self.batteryChangeEvent, since: since) : nil
-            return try await (reservoir: reservoir, battery: battery)
+            try await withThrowingTaskGroup(of: (ChangeEvent, Date?).self) { group in
+                for change in wanted {
+                    for eventType in change.eventTypes {
+                        group.addTask { (change, try await site.latestEvent(eventType, since: since)) }
+                    }
+                }
+                var dates: [ChangeEvent: Date] = [:]
+                for try await (change, date) in group {
+                    if let date { dates[change] = max(date, dates[change] ?? date) }
+                }
+                return dates
+            }
         }) else { return }
         fetchedAt[.changeDates] = .now
-        reservoirChanged = dates.reservoir
-        batteryChanged = dates.battery
+        changed = dates
     }
 
     /// The result of a request to the current site, or nil when it failed or the site changed
@@ -301,8 +306,7 @@ final class ReadingStore {
         pumpStatus = nil
         reportedPumpExtras = []
         treatments = []
-        reservoirChanged = nil
-        batteryChanged = nil
+        changed = [:]
         historyWindowStart = nil
         treatmentsWindowStart = nil
         fetchedAt = [:]

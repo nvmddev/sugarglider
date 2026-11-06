@@ -411,6 +411,26 @@
         }
       }
     },
+    "Cannula" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanüle"
+          }
+        }
+      }
+    },
+    "Cannula changed %@ ago" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seit dem Kanülenwechsel: %@"
+          }
+        }
+      }
+    },
     "CGM, loading" : {
       "localizations" : {
         "de" : {
@@ -601,12 +621,12 @@
         }
       }
     },
-    "Each item appears only if your Nightscout site reports it, through the device status a pump or loop uploader sends." : {
+    "Each item appears only if your Nightscout site has it. Most come from the device status that a pump or loop uploader sends. Cannula and sensor changes come from the treatments on your site." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ein Element erscheint nur, wenn deine Nightscout-Seite es meldet. Die Werte kommen aus dem Gerätestatus, den ein Pumpen- oder Loop-Uploader sendet."
+            "value" : "Ein Element erscheint nur, wenn deine Nightscout-Seite es hat. Die meisten Werte kommen aus dem Gerätestatus, den ein Pumpen- oder Loop-Uploader sendet. Kanülen- und Sensorwechsel kommen aus den Behandlungen auf deiner Seite."
           }
         }
       }
@@ -1403,6 +1423,26 @@
         }
       }
     },
+    "Sensor" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sensor"
+          }
+        }
+      }
+    },
+    "Sensor changed %@ ago" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seit dem Sensorwechsel: %@"
+          }
+        }
+      }
+    },
     "Series" : {
       "localizations" : {
         "de" : {
@@ -1622,6 +1662,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zeit seit Wechsel"
+          }
+        }
+      }
+    },
+    "Time since the last change" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeit seit dem letzten Wechsel"
+          }
+        }
+      }
+    },
+    "Time since the last start or change" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeit seit dem letzten Start oder Wechsel"
           }
         }
       }
