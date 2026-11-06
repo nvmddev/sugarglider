@@ -25,9 +25,11 @@ can't be pushed to. That PR merges itself once CI is green, provided a
 `RELEASE_PAT` secret exists (see below). Without one it waits for you to close
 and reopen it, which is what starts its checks.
 
-It builds on the `macos-26` runner with Xcode 26.6, pinned in the workflow like
-CI's toolchains, so the SDK a release links against only changes when someone
-bumps it. If the cask update fails after the release is out, rerun just that
+It builds on the `xcode-27` runner with the newest stable Xcode on that image
+(`scripts/newest-xcode.sh`), the same one CI's `Build & test (newest Xcode)`
+job tests with. So a release links against the newest SDK without a change in
+the workflow. When the next Xcode major gets its own image, bump the runner
+label in `release.yml` and `ci.yml` together. If the cask update fails after the release is out, rerun just that
 part with `gh workflow run cask.yml -f version=1.2.0` (no version means the
 latest release).
 
@@ -37,8 +39,10 @@ changed since the last tag, since a run of CI-only or docs-only commits would
 otherwise ship a byte-identical app under a new number. Pass an explicit
 `bump=patch` (or push a tag) when you want that anyway.
 
-Everything it does is a script you can run locally, so a release is never a
-black box:
+Almost everything it does is a script you can run locally, so a release is
+never a black box. Two scripts refuse to run outside CI:
+`scripts/import-signing-certificate.sh` replaces the keychain search list, and
+`scripts/changelog-pr.sh` force-pushes a branch. The rest:
 
 ```sh
 scripts/version.sh next auto            # what would the next version be?

@@ -160,8 +160,13 @@ private final class SiteProtocol: URLProtocol {
 }
 
 /// `ReadingStore` fetches in `Task`s nothing can await, so tests poll for the effect.
+///
+/// The timeout only limits a failing wait; a passing one returns at once. It is long because
+/// every test in the suite shares the main actor: with the whole suite running, a first poll
+/// took 0.6 s on a fast Mac instead of 6 ms alone (measured 2026-11-06), and the CI runners
+/// are several times slower. With 4 s, the first poll timed out there.
 @MainActor
-func waitUntil(_ what: String, timeout: Duration = .seconds(4), _ condition: () -> Bool) async throws {
+func waitUntil(_ what: String, timeout: Duration = .seconds(30), _ condition: () -> Bool) async throws {
     let deadline = ContinuousClock.now + timeout
     while !condition() {
         guard ContinuousClock.now < deadline else { throw WaitTimedOut(what: what) }
