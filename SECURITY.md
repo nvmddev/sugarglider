@@ -31,9 +31,10 @@ telemetry, no analytics and no other network traffic. Worth reporting:
 
 ## Known and accepted
 
-- **The token travels in the URL.** Nightscout's API takes it as a `token`
-  query parameter, so it can end up in your site's access logs and in any proxy
-  in front of it. Give it the `readable` role only, never your `API_SECRET`.
+- **The token is a read credential.** Sugarglider sends it in the `api-secret`
+  request header, not in the URL, so it stays out of your site's access logs.
+  Anything that can read the request itself can still see it. Give it the
+  `readable` role only, never your `API_SECRET`.
 - **The site URL isn't treated as a secret.** It sits in the preferences file,
   readable by anything running as your user. If your site allows reads without
   a token, that URL is all anyone needs to see your data.

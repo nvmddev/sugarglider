@@ -208,13 +208,16 @@ struct Nightscout {
     private func get(_ path: String, query: [URLQueryItem]) async throws -> Data {
         let base = baseURL.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(["/"]))
         guard !base.isEmpty else { throw NightscoutError.notConfigured }
-        let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        let items = token.isEmpty ? query : query + [URLQueryItem(name: "token", value: token)]
-        guard let url = URL(string: base)?.appending(path: path).appending(queryItems: items) else {
+        guard let url = URL(string: base)?.appending(path: path).appending(queryItems: query) else {
             throw NightscoutError.badURL
         }
+        var request = URLRequest(url: url)
+        // In the URL, the token would land in the site's access logs. Nightscout also takes the
+        // raw token in the header its uploaders send the hashed API secret in.
+        let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !token.isEmpty { request.setValue(token, forHTTPHeaderField: "api-secret") }
 
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw NightscoutError.http(http.statusCode)
         }
