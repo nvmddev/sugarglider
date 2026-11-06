@@ -64,15 +64,21 @@ final class AppSettings {
     var extremeLow: Double = 54 { didSet { persist(extremeLow, "extremeLow") } }
     var extremeHigh: Double = 250 { didSet { persist(extremeHigh, "extremeHigh") } }
 
+    var thresholds: ChartMath.Thresholds {
+        .init(extremeLow: extremeLow, targetLow: targetLow, targetHigh: targetHigh, extremeHigh: extremeHigh)
+    }
+
     /// Out-of-order thresholds are reported, never corrected: moving a range takes one field at a
     /// time, so clamping a neighbor would fight the user mid-edit. They matter because
-    /// `ChartMath.color(for:zones:)` tests them in order.
+    /// `ChartMath.Thresholds.zone(of:)` tests them in order.
     var thresholdOrderWarning: String? {
         if targetLow >= targetHigh { return String(localized: "Low must be below High.") }
         if extremeLow > targetLow { return String(localized: "Very low can't be above Low.") }
         if extremeHigh < targetHigh { return String(localized: "Very high can't be below High.") }
         return nil
     }
+
+    var showTimeInRange: Bool = true { didSet { persist(showTimeInRange, "showTimeInRange") } }
 
     var thresholdFormat: FloatingPointFormatStyle<Double> {
         .number.precision(.fractionLength(0...(units == .mmol ? 1 : 0))).grouping(.never)
@@ -386,6 +392,7 @@ final class AppSettings {
         load(\.targetHigh, "targetHigh")
         load(\.extremeLow, "extremeLow")
         load(\.extremeHigh, "extremeHigh")
+        load(\.showTimeInRange, "showTimeInRange")
         load(\.dropdownBackground, "dropdownBackground")
         load(\.deltaDisplay, "deltaDisplay")
         load(\.rangeHours, "rangeHours")

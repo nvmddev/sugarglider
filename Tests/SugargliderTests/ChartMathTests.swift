@@ -4,7 +4,7 @@ import Testing
 @testable import Sugarglider
 
 private func defaultZones() -> ChartMath.Zones {
-    .init(extremeLow: 54, targetLow: 70, targetHigh: 180, extremeHigh: 250,
+    .init(thresholds: .init(extremeLow: 54, targetLow: 70, targetHigh: 180, extremeHigh: 250),
           extremeLowColor: .red, belowColor: .orange, inRangeColor: .green,
           aboveColor: .blue, extremeHighColor: .purple)
 }
@@ -83,7 +83,7 @@ extension SugargliderTests {
     /// With Low above High the in-range zone has no height, which leaves it out rather than inverting it.
     @Test func zoneStopsSkipZonesWithoutHeight() {
         var zones = defaultZones()
-        zones.targetLow = 200
+        zones.thresholds.targetLow = 200
         let stops = ChartMath.zoneStops(for: zones, axis: ChartMath.ValueAxis(lower: 40, upper: 340, step: 50),
                                         units: .mgdl, blended: true)
         #expect(!stops.contains { AppSettings.colorsMatch($0.color, zones.inRangeColor) })
@@ -106,6 +106,16 @@ extension SugargliderTests {
         #expect(AppSettings.colorsMatch(ChartMath.color(for: 70, zones: zones), zones.inRangeColor))
         #expect(AppSettings.colorsMatch(ChartMath.color(for: 180, zones: zones), zones.inRangeColor))
         #expect(AppSettings.colorsMatch(ChartMath.color(for: 250, zones: zones), zones.aboveColor))
+    }
+
+    @Test func windowEndsAtTheClockOrALaterReading() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let past = [Reading(sgv: 100, direction: nil, date: now.addingTimeInterval(-60))]
+        #expect(ChartMath.window(hours: 2, endingAt: now, readings: past) == now.addingTimeInterval(-7200)...now)
+        #expect(ChartMath.window(hours: 2, endingAt: now, readings: []) == now.addingTimeInterval(-7200)...now)
+        let ahead = now.addingTimeInterval(300)
+        let future = [Reading(sgv: 100, direction: nil, date: ahead)]
+        #expect(ChartMath.window(hours: 2, endingAt: now, readings: future) == ahead.addingTimeInterval(-7200)...ahead)
     }
 
     @Test func sampleReadingsSweepAllZones() throws {

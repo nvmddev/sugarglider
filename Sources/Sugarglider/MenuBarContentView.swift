@@ -32,9 +32,13 @@ struct MenuBarContentView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 2) {
-                readingLine
-                ageText.font(.subheadline).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    readingLine
+                    ageText.font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                TimeInRangeView(settings: settings, store: store)
             }
 
             // No modifiers: without pump data this renders nothing, but a wrapper would still take a gap.

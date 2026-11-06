@@ -73,9 +73,8 @@ struct GlucoseChart: View {
 
         init?(_ chart: GlucoseChart) {
             let settings = chart.settings
-            // A reading dated ahead of this Mac's clock moves the end, rather than falling off the chart.
-            let end = max(chart.windowEnd, chart.readings.last?.date ?? chart.windowEnd)
-            let start = end.addingTimeInterval(-Double(chart.rangeHours) * 3600)
+            let window = ChartMath.window(hours: chart.rangeHours, endingAt: chart.windowEnd, readings: chart.readings)
+            let start = window.lowerBound, end = window.upperBound
             let visible = chart.readings.filter { $0.date >= start }
             guard let latest = visible.last else { return nil }
             let units = settings.units
@@ -89,8 +88,7 @@ struct GlucoseChart: View {
             self.latest = latest
             self.units = units
             zones = ChartMath.Zones(
-                extremeLow: settings.extremeLow, targetLow: settings.targetLow,
-                targetHigh: settings.targetHigh, extremeHigh: settings.extremeHigh,
+                thresholds: settings.thresholds,
                 extremeLowColor: settings.extremeLowColor, belowColor: settings.belowColor,
                 inRangeColor: settings.inRangeColor, aboveColor: settings.aboveColor,
                 extremeHighColor: settings.extremeHighColor)

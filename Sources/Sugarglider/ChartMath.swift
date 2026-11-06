@@ -5,26 +5,74 @@ enum ChartMath {
     /// line breaks and the cache's seams can't drift apart.
     static let dropoutThreshold: TimeInterval = 15 * 60
 
-    struct Zones {
+    /// From the bottom of the axis up.
+    enum Zone: CaseIterable { case veryLow, low, inRange, high, veryHigh }
+
+    /// In mg/dL, whatever unit is displayed.
+    struct Thresholds: Equatable {
         var extremeLow: Double
         var targetLow: Double
         var targetHigh: Double
         var extremeHigh: Double
+
+        /// A threshold itself belongs to the zone nearer the target range. Tested in this order,
+        /// which is why `AppSettings.thresholdOrderWarning` exists.
+        func zone(of sgv: Int) -> Zone {
+            let value = Double(sgv)
+            if value < extremeLow { return .veryLow }
+            if value < targetLow { return .low }
+            if value > extremeHigh { return .veryHigh }
+            if value > targetHigh { return .high }
+            return .inRange
+        }
+    }
+
+    struct Zones {
+        var thresholds: Thresholds
         var extremeLowColor: Color
         var belowColor: Color
         var inRangeColor: Color
         var aboveColor: Color
         var extremeHighColor: Color
+
+        func color(of zone: Zone) -> Color {
+            switch zone {
+            case .veryLow: extremeLowColor
+            case .low: belowColor
+            case .inRange: inRangeColor
+            case .high: aboveColor
+            case .veryHigh: extremeHighColor
+            }
+        }
     }
 
-    /// `sgv` and the thresholds are both mg/dL, whatever unit is displayed.
     static func color(for sgv: Int, zones: Zones) -> Color {
-        let value = Double(sgv)
-        if value < zones.extremeLow { return zones.extremeLowColor }
-        if value < zones.targetLow { return zones.belowColor }
-        if value > zones.extremeHigh { return zones.extremeHighColor }
-        if value > zones.targetHigh { return zones.aboveColor }
-        return zones.inRangeColor
+        zones.color(of: zones.thresholds.zone(of: sgv))
+    }
+
+    /// Each zone's share of the readings, as a fraction of one; empty without readings. Counted
+    /// rather than timed: readings come at a steady pace, and a dropout then counts for nothing
+    /// instead of for the reading before it. LOW and HIGH count as very low and very high whatever
+    /// the thresholds, because the sensor only tells on which side it ran out.
+    static func timeInRange(of readings: [Reading], thresholds: Thresholds) -> [Zone: Double] {
+        guard !readings.isEmpty else { return [:] }
+        var counts = Dictionary(uniqueKeysWithValues: Zone.allCases.map { ($0, 0) })
+        for reading in readings {
+            let zone: Zone = switch reading.outOfRange {
+            case .low: .veryLow
+            case .high: .veryHigh
+            case nil: thresholds.zone(of: reading.sgv)
+            }
+            counts[zone, default: 0] += 1
+        }
+        return counts.mapValues { Double($0) / Double(readings.count) }
+    }
+
+    /// The chart's time span: `hours` back from `end`, or from a reading dated later, which would
+    /// otherwise fall off the chart.
+    static func window(hours: Int, endingAt end: Date, readings: [Reading]) -> ClosedRange<Date> {
+        let end = max(end, readings.last?.date ?? end)
+        return end.addingTimeInterval(-Double(hours) * 3600)...end
     }
 
     static func segments(of readings: [Reading], gapThreshold gap: TimeInterval) -> [[Reading]] {
@@ -58,10 +106,10 @@ enum ChartMath {
         func location(_ mgdl: Double) -> Double {
             min(max((units.value(fromMgdl: mgdl) - axis.lower) / (axis.upper - axis.lower), 0), 1)
         }
-        let edges = [0, location(zones.extremeLow), location(zones.targetLow),
-                     location(zones.targetHigh), location(zones.extremeHigh), 1]
-        let colors = [zones.extremeLowColor, zones.belowColor, zones.inRangeColor,
-                      zones.aboveColor, zones.extremeHighColor]
+        let thresholds = zones.thresholds
+        let edges = [0, location(thresholds.extremeLow), location(thresholds.targetLow),
+                     location(thresholds.targetHigh), location(thresholds.extremeHigh), 1]
+        let colors = Zone.allCases.map(zones.color(of:))
         let bands = colors.indices.filter { edges[$0 + 1] > edges[$0] }
         guard !bands.isEmpty else { return [Gradient.Stop(color: zones.inRangeColor, location: 0)] }
         return bands.flatMap { i in
