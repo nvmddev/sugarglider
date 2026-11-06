@@ -103,7 +103,9 @@ jobs:
 
   lint:
     name: Lint shell scripts & workflows
-    runs-on: ubuntu-latest
+    # Pinned like the macOS images: shellcheck comes with the image, and a new
+    # version could turn a green branch red overnight.
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -129,7 +131,7 @@ jobs:
   # A broken version or changelog script should fail here, not mid-release.
   release-scripts:
     name: Smoke-test release scripts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
