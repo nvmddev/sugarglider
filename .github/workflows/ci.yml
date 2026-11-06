@@ -33,7 +33,18 @@ jobs:
 
       # Builds the app in Debug and runs the suite inside it.
       - name: Test
-        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64
+        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64 -resultBundlePath TestResults.xcresult
+
+      # -quiet hides which tests failed; the result bundle names them.
+      - name: Show failed tests
+        if: failure()
+        run: |
+          xcrun xcresulttool get test-results summary --path TestResults.xcresult |
+            jq -r '.testFailures[]? | "\(.testIdentifierString // .testName): \(.failureText)"'
+
+      # Every string in the app has a German translation.
+      - name: Check localization
+        run: scripts/check-localization.sh
 
       # Crafted Conventional Commits history; runs here too, on the release
       # interpreter, macOS' bash 3.2, which ubuntu's bash 5 can't stand in for.
@@ -89,7 +100,14 @@ jobs:
           xcodebuild -version
 
       - name: Test
-        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64
+        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64 -resultBundlePath TestResults.xcresult
+
+      # -quiet hides which tests failed; the result bundle names them.
+      - name: Show failed tests
+        if: failure()
+        run: |
+          xcrun xcresulttool get test-results summary --path TestResults.xcresult |
+            jq -r '.testFailures[]? | "\(.testIdentifierString // .testName): \(.failureText)"'
 
       - name: Assemble app bundle
         run: ./build.sh

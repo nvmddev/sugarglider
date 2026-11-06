@@ -13,6 +13,8 @@ struct PumpDetailsView: View {
 
     struct DailyRow: Equatable {
         var label: String
+        /// What VoiceOver says in place of `label`, where the label abbreviates.
+        var spokenLabel: String? = nil
         var today: String
         var yesterday: String
     }
@@ -72,6 +74,7 @@ struct PumpDetailsView: View {
             ForEach(rows, id: \.label) { row in
                 GridRow {
                     Text(row.label)
+                        .accessibilityLabel(row.spokenLabel ?? row.label)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(row.today)
@@ -129,11 +132,17 @@ struct PumpDetailsView: View {
         }
         if settings.showAverageGlucose, status.averageToday != nil || status.averageYesterday != nil {
             let glucose = { (mgdl: Double) in settings.units.text(fromMgdl: Int(mgdl.rounded()), locale: locale) }
-            rows.append(DailyRow(label: String(localized: "Average glucose"),
+            rows.append(DailyRow(label: String(localized: "Average glucose"), spokenLabel: averageGlucoseSpoken,
                                  today: text(status.averageToday, glucose),
                                  yesterday: text(status.averageYesterday, glucose)))
         }
         return rows
+    }
+
+    /// The label may abbreviate (German shows "Ø Glukosewert"), so VoiceOver gets the words.
+    static var averageGlucoseSpoken: String {
+        String(localized: "Average glucose (spoken)", defaultValue: "Average glucose",
+               comment: "VoiceOver reads this for the average glucose label. Spell out what the label abbreviates.")
     }
 
     /// The uploader can stop sending device statuses while glucose keeps flowing, and nothing else
