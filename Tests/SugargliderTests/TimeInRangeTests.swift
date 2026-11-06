@@ -43,25 +43,21 @@ extension SugargliderTests {
         // The first reading lies 3 hours back, outside the 2-hour window.
         let old = Reading(sgv: 300, direction: nil, date: now.addingTimeInterval(-3 * 3600))
         let summary = try #require(TimeInRangeView.summary(
-            readings: [old] + readings([60, 100, 100, 200], endingAt: now), windowEnd: now,
+            readings: [old] + readings([40, 60, 100, 100, 200, 300], endingAt: now), windowEnd: now,
             settings: settings, locale: english))
 
-        #expect(summary.span == "2h")
-        #expect(summary.rows == [.init(label: "Low", value: "25%"), .init(label: "In range", value: "50%"),
-                                 .init(label: "High", value: "25%")])
-        #expect(summary.help == "Very low 0%\nLow 25%\nIn range 50%\nHigh 25%\nVery high 0%")
+        #expect(abs(summary.inRangeShare - 1.0 / 3) < 1e-9)
+        #expect(summary.inRangeText == "33%")
+        #expect(summary.help == """
+            Time in range over the last 2 hours
+            Very low 17%
+            Low 17%
+            In range 33%
+            High 17%
+            Very high 17%
+            """)
         #expect(summary.spokenLabel == "Time in range over the last 2 hours")
-        #expect(summary.spokenValue == "Very low 0%, Low 25%, In range 50%, High 25%, Very high 0%")
-    }
-
-    /// Very low and low are added before rounding: 33%, where the rounded parts add up to 34%.
-    @Test func timeInRangeSummaryFoldsTheExtremesBeforeRounding() throws {
-        let now = Date.now
-        let summary = try #require(TimeInRangeView.summary(
-            readings: readings([40, 60, 100, 200, 300, 300], endingAt: now), windowEnd: now,
-            settings: Self.makeSettings(), locale: english))
-        #expect(summary.rows.map(\.value) == ["33%", "17%", "50%"])
-        #expect(summary.help == "Very low 17%\nLow 17%\nIn range 17%\nHigh 17%\nVery high 33%")
+        #expect(summary.spokenValue == "Very low 17%, Low 17%, In range 33%, High 17%, Very high 17%")
     }
 
     @Test func timeInRangeSummaryFollowsTheRegion() throws {
@@ -70,7 +66,7 @@ extension SugargliderTests {
             readings: readings([60, 100, 100, 200], endingAt: now), windowEnd: now,
             settings: Self.makeSettings(), locale: Locale(identifier: "de_DE")))
         // German puts a no-break space before the percent sign.
-        #expect(summary.rows.map(\.value) == ["25\u{A0}%", "50\u{A0}%", "25\u{A0}%"])
+        #expect(summary.inRangeText == "50\u{A0}%")
     }
 
     @Test func timeInRangeSummaryHidesWhenOffOrMeaningless() {

@@ -29,12 +29,12 @@ struct GlucoseTab: View {
             Section {
                 Toggle(isOn: $settings.showTimeInRange) {
                     Text("Time in range")
-                    Text("Each zone's share of the readings in the chart")
+                    Text("The share of readings in range, as a ring beside the reading")
                 }
             } header: {
                 Text("Dropdown")
             } footer: {
-                Text("Hover it in the dropdown to see very low and very high on their own.")
+                Text("It counts the readings that the chart shows. Hover the ring to see the share of each zone.")
                     .foregroundStyle(.secondary)
             }
         }

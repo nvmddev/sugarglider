@@ -631,16 +631,6 @@
         }
       }
     },
-    "Each zone's share of the readings in the chart" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anteil der Werte pro Zone im Diagramm"
-          }
-        }
-      }
-    },
     "Ease-off" : {
       "localizations" : {
         "de" : {
@@ -804,16 +794,6 @@
         }
       }
     },
-    "Hover it in the dropdown to see very low and very high on their own." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zeige im Menü mit dem Mauszeiger darauf, um sehr tiefe und sehr hohe Werte einzeln zu sehen."
-          }
-        }
-      }
-    },
     "Hover the chart for the amounts and the announcement texts. Pump data is fetched when you open the dropdown or this tab, never in the background." : {
       "localizations" : {
         "de" : {
@@ -900,6 +880,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ungültige URL"
+          }
+        }
+      }
+    },
+    "It counts the readings that the chart shows. Hover the ring to see the share of each zone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gezählt werden die Werte, die das Diagramm zeigt. Zeige mit dem Mauszeiger auf den Ring, um den Anteil jeder Zone zu sehen."
           }
         }
       }
@@ -1692,6 +1682,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der aktuelle Modus der Pumpe, z. B. Auto-Modus oder Boost"
+          }
+        }
+      }
+    },
+    "The share of readings in range, as a ring beside the reading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anteil der Werte im Zielbereich, als Ring neben dem Messwert"
           }
         }
       }
