@@ -19,4 +19,13 @@ extension SugargliderTests {
         #expect(String(localized: "Version \("1.2.0") (\("7"))", bundle: german) == "Version 1.2.0 (7)")
         #expect(String(localized: "\(3) to \(300) \("Sekunden")", bundle: german) == "3 bis 300 Sekunden")
     }
+
+    /// German abbreviates the label; VoiceOver must still hear the words.
+    @Test func germanSpellsOutTheAverageForVoiceOver() throws {
+        let path = try #require(Bundle.main.path(forResource: "de", ofType: "lproj"))
+        let german = try #require(Bundle(path: path))
+        #expect(String(localized: "Average glucose", bundle: german) == "Ø Glukosewert")
+        #expect(String(localized: "Average glucose (spoken)", defaultValue: "Average glucose", bundle: german)
+                == "Durchschnittlicher Glukosewert")
+    }
 }

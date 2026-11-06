@@ -258,7 +258,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mittlere Glukose"
+            "value" : "Ø Glukosewert"
+          }
+        }
+      }
+    },
+    "Average glucose (spoken)" : {
+      "comment" : "VoiceOver reads this for the average glucose label. Spell out what the label abbreviates.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durchschnittlicher Glukosewert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Average glucose"
           }
         }
       }

@@ -601,11 +601,11 @@ extension SugargliderTests {
         settings.units = .mmol
         #expect(PumpDetailsView.dailyRows(status: fullStatus(), settings: settings, locale: Self.enUS) == [
             .init(label: "Total insulin", today: "21.5 U", yesterday: "47.3 U"),
-            .init(label: "Average glucose", today: "6.9", yesterday: "8.1"),
+            .init(label: "Average glucose", spokenLabel: "Average glucose", today: "6.9", yesterday: "8.1"),
         ])
         settings.units = .mgdl
         #expect(PumpDetailsView.dailyRows(status: fullStatus(), settings: settings, locale: Self.enUS).last
-                == .init(label: "Average glucose", today: "124", yesterday: "146"))
+                == .init(label: "Average glucose", spokenLabel: "Average glucose", today: "124", yesterday: "146"))
     }
 
     @Test func staleNoteOnlyPastTheStaleDelay() {
