@@ -103,13 +103,28 @@ extension SugargliderTests {
         ])
     }
 
-    @Test(arguments: [("   ", ""), (" secret ", "&token=secret")])
-    func fetchTrimsTheSiteURLAndToken(token: String, tokenQuery: String) async throws {
+    @Test(arguments: [("   ", nil), (" secret ", "secret")] as [(String, String?)])
+    func fetchTrimsTheSiteURLAndToken(token: String, secret: String?) async throws {
         let site = StubbedSite(json: oneReading)
 
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         _ = try await site.nightscout(token: token, baseURL: site.baseURL + "///").entries(count: 10, now: now)
-        #expect(site.requests == ["/api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$lte%5D=1700000300000\(tokenQuery)"])
+        #expect(site.requests == ["/api/v1/entries/sgv.json?count=10&find%5Bdate%5D%5B$lte%5D=1700000300000"])
+        #expect(site.secrets == [secret])
+    }
+
+    /// In a URL, the token would land in the site's access logs and in any proxy's.
+    @Test func everyRequestSendsTheTokenInAHeaderOnly() async throws {
+        let site = StubbedSite(json: "[]")
+        let nightscout = site.nightscout(token: "reader-0123456789abcdef")
+
+        _ = try? await nightscout.entries(count: 1)
+        _ = try await nightscout.pumpStatus()
+        _ = try await nightscout.treatments(count: 1, since: .now)
+        _ = try await nightscout.latestEvent("Site Change", since: .now)
+        #expect(site.requests.count == 4)
+        #expect(site.requests.allSatisfy { !$0.contains("reader-0123456789abcdef") && !$0.contains("token") })
+        #expect(site.secrets == Array(repeating: "reader-0123456789abcdef", count: 4))
     }
 
     @Test(arguments: ["not json at all", #"{"foo":1}"#])
