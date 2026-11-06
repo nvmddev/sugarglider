@@ -27,6 +27,7 @@ xcodebuild test -project Sugarglider.xcodeproj -scheme Sugarglider -destination 
 ```
 
 They run inside the app, which notices and stays out of the menu bar for them.
+The scheme runs them in English, so they pass whatever language your Mac uses.
 `build.sh` archives the Release configuration and copies the app here; the
 environment variables it reads are listed at its top.
 
@@ -56,6 +57,11 @@ A few conventions span several files:
   value is shown.
 - Numbers, dates and durations follow the user's region: they go through a
   `FormatStyle`, never `String(format:)`.
+- The app speaks English and German and follows the system language. Every
+  string a user sees is localizable: views take a `LocalizedStringKey`, models
+  use `String(localized:)`. The translations live in the String Catalog
+  `Sources/Sugarglider/Localizable.xcstrings`. Names, units and strings that
+  only join other strings are marked *Don't Translate* there.
 - The app target is isolated to the main actor by default, and macOS 26 is the
   floor, so there are no `#available` checks.
 
@@ -108,6 +114,10 @@ still one merge click.
 - `./build.sh` succeeds and you've actually run the app.
 - Anything touching drawing or colors was checked in **both** Light and Dark
   mode, and with both mmol/L and mg/dL if it touches values.
+- New or changed text has a German translation. `scripts/check-localization.sh`
+  adds new strings to the String Catalog and lists the ones without German.
+  Xcode does the same when you build in it. No German? Say so in the PR and a
+  maintainer fills it in.
 - Shell scripts pass `shellcheck build.sh scripts/*.sh`, and workflows pass
   `actionlint`.
 - If you changed the menu bar label, the dropdown or the chart, re-run
