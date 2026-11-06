@@ -56,7 +56,10 @@ extension SugargliderTests {
             High 17%
             Very high 17%
             """)
-        #expect(summary.spokenLabel == "Time in range over the last 2 hours")
+        #expect(summary.title == "Time in range over the last 2 hours")
+        #expect(summary.zones == [.init(label: "Very low", value: "17%"), .init(label: "Low", value: "17%"),
+                                  .init(label: "In range", value: "33%"), .init(label: "High", value: "17%"),
+                                  .init(label: "Very high", value: "17%")])
         #expect(summary.spokenValue == "Very low 17%, Low 17%, In range 33%, High 17%, Very high 17%")
     }
 

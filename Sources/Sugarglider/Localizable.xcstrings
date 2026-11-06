@@ -884,12 +884,12 @@
         }
       }
     },
-    "It counts the readings that the chart shows. Hover the ring to see the share of each zone." : {
+    "It counts the readings that the chart shows. Click the ring to see the share of each zone." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gezählt werden die Werte, die das Diagramm zeigt. Zeige mit dem Mauszeiger auf den Ring, um den Anteil jeder Zone zu sehen."
+            "value" : "Gezählt werden die Werte, die das Diagramm zeigt. Klicke auf den Ring, um den Anteil jeder Zone zu sehen."
           }
         }
       }
@@ -1519,6 +1519,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Änderung anzeigen"
+          }
+        }
+      }
+    },
+    "Shows each zone's share" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt den Anteil jeder Zone"
           }
         }
       }

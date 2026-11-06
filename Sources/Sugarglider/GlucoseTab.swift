@@ -34,7 +34,7 @@ struct GlucoseTab: View {
             } header: {
                 Text("Dropdown")
             } footer: {
-                Text("It counts the readings that the chart shows. Hover the ring to see the share of each zone.")
+                Text("It counts the readings that the chart shows. Click the ring to see the share of each zone.")
                     .foregroundStyle(.secondary)
             }
         }
