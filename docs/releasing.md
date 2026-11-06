@@ -39,8 +39,10 @@ changed since the last tag, since a run of CI-only or docs-only commits would
 otherwise ship a byte-identical app under a new number. Pass an explicit
 `bump=patch` (or push a tag) when you want that anyway.
 
-Everything it does is a script you can run locally, so a release is never a
-black box:
+Almost everything it does is a script you can run locally, so a release is
+never a black box. Two scripts refuse to run outside CI:
+`scripts/import-signing-certificate.sh` replaces the keychain search list, and
+`scripts/changelog-pr.sh` force-pushes a branch. The rest:
 
 ```sh
 scripts/version.sh next auto            # what would the next version be?

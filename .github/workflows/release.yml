@@ -89,8 +89,15 @@ jobs:
               exit 1
             fi
           fi
-          echo "version=${version}"   >> "$GITHUB_OUTPUT"
-          echo "previous=${previous}" >> "$GITHUB_OUTPUT"
+          # Flows into file names, the tag and GITHUB_ENV.
+          [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::invalid version '${version}': expected MAJOR.MINOR.PATCH"
+            exit 1
+          }
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # Every later step reads both from the environment.
+          echo "VERSION=${version}"   >> "$GITHUB_ENV"
+          echo "PREVIOUS=${previous}" >> "$GITHUB_ENV"
           echo "Releasing ${version} (previous: ${previous:-none})" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Test
@@ -111,35 +118,9 @@ jobs:
             echo "::warning::No MACOS_CERTIFICATE_P12 secret, so the build is ad-hoc signed. Downloads stay Gatekeeper-quarantined; see the release notes."
             exit 0
           fi
-
-          KEYCHAIN="${RUNNER_TEMP}/signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(uuidgen)"
-          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
-          security set-keychain-settings -lut 3600 "${KEYCHAIN}"
-          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
-
-          printf '%s' "${CERT_P12}" | base64 --decode > "${RUNNER_TEMP}/cert.p12"
-          security import "${RUNNER_TEMP}/cert.p12" -k "${KEYCHAIN}" -P "${CERT_PASSWORD}" \
-            -T /usr/bin/codesign -T /usr/bin/security
-          rm -f "${RUNNER_TEMP}/cert.p12"
-          # Without this, codesign blocks on an interactive keychain prompt.
-          security set-key-partition-list -S apple-tool:,apple:,codesign: \
-            -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}" > /dev/null
-          # Only this keychain: nothing else in the job needs the login keychain,
-          # and naming it portably is fiddlier than it looks.
-          security list-keychain -d user -s "${KEYCHAIN}"
-
-          if [[ -z "${IDENTITY}" ]]; then
-            IDENTITY="$(security find-identity -v -p codesigning "${KEYCHAIN}" \
-              | awk -F'"' '/Developer ID Application/{print $2; exit}')"
-          fi
-          if [[ -z "${IDENTITY}" ]]; then
-            echo "::error::Imported the certificate but found no 'Developer ID Application' identity in it."
-            exit 1
-          fi
-          echo "Signing as: ${IDENTITY}"
-
-          echo "identity=${IDENTITY}" >> "$GITHUB_OUTPUT"
+          identity="$(scripts/import-signing-certificate.sh)"
+          echo "Signing as: ${identity}"
+          echo "identity=${identity}" >> "$GITHUB_OUTPUT"
           if [[ -n "${APPLE_ID}" ]]; then
             echo "notarize=true" >> "$GITHUB_OUTPUT"
           else
@@ -165,14 +146,11 @@ jobs:
 
       - name: Build app bundle
         env:
-          VERSION: ${{ steps.version.outputs.version }}
           SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: ./build.sh
 
       - name: Package ZIP
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -181,7 +159,6 @@ jobs:
       - name: Notarize app
         if: steps.signing.outputs.notarize == 'true'
         env:
-          VERSION: ${{ steps.version.outputs.version }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
@@ -196,14 +173,12 @@ jobs:
 
       - name: Package DMG
         env:
-          VERSION: ${{ steps.version.outputs.version }}
           SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
         run: scripts/make-dmg.sh
 
       - name: Notarize DMG
         if: steps.signing.outputs.notarize == 'true'
         env:
-          VERSION: ${{ steps.version.outputs.version }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
@@ -213,14 +188,10 @@ jobs:
       # Gatekeeper. This fails the release instead of publishing quarantined downloads.
       - name: Verify notarization
         if: steps.signing.outputs.notarize == 'true'
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: scripts/verify-notarization.sh "dist/Sugarglider-${VERSION}.zip" "dist/Sugarglider-${VERSION}.dmg"
 
       # cask.yml reads the zip's hash back out of this release asset.
       - name: Checksums
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           cd dist
@@ -229,8 +200,6 @@ jobs:
 
       - name: Generate release notes
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-          PREVIOUS: ${{ steps.version.outputs.previous }}
           NOTARIZED: ${{ steps.signing.outputs.notarize }}
         run: |
           set -euo pipefail
@@ -240,7 +209,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: Sugarglider-${{ steps.version.outputs.version }}
+          name: Sugarglider-${{ env.VERSION }}
           path: dist/
           retention-days: 14
           if-no-files-found: error
@@ -256,8 +225,6 @@ jobs:
 
       - name: Create tag
         if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run }}
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           git tag -a "v${VERSION}" -m "Release v${VERSION}"
@@ -269,7 +236,6 @@ jobs:
         if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           gh release create "v${VERSION}" \
@@ -292,59 +258,8 @@ jobs:
           # passes the same gate as any other.
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
           HAS_PAT: ${{ secrets.RELEASE_PAT != '' }}
-          VERSION: ${{ steps.version.outputs.version }}
-          PREVIOUS: ${{ steps.version.outputs.previous }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          set -euo pipefail
-          BRANCH="docs/changelog-v${VERSION}"
-          git fetch origin "${DEFAULT_BRANCH}"
-          git checkout -B "${BRANCH}" "origin/${DEFAULT_BRANCH}"
-          scripts/changelog.sh prepend "${VERSION}" "${PREVIOUS}" "v${VERSION}"
-
-          if git diff --quiet -- CHANGELOG.md; then
-            echo "CHANGELOG.md already up to date."
-            exit 0
-          fi
-          git add CHANGELOG.md
-          # No [skip ci] here: the required checks have to report before the PR
-          # can merge. The squash commit gets it through --subject below.
-          git commit -m "docs: changelog for v${VERSION}"
-
-          # From here on every failure warns instead of failing the job: the
-          # release is already published, and a red run would misrepresent that.
-          # GH_TOKEN authenticates gh, never git, so the push needs the
-          # credential in the remote URL.
-          if [[ "${HAS_PAT}" == "true" ]]; then
-            git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          fi
-          # -f rather than --force-with-lease: a re-run of the same version owns
-          # this branch outright, and there's no lease for a ref never fetched.
-          git push -f origin "${BRANCH}" || {
-            echo "::warning::Could not push ${BRANCH}. Run 'scripts/changelog.sh prepend ${VERSION}' locally and open the PR yourself."
-            exit 0
-          }
-
-          if [[ -z "$(gh pr list --head "${BRANCH}" --base "${DEFAULT_BRANCH}" --state open --json number --jq '.[].number')" ]]; then
-            gh pr create --base "${DEFAULT_BRANCH}" --head "${BRANCH}" \
-              --title "docs: changelog for v${VERSION}" \
-              --body "Generated by the release workflow for [v${VERSION}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}). Merges once CI is green." || {
-              echo "::warning::Could not open the changelog PR for v${VERSION}; the branch ${BRANCH} is pushed, so open it by hand."
-              exit 0
-            }
-          fi
-
-          # Dispatching ci.yml on the branch is no substitute for the PAT
-          # (measured): its checks never reach the head commit's status-check
-          # rollup, which is what the merge gate reads. Closing and reopening
-          # the PR does work.
-          if [[ "${HAS_PAT}" != "true" ]]; then
-            echo "::warning::No RELEASE_PAT secret, so CI won't start for the changelog PR on its own and it can't merge. Close and reopen it once; it merges itself when the checks go green."
-          fi
-
-          gh pr merge "${BRANCH}" --auto --squash --delete-branch \
-            --subject "docs: changelog for v${VERSION} [skip ci]" || \
-            echo "::warning::Could not enable auto-merge; merge the changelog PR by hand once CI is green."
+        run: scripts/changelog-pr.sh "${VERSION}" "${PREVIOUS}"
 
   homebrew:
     name: Update Homebrew cask
