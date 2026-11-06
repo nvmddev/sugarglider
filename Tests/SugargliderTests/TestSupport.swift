@@ -95,6 +95,11 @@ final class StubbedSite: Sendable {
 
     deinit { SiteProtocol.sites.withLock { $0[host] = nil } }
 
+    /// Answers a request whose path and query contain `fragment` with `json` instead.
+    func answer(_ json: String, whenRequestContains fragment: String) {
+        SiteProtocol.sites.withLock { $0[host]?.answers.append((fragment, Data(json.utf8))) }
+    }
+
     @MainActor func nightscout(token: String = "", baseURL: String? = nil) -> Nightscout {
         Nightscout(baseURL: baseURL ?? self.baseURL, token: token, session: Self.session)
     }
@@ -112,6 +117,7 @@ private final class SiteProtocol: URLProtocol {
         var body: Data
         var delay: TimeInterval = 0
         var requests: [String] = []
+        var answers: [(fragment: String, body: Data)] = []
     }
 
     static let sites = Mutex<[String: Site]>([:])
@@ -130,21 +136,23 @@ private final class SiteProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard let url = request.url, let host = url.host(), let site = Self.sites.withLock({ sites in
+        guard let url = request.url, let host = url.host(), let (site, body) = Self.sites.withLock({ sites in
             let request = url.path(percentEncoded: true) + (url.query(percentEncoded: true).map { "?\($0)" } ?? "")
             sites[host]?.requests.append(request)
-            return sites[host]
+            return sites[host].map { site in
+                (site, site.answers.first { request.contains($0.fragment) }?.body ?? site.body)
+            }
         }) else {
             client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
             return
         }
-        let answer = { [site, url] in
+        let answer = { [site, body, url] in
             guard !self.cancelled.withLock({ $0 }) else { return }
             guard let client = self.client else { return }
             let response = HTTPURLResponse(url: url, statusCode: site.status, httpVersion: "HTTP/1.1",
                                            headerFields: ["Content-Type": "application/json"])!
             client.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client.urlProtocol(self, didLoad: site.body)
+            client.urlProtocol(self, didLoad: body)
             client.urlProtocolDidFinishLoading(self)
         }
         if site.delay > 0 {

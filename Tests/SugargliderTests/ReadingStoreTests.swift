@@ -320,7 +320,7 @@ extension SugargliderTests {
         store.readings = [reading(110)]
         store.pumpStatus = status
         store.treatments = [bolus]
-        store.reservoirChanged = changed
+        store.changed = [.reservoir: changed]
 
         for _ in 0..<2 {
             await store.refreshHistory(force: false)
@@ -330,7 +330,7 @@ extension SugargliderTests {
         #expect(store.readings.map(\.sgv) == [110])
         #expect(store.pumpStatus == status)
         #expect(store.treatments == [bolus])
-        #expect(store.reservoirChanged == changed)
+        #expect(store.changed == [.reservoir: changed])
     }
 
     @Test func wideningTheRangeFetchesTheMissingHistory() async throws {

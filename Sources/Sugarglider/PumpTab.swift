@@ -20,6 +20,8 @@ struct PumpTab: View {
                 toggle("Time since change", detail: "Next to the reservoir and the battery",
                        isOn: $settings.showChangeAge)
                     .disabled(!settings.showReservoir && !settings.showPumpBattery)
+                toggle("Cannula", detail: "Time since the last change", isOn: $settings.showCannulaAge)
+                toggle("Sensor", detail: "Time since the last start or change", isOn: $settings.showSensorAge)
                 if reported.contains(.dailyInsulin) {
                     toggle("Total insulin", detail: "Today and yesterday", isOn: $settings.showDailyInsulin)
                 }
@@ -31,8 +33,9 @@ struct PumpTab: View {
                 Text("Dropdown")
             } footer: {
                 Text("""
-                    Each item appears only if your Nightscout site reports it, through the \
-                    device status a pump or loop uploader sends.
+                    Each item appears only if your Nightscout site has it. Most come from the \
+                    device status that a pump or loop uploader sends. Cannula and sensor changes \
+                    come from the treatments on your site.
                     """)
                     .foregroundStyle(.secondary)
             }

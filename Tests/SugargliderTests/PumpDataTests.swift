@@ -390,7 +390,7 @@ extension SugargliderTests {
 extension SugargliderTests {
     private static var pumpSwitches: [ReferenceWritableKeyPath<AppSettings, Bool>] {
         [\.showActiveInsulin, \.showPumpMode, \.showDeliveryRate, \.showReservoir, \.showPumpBattery,
-         \.showChangeAge, \.showDailyInsulin, \.showAverageGlucose,
+         \.showChangeAge, \.showCannulaAge, \.showSensorAge, \.showDailyInsulin, \.showAverageGlucose,
          \.chartShowsBoluses, \.chartShowsDeliveryRate, \.chartShowsAnnouncements]
     }
 
@@ -423,14 +423,12 @@ extension SugargliderTests {
         let store = ReadingStore(settings: Self.makeSettings())
         store.pumpStatus = PumpStatus(date: .now, mode: .auto)
         store.treatments = [Treatment(id: "a", date: .now, kind: .bolus(units: 1))]
-        store.reservoirChanged = .now
-        store.batteryChanged = .now
+        store.changed = [.reservoir: .now, .sensor: .now]
         store.reconnect()
         #expect(store.pumpStatus == nil)
         #expect(store.reportedPumpExtras.isEmpty)
         #expect(store.treatments.isEmpty)
-        #expect(store.reservoirChanged == nil)
-        #expect(store.batteryChanged == nil)
+        #expect(store.changed.isEmpty)
         #expect(store.treatmentsWindowStart == nil)
     }
 
@@ -509,8 +507,8 @@ extension SugargliderTests {
 
         await store.refreshDetails(force: true)
         let date = NightscoutTime.date(changed)
-        #expect(store.reservoirChanged == (showAges && reservoir ? date : nil))
-        #expect(store.batteryChanged == (showAges && battery ? date : nil))
+        #expect(store.changed[.reservoir] == (showAges && reservoir ? date : nil))
+        #expect(store.changed[.battery] == (showAges && battery ? date : nil))
         let asked = server.requests.filter { $0.contains("eventType") }
         #expect(asked.contains { $0.contains("=Insulin%20Change") } == (showAges && reservoir))
         #expect(asked.contains { $0.contains("=Pump%20Battery%20Change") } == (showAges && battery))
@@ -520,6 +518,27 @@ extension SugargliderTests {
             let lookback = try #require(NightscoutTime.date(since)).distance(to: .now)
             #expect(abs(lookback - 60 * 86_400) < 60)
         }
+    }
+
+    /// Loop and xDrip+ record a new sensor as a start, AAPS as a change, and a site may hold both.
+    @Test func sensorAgeIsTheNewestOfItsTwoEventTypes() async throws {
+        let server = StubbedSite(json: "[]")
+        server.answer(#"[{"eventType":"Sensor Start","created_at":"2030-01-01T08:00:00Z"}]"#, whenRequestContains: "=Sensor%20Start")
+        server.answer(#"[{"eventType":"Sensor Change","created_at":"2030-01-03T08:00:00Z"}]"#, whenRequestContains: "=Sensor%20Change")
+        server.answer(#"[{"eventType":"Site Change","created_at":"2030-01-02T08:00:00Z"}]"#, whenRequestContains: "=Site%20Change")
+        let settings = Self.makeSettings()
+        for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
+        settings.showSensorAge = true
+        let store = server.store(settings)
+
+        await store.refreshDetails(force: true)
+        #expect(store.changed == [.sensor: try #require(NightscoutTime.date("2030-01-03T08:00:00Z"))])
+        #expect(server.requests.count == 2)
+
+        settings.showCannulaAge = true
+        await store.refreshDetails(force: true)
+        #expect(store.changed[.cannula] == NightscoutTime.date("2030-01-02T08:00:00Z"))
+        #expect(server.requests.count == 5)
     }
 }
 
@@ -533,7 +552,7 @@ extension SugargliderTests {
     }
 
     @Test func defaultDetailRowsLabelTheRateWithTheMode() {
-        let rows = PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
+        let rows = PumpDetailsView.rows(status: fullStatus(), changed: [:],
                                         settings: Self.makeSettings(), now: .now, locale: Self.enUS)
         #expect(rows.map(\.label) == ["Active insulin", "Auto mode", "Reservoir", "Pump battery"])
         #expect(rows.map(\.value) == ["1.35 U", "1.15 U/h", "120 U", "65%"])
@@ -543,18 +562,18 @@ extension SugargliderTests {
     @Test func detailRowsSplitModeAndRateWhenOnlyOneIsOn() {
         let settings = Self.makeSettings()
         settings.showDeliveryRate = false
-        #expect(PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
+        #expect(PumpDetailsView.rows(status: fullStatus(), changed: [:],
                                      settings: settings, now: .now, locale: Self.enUS).contains(.init(label: "Mode", value: "Auto mode")))
         settings.showDeliveryRate = true
         settings.showPumpMode = false
-        #expect(PumpDetailsView.rows(status: fullStatus(), reservoirChanged: nil, batteryChanged: nil,
+        #expect(PumpDetailsView.rows(status: fullStatus(), changed: [:],
                                      settings: settings, now: .now, locale: Self.enUS).contains(.init(label: "Delivery rate", value: "1.15 U/h")))
     }
 
     @Test func statusTextModeKeepsItsOwnRow() {
         var status = fullStatus()
         status.mode = .other("Closed Loop")
-        let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
+        let rows = PumpDetailsView.rows(status: status, changed: [:],
                                         settings: Self.makeSettings(), now: .now, locale: Self.enUS)
         #expect(rows.contains(.init(label: "Mode", value: "Closed Loop")))
         #expect(rows.contains(.init(label: "Delivery rate", value: "1.15 U/h")))
@@ -563,7 +582,7 @@ extension SugargliderTests {
     @Test func reservoirRowShowsTheUploadersMessageInsteadOfTheLevel() {
         for reservoir in [42, nil] as [Double?] {
             let status = PumpStatus(date: .now, reservoir: reservoir, reservoirMessage: "Signal Loss")
-            let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
+            let rows = PumpDetailsView.rows(status: status, changed: [:],
                                             settings: Self.makeSettings(), now: .now, locale: Self.enUS)
             #expect(rows == [.init(label: "Reservoir", value: "Signal Loss")])
         }
@@ -571,10 +590,10 @@ extension SugargliderTests {
 
     @Test func detailRowsShowOnlyWhatTheSiteReports() {
         let status = PumpStatus(date: .now, reservoir: 8.4)
-        let rows = PumpDetailsView.rows(status: status, reservoirChanged: nil, batteryChanged: nil,
+        let rows = PumpDetailsView.rows(status: status, changed: [:],
                                         settings: Self.makeSettings(), now: .now, locale: Self.enUS)
         #expect(rows == [.init(label: "Reservoir", value: "8.4 U")])
-        #expect(PumpDetailsView.rows(status: nil, reservoirChanged: nil, batteryChanged: nil,
+        #expect(PumpDetailsView.rows(status: nil, changed: [:],
                                      settings: Self.makeSettings(), now: .now, locale: Self.enUS).isEmpty)
         #expect(PumpDetailsView.dailyRows(status: status, settings: Self.makeSettings(), locale: Self.enUS).isEmpty)
     }
@@ -584,7 +603,7 @@ extension SugargliderTests {
         let settings = Self.makeSettings()
         let changed = now.addingTimeInterval(-25 * 3600)
         func reservoirRow() -> PumpDetailsView.Row? {
-            PumpDetailsView.rows(status: fullStatus(), reservoirChanged: changed, batteryChanged: nil,
+            PumpDetailsView.rows(status: fullStatus(), changed: [.reservoir: changed],
                                  settings: settings, now: now, locale: Self.enUS).first { $0.label == "Reservoir" }
         }
         #expect(reservoirRow()?.note == nil)
@@ -592,6 +611,24 @@ extension SugargliderTests {
         #expect(reservoirRow()?.note == "1d 1h")
         // The note stays narrow for the row; the help is spoken, so it uses the wide units.
         #expect(reservoirRow()?.help == "Reservoir changed 1 day, 1 hour ago")
+    }
+
+    /// They come from treatments, so a site with a CGM alone shows the sensor's age too.
+    @Test func cannulaAndSensorRowsNeedNoPumpStatus() {
+        let now = Date.now
+        let settings = Self.makeSettings()
+        let changed: [ChangeEvent: Date] = [.cannula: now.addingTimeInterval(-50 * 3600),
+                                            .sensor: now.addingTimeInterval(-6 * 86_400 - 3 * 3600)]
+        #expect(PumpDetailsView.rows(status: nil, changed: changed, settings: settings, now: now, locale: Self.enUS).isEmpty)
+        settings.showCannulaAge = true
+        settings.showSensorAge = true
+        #expect(PumpDetailsView.rows(status: nil, changed: changed, settings: settings, now: now, locale: Self.enUS) == [
+            .init(label: "Cannula", value: "2d 2h", help: "Cannula changed 2 days, 2 hours ago"),
+            .init(label: "Sensor", value: "6d 3h", help: "Sensor changed 6 days, 3 hours ago"),
+        ])
+        let withStatus = PumpDetailsView.rows(status: fullStatus(), changed: changed, settings: settings,
+                                              now: now, locale: Self.enUS)
+        #expect(withStatus.map(\.label) == ["Active insulin", "Auto mode", "Reservoir", "Pump battery", "Cannula", "Sensor"])
     }
 
     @Test func dailyRowsUseTheDisplayUnit() {
@@ -648,7 +685,8 @@ extension SugargliderTests {
         let s = Self.makeSettings()
         #expect(s.showActiveInsulin && s.showPumpMode && s.showDeliveryRate && s.showReservoir && s.showPumpBattery)
         #expect(s.chartShowsBoluses)
-        #expect(!s.showChangeAge && !s.showDailyInsulin && !s.showAverageGlucose)
+        #expect(!s.showChangeAge && !s.showCannulaAge && !s.showSensorAge)
+        #expect(!s.showDailyInsulin && !s.showAverageGlucose)
         #expect(!s.chartShowsDeliveryRate && !s.chartShowsAnnouncements)
     }
 
@@ -669,6 +707,8 @@ extension SugargliderTests {
         s.showReservoir = false
         s.showPumpBattery = false
         #expect(!s.needsChangeDates)                 // nothing to put the age next to
+        s.showSensorAge = true
+        #expect(s.needsChangeDates)                  // a row of its own
         s.chartShowsBoluses = false
         #expect(!s.needsTreatments)
         let rows: [ReferenceWritableKeyPath<AppSettings, Bool>] = [\.showActiveInsulin, \.showPumpMode, \.showDeliveryRate]

@@ -342,6 +342,8 @@ final class AppSettings {
     var showPumpBattery: Bool = true { didSet { persist(showPumpBattery, "showPumpBattery") } }
     /// Time since the last reservoir or battery change.
     var showChangeAge: Bool = false { didSet { persist(showChangeAge, "showChangeAge") } }
+    var showCannulaAge: Bool = false { didSet { persist(showCannulaAge, "showCannulaAge") } }
+    var showSensorAge: Bool = false { didSet { persist(showSensorAge, "showSensorAge") } }
     var showDailyInsulin: Bool = false { didSet { persist(showDailyInsulin, "showDailyInsulin") } }
     var showAverageGlucose: Bool = false { didSet { persist(showAverageGlucose, "showAverageGlucose") } }
 
@@ -358,7 +360,17 @@ final class AppSettings {
             || showDailyInsulin || showAverageGlucose
     }
     var needsTreatments: Bool { chartShowsBoluses || chartShowsDeliveryRate || chartShowsAnnouncements }
-    var needsChangeDates: Bool { showChangeAge && (showReservoir || showPumpBattery) }
+    var needsChangeDates: Bool { ChangeEvent.allCases.contains { showsAge(of: $0) } }
+
+    /// Reservoir and battery ages are notes on their rows, so they need the row too.
+    func showsAge(of change: ChangeEvent) -> Bool {
+        switch change {
+        case .reservoir: showChangeAge && showReservoir
+        case .battery: showChangeAge && showPumpBattery
+        case .cannula: showCannulaAge
+        case .sensor: showSensorAge
+        }
+    }
 
     // MARK: - Loading and persistence
 
@@ -400,6 +412,8 @@ final class AppSettings {
         load(\.showReservoir, "showReservoir")
         load(\.showPumpBattery, "showPumpBattery")
         load(\.showChangeAge, "showChangeAge")
+        load(\.showCannulaAge, "showCannulaAge")
+        load(\.showSensorAge, "showSensorAge")
         load(\.showDailyInsulin, "showDailyInsulin")
         load(\.showAverageGlucose, "showAverageGlucose")
         load(\.chartShowsBoluses, "chartShowsBoluses")
