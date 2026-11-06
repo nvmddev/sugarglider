@@ -284,7 +284,7 @@ extension SugargliderTests {
         let line = try #require(server.requests.first)
         #expect(line.contains("/api/v1/devicestatus.json"))
         #expect(line.contains("count=\(Nightscout.deviceStatusCount)"))
-        #expect(line.contains("token=t"))
+        #expect(server.secrets == ["t"])
     }
 
     @Test func fetchPumpStatusOfASiteWithoutOneIsNil() async throws {

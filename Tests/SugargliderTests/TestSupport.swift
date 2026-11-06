@@ -80,6 +80,8 @@ final class StubbedSite: Sendable {
 
     /// Path and query of every request, as sent.
     var requests: [String] { SiteProtocol.sites.withLock { $0[host]?.requests ?? [] } }
+    /// The `api-secret` header of every request, nil where none was sent.
+    var secrets: [String?] { SiteProtocol.sites.withLock { $0[host]?.secrets ?? [] } }
 
     /// Delays every answer, so a slow response to a replaced site can be tested.
     /// Set it before the request starts.
@@ -117,6 +119,7 @@ private final class SiteProtocol: URLProtocol {
         var body: Data
         var delay: TimeInterval = 0
         var requests: [String] = []
+        var secrets: [String?] = []
         var answers: [(fragment: String, body: Data)] = []
     }
 
@@ -139,6 +142,7 @@ private final class SiteProtocol: URLProtocol {
         guard let url = request.url, let host = url.host(), let (site, body) = Self.sites.withLock({ sites in
             let request = url.path(percentEncoded: true) + (url.query(percentEncoded: true).map { "?\($0)" } ?? "")
             sites[host]?.requests.append(request)
+            sites[host]?.secrets.append(self.request.value(forHTTPHeaderField: "api-secret"))
             return sites[host].map { site in
                 (site, site.answers.first { request.contains($0.fragment) }?.body ?? site.body)
             }
