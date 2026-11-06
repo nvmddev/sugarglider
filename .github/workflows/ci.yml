@@ -48,6 +48,42 @@ jobs:
       - name: Assemble app bundle
         run: ./build.sh
 
+  # The toolchain the release uses. The two toolchains reject different code,
+  # in both directions. A separate job rather than a matrix, because the ruleset
+  # requires "Build & test" by that exact name. Not required itself while the
+  # image is a preview without an SLA.
+  test-newest:
+    name: Build & test (newest Xcode)
+    # GitHub puts each Xcode major on its own image. Bump this label by hand
+    # when the next major's image arrives; release.yml uses the same one.
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Follows each new Xcode release on the image, never a beta or a release
+      # candidate. So a new Xcode can turn this job red without a code change.
+      - name: Select the newest stable Xcode
+        run: |
+          developer_dir="$(scripts/newest-xcode.sh)"
+          echo "DEVELOPER_DIR=${developer_dir}" >> "$GITHUB_ENV"
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Test
+        run: scripts/test.sh
+
+      # This Xcode extracts the strings the release ships.
+      - name: Check localization
+        run: scripts/check-localization.sh
+
+      - name: Assemble app bundle
+        run: ./build.sh
+
+      # Built like the release, ad-hoc signed.
       - name: Package for download
         run: |
           mkdir -p dist
@@ -61,31 +97,6 @@ jobs:
           path: dist/Sugarglider.zip
           retention-days: 14
           if-no-files-found: error
-
-  # The two toolchains reject different code, in both directions. A separate job
-  # rather than a matrix, because the ruleset requires "Build & test" by that
-  # exact name. Not required itself while the image is a preview without an SLA.
-  test-newest:
-    name: Build & test (newest Xcode)
-    runs-on: xcode-27
-    timeout-minutes: 30
-    env:
-      # The image's default Xcode lags the newest release. Bump together with
-      # the runner label.
-      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Show toolchain
-        run: |
-          swift --version
-          xcodebuild -version
-
-      - name: Test
-        run: scripts/test.sh
-
-      - name: Assemble app bundle
-        run: ./build.sh
 
   lint:
     name: Lint shell scripts & workflows
