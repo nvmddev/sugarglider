@@ -216,6 +216,22 @@ extension Treatment {
     }
 }
 
+/// A change the dropdown shows an age for. Nightscout records each as a treatment, under the
+/// event types its own age pills read.
+enum ChangeEvent: CaseIterable {
+    case reservoir, battery, cannula, sensor
+
+    var eventTypes: [String] {
+        switch self {
+        case .reservoir: ["Insulin Change"]
+        case .battery: ["Pump Battery Change"]
+        case .cannula: ["Site Change"]
+        // Loop and xDrip+ record a new sensor as a start, AAPS as a change.
+        case .sensor: ["Sensor Start", "Sensor Change"]
+        }
+    }
+}
+
 /// Nightscout's two time encodings: ISO 8601 strings (`created_at`, with or without fractional
 /// seconds, any UTC offset) and epoch milliseconds (`date`, `mills`).
 enum NightscoutTime {

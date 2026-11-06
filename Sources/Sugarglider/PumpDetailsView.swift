@@ -20,8 +20,7 @@ struct PumpDetailsView: View {
     }
 
     var body: some View {
-        let rows = Self.rows(status: store.pumpStatus, reservoirChanged: store.reservoirChanged,
-                             batteryChanged: store.batteryChanged, settings: settings, now: store.now)
+        let rows = Self.rows(status: store.pumpStatus, changed: store.changed, settings: settings, now: store.now)
         let daily = Self.dailyRows(status: store.pumpStatus, settings: settings)
         if !rows.isEmpty || !daily.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -84,9 +83,15 @@ struct PumpDetailsView: View {
         }
     }
 
-    static func rows(status: PumpStatus?, reservoirChanged: Date?, batteryChanged: Date?,
-                     settings: AppSettings, now: Date, locale: Locale = .autoupdatingCurrent) -> [Row] {
-        guard let status else { return [] }
+    static func rows(status: PumpStatus?, changed: [ChangeEvent: Date], settings: AppSettings, now: Date,
+                     locale: Locale = .autoupdatingCurrent) -> [Row] {
+        // Cannula and sensor changes are treatments, so they show without a device status too.
+        let status = status.map { statusRows($0, changed: changed, settings: settings, now: now, locale: locale) } ?? []
+        return status + ageRows(changed: changed, settings: settings, now: now, locale: locale)
+    }
+
+    private static func statusRows(_ status: PumpStatus, changed: [ChangeEvent: Date], settings: AppSettings,
+                                   now: Date, locale: Locale) -> [Row] {
         var rows: [Row] = []
         if settings.showActiveInsulin, let iob = status.insulinOnBoard {
             rows.append(Row(label: String(localized: "Active insulin"), value: PumpFormat.insulin(iob, locale: locale)))
@@ -104,18 +109,31 @@ struct PumpDetailsView: View {
             if let rate { rows.append(Row(label: String(localized: "Delivery rate"), value: PumpFormat.rate(rate, locale: locale))) }
         }
 
-        let ages = settings.showChangeAge
+        func shownChange(_ change: ChangeEvent) -> Date? { settings.showsAge(of: change) ? changed[change] : nil }
         if settings.showReservoir, let value = status.reservoirMessage ?? status.reservoir.map({ PumpFormat.reservoir($0, locale: locale) }) {
-            let age = ages ? reservoirChanged?.age(at: now, units: 2, locale: locale) : nil
-            let spokenAge = ages ? reservoirChanged?.age(at: now, units: 2, width: .wide, locale: locale) : nil
-            rows.append(Row(label: String(localized: "Reservoir"), value: value, note: age,
-                            help: spokenAge.map { String(localized: "Reservoir changed \($0) ago") }))
+            let date = shownChange(.reservoir)
+            rows.append(Row(label: String(localized: "Reservoir"), value: value,
+                            note: date?.age(at: now, units: 2, locale: locale),
+                            help: date.map { String(localized: "Reservoir changed \($0.age(at: now, units: 2, width: .wide, locale: locale)) ago") }))
         }
         if settings.showPumpBattery, let percent = status.batteryPercent {
-            let age = ages ? batteryChanged?.age(at: now, units: 2, locale: locale) : nil
-            let spokenAge = ages ? batteryChanged?.age(at: now, units: 2, width: .wide, locale: locale) : nil
-            rows.append(Row(label: String(localized: "Pump battery"), value: PumpFormat.battery(percent, locale: locale), note: age,
-                            help: spokenAge.map { String(localized: "Battery changed \($0) ago") }))
+            let date = shownChange(.battery)
+            rows.append(Row(label: String(localized: "Pump battery"), value: PumpFormat.battery(percent, locale: locale),
+                            note: date?.age(at: now, units: 2, locale: locale),
+                            help: date.map { String(localized: "Battery changed \($0.age(at: now, units: 2, width: .wide, locale: locale)) ago") }))
+        }
+        return rows
+    }
+
+    private static func ageRows(changed: [ChangeEvent: Date], settings: AppSettings, now: Date, locale: Locale) -> [Row] {
+        var rows: [Row] = []
+        if settings.showsAge(of: .cannula), let date = changed[.cannula] {
+            rows.append(Row(label: String(localized: "Cannula"), value: date.age(at: now, units: 2, locale: locale),
+                            help: String(localized: "Cannula changed \(date.age(at: now, units: 2, width: .wide, locale: locale)) ago")))
+        }
+        if settings.showsAge(of: .sensor), let date = changed[.sensor] {
+            rows.append(Row(label: String(localized: "Sensor"), value: date.age(at: now, units: 2, locale: locale),
+                            help: String(localized: "Sensor changed \(date.age(at: now, units: 2, width: .wide, locale: locale)) ago")))
         }
         return rows
     }

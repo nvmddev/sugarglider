@@ -20,6 +20,7 @@ private enum StoredSettings {
         "lineShadingUsesLineColor": false, "dotUsesZoneColor": false,
         "showActiveInsulin": false, "showPumpMode": false, "showDeliveryRate": false,
         "showReservoir": false, "showPumpBattery": false, "showChangeAge": true,
+        "showCannulaAge": true, "showSensorAge": true,
         "showDailyInsulin": true, "showAverageGlucose": true,
         "chartShowsBoluses": false, "chartShowsDeliveryRate": true, "chartShowsAnnouncements": true,
     ]
@@ -76,6 +77,8 @@ extension SugargliderTests {
         #expect(s.showReservoir)
         #expect(s.showPumpBattery)
         #expect(!s.showChangeAge)
+        #expect(!s.showCannulaAge)
+        #expect(!s.showSensorAge)
         #expect(!s.showDailyInsulin)
         #expect(!s.showAverageGlucose)
         #expect(s.chartShowsBoluses)
@@ -118,6 +121,8 @@ extension SugargliderTests {
         #expect(!s.showReservoir)
         #expect(!s.showPumpBattery)
         #expect(s.showChangeAge)
+        #expect(s.showCannulaAge)
+        #expect(s.showSensorAge)
         #expect(s.showDailyInsulin)
         #expect(s.showAverageGlucose)
         #expect(!s.chartShowsBoluses)
@@ -163,6 +168,8 @@ extension SugargliderTests {
         s.showReservoir = false
         s.showPumpBattery = false
         s.showChangeAge = true
+        s.showCannulaAge = true
+        s.showSensorAge = true
         s.showDailyInsulin = true
         s.showAverageGlucose = true
         s.chartShowsBoluses = false
