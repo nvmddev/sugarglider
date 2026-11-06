@@ -84,6 +84,9 @@ straight away whether the connection works.
   light and dark mode. The dropdown itself can be see-through glass or solid.
 - mmol/L or mg/dL, switchable any time. Your target range and the very
   low/high bounds are yours to set.
+- English or German, whichever your Mac uses. Want Sugarglider in a different
+  language than the rest of your Mac? Pick one under **System Settings →
+  General → Language & Region → Applications**.
 - Pump data, if your site has it: active insulin, the current delivery rate,
   reservoir and battery under the reading, plus boluses, the rate history and
   pump or sensor alerts on the chart, in colors you pick. If your uploader also

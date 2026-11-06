@@ -24,7 +24,8 @@ struct PumpTab: View {
                     toggle("Total insulin", detail: "Today and yesterday", isOn: $settings.showDailyInsulin)
                 }
                 if reported.contains(.averageGlucose) {
-                    toggle("Average glucose", detail: "Today and yesterday", isOn: $settings.showAverageGlucose)
+                    toggle("Average glucose", spokenTitle: PumpDetailsView.averageGlucoseSpoken,
+                           detail: "Today and yesterday", isOn: $settings.showAverageGlucose)
                 }
             } header: {
                 Text("Dropdown")
@@ -54,9 +55,10 @@ struct PumpTab: View {
         .task { await store.refreshPumpStatus(force: false, evenIfSwitchedOff: true) }
     }
 
-    private func toggle(_ title: LocalizedStringKey, detail: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
+    private func toggle(_ title: LocalizedStringKey, spokenTitle: String? = nil, detail: LocalizedStringKey,
+                        isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
-            Text(title)
+            Text(title).accessibilityLabel(spokenTitle.map { Text($0) } ?? Text(title))
             Text(detail)
         }
     }
