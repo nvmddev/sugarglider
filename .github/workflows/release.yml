@@ -27,11 +27,11 @@ concurrency:
 jobs:
   release:
     name: Build & publish
-    runs-on: macos-26
+    # The image and the Xcode of CI's newest-Xcode job, so the release ships
+    # what that job tests. Bump the label together with ci.yml.
+    runs-on: xcode-27
     # Two sequential notarizations of up to 30 min each; 90 min leaves room.
     timeout-minutes: 90
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     permissions:
       contents: write # tag, release assets, changelog branch
       pull-requests: write # the changelog PR
@@ -43,6 +43,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # version + changelog need the full tag/commit history
+
+      # Never a beta or a release candidate; see the script.
+      - name: Select the newest stable Xcode
+        run: |
+          developer_dir="$(scripts/newest-xcode.sh)"
+          echo "DEVELOPER_DIR=${developer_dir}" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="${developer_dir}" xcodebuild -version
 
       - name: Configure git identity
         run: |

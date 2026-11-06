@@ -25,9 +25,11 @@ can't be pushed to. That PR merges itself once CI is green, provided a
 `RELEASE_PAT` secret exists (see below). Without one it waits for you to close
 and reopen it, which is what starts its checks.
 
-It builds on the `macos-26` runner with Xcode 26.6, pinned in the workflow like
-CI's toolchains, so the SDK a release links against only changes when someone
-bumps it. If the cask update fails after the release is out, rerun just that
+It builds on the `xcode-27` runner with the newest stable Xcode on that image
+(`scripts/newest-xcode.sh`), the same one CI's `Build & test (newest Xcode)`
+job tests with. So a release links against the newest SDK without a change in
+the workflow. When the next Xcode major gets its own image, bump the runner
+label in `release.yml` and `ci.yml` together. If the cask update fails after the release is out, rerun just that
 part with `gh workflow run cask.yml -f version=1.2.0` (no version means the
 latest release).
 
