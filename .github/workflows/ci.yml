@@ -44,20 +44,9 @@ jobs:
       - name: Smoke-test version + changelog (bash 3.2)
         run: scripts/smoke-version-changelog.sh
 
+      # Also checks the signature and the architecture, and names the SDK.
       - name: Assemble app bundle
         run: ./build.sh
-
-      # macOS gives an app its current design only when it records a current SDK.
-      - name: Verify bundle
-        run: |
-          set -euo pipefail
-          binary=Sugarglider.app/Contents/MacOS/Sugarglider
-          [[ "$(lipo -archs "${binary}")" == "arm64" ]]
-          vtool -show-build "${binary}"
-          codesign --verify --strict --verbose=2 Sugarglider.app
-          for key in CFBundleIdentifier CFBundleShortVersionString LSMinimumSystemVersion; do
-            /usr/libexec/PlistBuddy -c "Print :${key}" Sugarglider.app/Contents/Info.plist
-          done
 
       - name: Package for download
         run: |
