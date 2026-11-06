@@ -46,8 +46,9 @@ extension SugargliderTests {
             readings: [old] + readings([60, 100, 100, 200], endingAt: now), windowEnd: now,
             settings: settings, locale: english))
 
-        #expect(summary.label == "Time in range (2h)")
-        #expect(summary.value == "Low 25% · In range 50% · High 25%")
+        #expect(summary.span == "2h")
+        #expect(summary.rows == [.init(label: "Low", value: "25%"), .init(label: "In range", value: "50%"),
+                                 .init(label: "High", value: "25%")])
         #expect(summary.help == "Very low 0%\nLow 25%\nIn range 50%\nHigh 25%\nVery high 0%")
         #expect(summary.spokenLabel == "Time in range over the last 2 hours")
         #expect(summary.spokenValue == "Very low 0%, Low 25%, In range 50%, High 25%, Very high 0%")
@@ -59,7 +60,7 @@ extension SugargliderTests {
         let summary = try #require(TimeInRangeView.summary(
             readings: readings([40, 60, 100, 200, 300, 300], endingAt: now), windowEnd: now,
             settings: Self.makeSettings(), locale: english))
-        #expect(summary.value == "Low 33% · In range 17% · High 50%")
+        #expect(summary.rows.map(\.value) == ["33%", "17%", "50%"])
         #expect(summary.help == "Very low 17%\nLow 17%\nIn range 17%\nHigh 17%\nVery high 33%")
     }
 
@@ -69,7 +70,7 @@ extension SugargliderTests {
             readings: readings([60, 100, 100, 200], endingAt: now), windowEnd: now,
             settings: Self.makeSettings(), locale: Locale(identifier: "de_DE")))
         // German puts a no-break space before the percent sign.
-        #expect(summary.value == "Low 25\u{A0}% · In range 50\u{A0}% · High 25\u{A0}%")
+        #expect(summary.rows.map(\.value) == ["25\u{A0}%", "50\u{A0}%", "25\u{A0}%"])
     }
 
     @Test func timeInRangeSummaryHidesWhenOffOrMeaningless() {

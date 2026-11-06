@@ -1716,16 +1716,6 @@
         }
       }
     },
-    "Time in range (%@)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zielbereich (%@)"
-          }
-        }
-      }
-    },
     "Time in range over the last %@" : {
       "localizations" : {
         "de" : {
