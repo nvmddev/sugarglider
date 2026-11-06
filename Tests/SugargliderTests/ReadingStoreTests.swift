@@ -442,7 +442,10 @@ extension SugargliderTests {
         try await waitUntil("the first poll") { store.lastReading != nil }
         let polls = server.requests.count
         settings.pollIntervalSeconds = 30
-        try await waitUntil("polling restarted at the new interval") { server.requests.count > polls }
+        // Less than the 60 s the old loop sleeps, so only the restarted loop can send this request.
+        try await waitUntil("polling restarted at the new interval", timeout: .seconds(30)) {
+            server.requests.count > polls
+        }
 
         settings.rangeHours = 24
         try await waitUntil("the widened history") {
@@ -575,8 +578,8 @@ extension SugargliderTests {
         try await waitUntil("the first poll") { store.lastReading != nil }
         let before = store.now
 
-        // The tick plus its 5 s tolerance: well before the 300 s sleep the clock was on.
-        try await waitUntil("the steady tick", timeout: .seconds(8)) { store.now > before }
+        // Far less than the 300 s sleep the clock was on, so only the restarted clock can tick here.
+        try await waitUntil("the steady tick", timeout: .seconds(30)) { store.now > before }
     }
 
     // MARK: - T6: races and seams

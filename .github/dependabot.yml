@@ -7,6 +7,10 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci"
+    # A new action release waits a week before it is proposed here. A
+    # compromised release is usually found and pulled within that time.
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]

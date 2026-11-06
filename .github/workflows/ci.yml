@@ -6,8 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A new push to a pull request cancels its running checks. Any other run gets
+# a group of its own, so every commit on main keeps its result: within one
+# group, GitHub also drops a queued run when a newer one arrives.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -31,16 +34,19 @@ jobs:
           swift --version
           xcodebuild -version
 
-      # Builds the app in Debug and runs the suite inside it.
+      # Builds the app in Debug, runs the suite inside it and names failed tests.
       - name: Test
-        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64 -resultBundlePath TestResults.xcresult
+        run: scripts/test.sh
 
-      # -quiet hides which tests failed; the result bundle names them.
-      - name: Show failed tests
+      # Output and duration of every test, for a failure that shows only on CI.
+      - name: Keep the test results
         if: failure()
-        run: |
-          xcrun xcresulttool get test-results summary --path TestResults.xcresult |
-            jq -r '.testFailures[]? | "\(.testIdentifierString // .testName): \(.failureText)"'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: TestResults-${{ github.job }}-${{ github.run_attempt }}
+          path: .build/TestResults.xcresult
+          retention-days: 14
+          if-no-files-found: ignore
 
       # Every string in the app has a German translation.
       - name: Check localization
@@ -51,21 +57,56 @@ jobs:
       - name: Smoke-test version + changelog (bash 3.2)
         run: scripts/smoke-version-changelog.sh
 
+      # Also checks the signature and the architecture, and names the SDK.
       - name: Assemble app bundle
         run: ./build.sh
 
-      # macOS gives an app its current design only when it records a current SDK.
-      - name: Verify bundle
-        run: |
-          set -euo pipefail
-          binary=Sugarglider.app/Contents/MacOS/Sugarglider
-          [[ "$(lipo -archs "${binary}")" == "arm64" ]]
-          vtool -show-build "${binary}"
-          codesign --verify --strict --verbose=2 Sugarglider.app
-          for key in CFBundleIdentifier CFBundleShortVersionString LSMinimumSystemVersion; do
-            /usr/libexec/PlistBuddy -c "Print :${key}" Sugarglider.app/Contents/Info.plist
-          done
+  # The toolchain the release uses. The two toolchains reject different code,
+  # in both directions. A separate job rather than a matrix, because the ruleset
+  # requires both jobs by their exact names. The image is a preview without an
+  # SLA: if it is down, rerun the job later.
+  test-newest:
+    name: Build & test (newest Xcode)
+    # GitHub puts each Xcode major on its own image. Bump this label by hand
+    # when the next major's image arrives; release.yml uses the same one.
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # Follows each new Xcode release on the image, never a beta or a release
+      # candidate. So a new Xcode can turn this job red without a code change.
+      - name: Select the newest stable Xcode
+        run: |
+          developer_dir="$(scripts/newest-xcode.sh)"
+          echo "DEVELOPER_DIR=${developer_dir}" >> "$GITHUB_ENV"
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Test
+        run: scripts/test.sh
+
+      # Output and duration of every test, for a failure that shows only on CI.
+      - name: Keep the test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: TestResults-${{ github.job }}-${{ github.run_attempt }}
+          path: .build/TestResults.xcresult
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # This Xcode extracts the strings the release ships.
+      - name: Check localization
+        run: scripts/check-localization.sh
+
+      - name: Assemble app bundle
+        run: ./build.sh
+
+      # Built like the release, ad-hoc signed.
       - name: Package for download
         run: |
           mkdir -p dist
@@ -80,41 +121,11 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  # The two toolchains reject different code, in both directions. A separate job
-  # rather than a matrix, because the ruleset requires "Build & test" by that
-  # exact name. Not required itself while the image is a preview without an SLA.
-  test-newest:
-    name: Build & test (newest Xcode)
-    runs-on: xcode-27
-    timeout-minutes: 30
-    env:
-      # The image's default Xcode lags the newest release. Bump together with
-      # the runner label.
-      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Show toolchain
-        run: |
-          swift --version
-          xcodebuild -version
-
-      - name: Test
-        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64 -resultBundlePath TestResults.xcresult
-
-      # -quiet hides which tests failed; the result bundle names them.
-      - name: Show failed tests
-        if: failure()
-        run: |
-          xcrun xcresulttool get test-results summary --path TestResults.xcresult |
-            jq -r '.testFailures[]? | "\(.testIdentifierString // .testName): \(.failureText)"'
-
-      - name: Assemble app bundle
-        run: ./build.sh
-
   lint:
     name: Lint shell scripts & workflows
-    runs-on: ubuntu-latest
+    # Pinned like the macOS images: shellcheck comes with the image, and a new
+    # version could turn a green branch red overnight.
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -140,7 +151,7 @@ jobs:
   # A broken version or changelog script should fail here, not mid-release.
   release-scripts:
     name: Smoke-test release scripts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

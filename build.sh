@@ -71,6 +71,17 @@ ditto "${ARCHIVE}/Products/Applications/${APP}" "${APP}.partial"
 mv "${APP}.partial" "${APP}"
 codesign --verify --strict --verbose=2 "${APP}"
 
-echo "Built ${APP} (${VERSION}, build ${BUILD_NUMBER})"
+BINARY="${APP}/Contents/MacOS/Sugarglider"
+ARCHS="$(lipo -archs "${BINARY}")"
+[[ "${ARCHS}" == "arm64" ]] || { echo "error: ${BINARY} is built for ${ARCHS}, not for arm64 alone" >&2; exit 1; }
+# macOS gives an app the behavior of the SDK it records, the current design included.
+BUILD_INFO="$(vtool -show-build "${BINARY}")"
+MINOS="$(awk '$1 == "minos" { print $2 }' <<<"${BUILD_INFO}")"
+SDK="$(awk '$1 == "sdk" { print $2 }' <<<"${BUILD_INFO}")"
+# Read back from the bundle, so the log shows what the build settings produced.
+info() { plutil -extract "$1" raw -o - "${APP}/Contents/Info.plist"; }
+
+echo "Built ${APP} $(info CFBundleShortVersionString) (build $(info CFBundleVersion)), $(info CFBundleIdentifier)"
+echo "  For:        arm64, macOS ${MINOS} or newer, built with the macOS ${SDK} SDK"
 echo "  Run it:     open ${APP}"
 echo "  Install:    cp -r ${APP} /Applications/"
