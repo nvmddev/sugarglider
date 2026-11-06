@@ -63,8 +63,8 @@ jobs:
 
   # The toolchain the release uses. The two toolchains reject different code,
   # in both directions. A separate job rather than a matrix, because the ruleset
-  # requires "Build & test" by that exact name. Not required itself while the
-  # image is a preview without an SLA.
+  # requires both jobs by their exact names. The image is a preview without an
+  # SLA: if it is down, rerun the job later.
   test-newest:
     name: Build & test (newest Xcode)
     # GitHub puts each Xcode major on its own image. Bump this label by hand
