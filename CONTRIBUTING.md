@@ -23,11 +23,14 @@ project builds with `xcodebuild`. The tests run from the command line the way
 CI runs them:
 
 ```sh
-xcodebuild test -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS
+scripts/test.sh
 ```
 
-They run inside the app, which notices and stays out of the menu bar for them.
-The scheme runs them in English, so they pass whatever language your Mac uses.
+It names the tests that failed. Extra options go to `xcodebuild`, so
+`scripts/test.sh '-only-testing:SugargliderTests/SugargliderTests/<name>()'`
+runs a single test. The tests run inside the app, which notices and stays out
+of the menu bar for them. The scheme runs them in English, so they pass whatever
+language your Mac uses.
 `build.sh` archives the Release configuration and copies the app here; the
 environment variables it reads are listed at its top.
 
@@ -110,7 +113,7 @@ still one merge click.
 
 ## Before you open a PR
 
-- The tests pass (⌘U, or `xcodebuild test` as above).
+- The tests pass (⌘U, or `scripts/test.sh` as above).
 - `./build.sh` succeeds and you've actually run the app.
 - Anything touching drawing or colors was checked in **both** Light and Dark
   mode, and with both mmol/L and mg/dL if it touches values.

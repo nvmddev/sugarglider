@@ -87,7 +87,7 @@ jobs:
           echo "Releasing ${version} (previous: ${previous:-none})" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Test
-        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64
+        run: scripts/test.sh
 
       - name: Import signing certificate
         id: signing

@@ -31,16 +31,9 @@ jobs:
           swift --version
           xcodebuild -version
 
-      # Builds the app in Debug and runs the suite inside it.
+      # Builds the app in Debug, runs the suite inside it and names failed tests.
       - name: Test
-        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64 -resultBundlePath TestResults.xcresult
-
-      # -quiet hides which tests failed; the result bundle names them.
-      - name: Show failed tests
-        if: failure()
-        run: |
-          xcrun xcresulttool get test-results summary --path TestResults.xcresult |
-            jq -r '.testFailures[]? | "\(.testIdentifierString // .testName): \(.failureText)"'
+        run: scripts/test.sh
 
       # Every string in the app has a German translation.
       - name: Check localization
@@ -100,14 +93,7 @@ jobs:
           xcodebuild -version
 
       - name: Test
-        run: xcodebuild test -quiet -project Sugarglider.xcodeproj -scheme Sugarglider -destination platform=macOS,arch=arm64 -resultBundlePath TestResults.xcresult
-
-      # -quiet hides which tests failed; the result bundle names them.
-      - name: Show failed tests
-        if: failure()
-        run: |
-          xcrun xcresulttool get test-results summary --path TestResults.xcresult |
-            jq -r '.testFailures[]? | "\(.testIdentifierString // .testName): \(.failureText)"'
+        run: scripts/test.sh
 
       - name: Assemble app bundle
         run: ./build.sh
