@@ -16,8 +16,10 @@ on:
         type: boolean
         default: false
 
+# Read-only by default. The release job asks for the writes it needs, and the
+# cask job gets only this.
 permissions:
-  contents: write
+  contents: read
 
 # Queued: cancelling could leave a release half-published.
 concurrency:
