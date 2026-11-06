@@ -15,8 +15,10 @@ struct TimeInRangeView: View {
         /// The ring's fill, from 0 to 1.
         var inRangeShare: Double
         var inRangeText: String
-        /// What the ring stands for: the popover's title and what VoiceOver calls it.
+        /// What the ring stands for, short: the popover's and the help tag's title.
         var title: String
+        /// The same with the hours spelled out, for VoiceOver.
+        var spokenLabel: String
         /// All five zones, from very low up.
         var zones: [Zone]
         /// The title, then each zone on its own line.
@@ -46,7 +48,7 @@ struct TimeInRangeView: View {
             }
             .buttonStyle(.plain)
             .help(summary.help)
-            .accessibilityLabel(summary.title)
+            .accessibilityLabel(summary.spokenLabel)
             .accessibilityValue(summary.spokenValue)
             // VoiceOver reads the help tag as the hint, which would repeat the value.
             .accessibilityHint(Text("Shows each zone's share"))
@@ -75,10 +77,14 @@ struct TimeInRangeView: View {
                      String(localized: "In range \(percent(.inRange))"), String(localized: "High \(percent(.high))"),
                      String(localized: "Very high \(percent(.veryHigh))")]
         let hours = Duration.seconds(Double(settings.rangeHours) * 3600)
-            .formatted(.units(allowed: [.hours], width: .wide).locale(locale))
-        let title = String(localized: "Time in range over the last \(hours)")
-        return Summary(inRangeShare: inRange, inRangeText: percent(.inRange), title: title, zones: zones,
-                       help: ([title] + lines).joined(separator: "\n"), spokenValue: lines.joined(separator: ", "))
+        func hoursText(_ width: Duration.UnitsFormatStyle.UnitWidth) -> String {
+            hours.formatted(.units(allowed: [.hours], width: width).locale(locale))
+        }
+        let title = String(localized: "Time in range (\(hoursText(.narrow)))")
+        return Summary(inRangeShare: inRange, inRangeText: percent(.inRange), title: title,
+                       spokenLabel: String(localized: "Time in range over the last \(hoursText(.wide))"),
+                       zones: zones, help: ([title] + lines).joined(separator: "\n"),
+                       spokenValue: lines.joined(separator: ", "))
     }
 }
 

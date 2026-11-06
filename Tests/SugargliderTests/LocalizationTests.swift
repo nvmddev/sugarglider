@@ -24,6 +24,7 @@ extension SugargliderTests {
         let path = try #require(Bundle.main.path(forResource: "de", ofType: "lproj"))
         let german = try #require(Bundle(path: path))
         #expect(String(localized: "Time in range", bundle: german) == "Zeit im Zielbereich")
+        #expect(String(localized: "Time in range (\("9h"))", bundle: german) == "Im Zielbereich (9h)")
         #expect(String(localized: "Low \("4 %")", bundle: german) == "Tief 4 %")
         #expect(String(localized: "In range \("78 %")", bundle: german) == "Im Ziel 78 %")
         #expect(String(localized: "Time in range over the last \("6 Stunden")", bundle: german)
