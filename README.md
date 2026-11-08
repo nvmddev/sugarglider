@@ -104,8 +104,8 @@ To use a different language for Sugarglider only, go to **System Settings →
 General → Language & Region → Applications**.
 
 More languages are welcome. [Open an issue](https://github.com/nvmddev/sugarglider/issues/new/choose)
-to ask for one, or add it yourself in a pull request. All of the app's text is
-in `Sources/Sugarglider/Localizable.xcstrings`. You can edit that file in Xcode.
+to ask for one, or add it yourself in a pull request.
+[CONTRIBUTING.md](CONTRIBUTING.md#adding-a-language) explains how.
 
 ## Privacy
 
