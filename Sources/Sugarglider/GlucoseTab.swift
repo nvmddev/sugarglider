@@ -57,7 +57,7 @@ struct GlucoseTab: View {
     private func displayValue(_ keyPath: ReferenceWritableKeyPath<AppSettings, Double>) -> Binding<Double> {
         Binding(
             get: { settings.units.value(fromMgdl: settings[keyPath: keyPath]) },
-            set: { settings[keyPath: keyPath] = settings.units.mgdl(from: $0) }
+            set: { settings[keyPath: keyPath] = settings.units.thresholdMgdl(from: $0) }
         )
     }
 }

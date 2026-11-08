@@ -34,17 +34,15 @@ struct TimeInRangeView: View {
     var body: some View {
         if let summary = Self.summary(readings: store.readings, windowEnd: store.now, settings: settings) {
             Button { showsZones.toggle() } label: {
-                ScaledLayout(scale: Self.ringScale) {
-                    Gauge(value: summary.inRangeShare) {
-                        Text(summary.title)
-                    } currentValueLabel: {
-                        // The style's own label size leaves "100%" no room inside the ring.
-                        Text(summary.inRangeText).font(.title3.weight(.medium)).monospacedDigit()
-                    }
-                    .gaugeStyle(.accessoryCircularCapacity)
-                    .tint(settings.inRangeColor)
-                    .scaleEffect(Self.ringScale)
+                Gauge(value: summary.inRangeShare) {
+                    Text(summary.title)
+                } currentValueLabel: {
+                    // The style's own label size leaves "100%" no room inside the ring.
+                    Text(summary.inRangeText).font(.title3.weight(.medium)).monospacedDigit()
                 }
+                .gaugeStyle(.accessoryCircularCapacity)
+                .tint(settings.inRangeColor)
+                .scaled(by: Self.ringScale)
             }
             .buttonStyle(.plain)
             .help(summary.help)
@@ -65,8 +63,13 @@ struct TimeInRangeView: View {
                                            thresholds: settings.thresholds)
         guard let inRange = shares[.inRange] else { return nil }
 
+        // Rounding must not turn a few readings into none, nor all but a few into all.
         func percent(_ zone: ChartMath.Zone) -> String {
-            shares[zone, default: 0].formatted(.percent.precision(.fractionLength(0)).locale(locale))
+            let share = shares[zone, default: 0]
+            let style: FloatingPointFormatStyle<Double>.Percent = .percent.precision(.fractionLength(0)).locale(locale)
+            if share > 0, share < 0.01 { return String(localized: "<\(0.01.formatted(style))") }
+            if share > 0.99, share < 1 { return String(localized: ">\(0.99.formatted(style))") }
+            return share.formatted(style)
         }
         let zones = [Summary.Zone(label: String(localized: "Very low"), value: percent(.veryLow)),
                      Summary.Zone(label: String(localized: "Low"), value: percent(.low)),
@@ -112,7 +115,14 @@ private struct ZoneShares: View {
     }
 }
 
-/// Draws its view at `scale` and takes only the scaled room, which `scaleEffect` alone doesn't.
+private extension View {
+    /// Draws the view at `scale` and takes only the scaled room, which `scaleEffect` alone doesn't.
+    func scaled(by scale: CGFloat) -> some View {
+        ScaledLayout(scale: scale) { scaleEffect(scale) }
+    }
+}
+
+/// Takes the room of its view at `scale`; the view's own `scaleEffect` draws it at that size.
 private struct ScaledLayout: Layout {
     var scale: CGFloat
 

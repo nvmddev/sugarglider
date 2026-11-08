@@ -36,7 +36,7 @@ final class ReadingStore {
     @ObservationIgnored private(set) var historyWindowStart: Date?
     @ObservationIgnored private(set) var treatmentsWindowStart: Date?
 
-    private enum Part { case history, pumpStatus, treatments, changeDates }
+    private enum Part: Hashable { case history, pumpStatus, treatments, change(ChangeEvent) }
     @ObservationIgnored private var fetchedAt: [Part: Date] = [:]
     /// Bumped by `reconnect()`. Responses to earlier requests are dropped, so a slow answer
     /// from the previous site can't repopulate the store.
@@ -264,10 +264,11 @@ final class ReadingStore {
     }
 
     private func refreshChangeDates(force: Bool) async {
-        guard settings.isConfigured, settings.needsChangeDates,
-              force || !fetchedRecently(.changeDates) else { return }
+        let wanted = ChangeEvent.allCases.filter {
+            settings.showsAge(of: $0) && (force || !fetchedRecently(.change($0)))
+        }
+        guard settings.isConfigured, !wanted.isEmpty else { return }
         let since = Date.now.addingTimeInterval(-Self.changeLookback)
-        let wanted = ChangeEvent.allCases.filter { settings.showsAge(of: $0) }
         guard let dates = await fetch({ site in
             try await withThrowingTaskGroup(of: (ChangeEvent, Date?).self) { group in
                 for change in wanted {
@@ -282,8 +283,12 @@ final class ReadingStore {
                 return dates
             }
         }) else { return }
-        fetchedAt[.changeDates] = .now
-        changed = dates
+        var updated = changed
+        for change in wanted {
+            fetchedAt[.change(change)] = .now
+            updated[change] = dates[change]
+        }
+        changed = updated
     }
 
     /// The result of a request to the current site, or nil when it failed or the site changed

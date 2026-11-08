@@ -385,8 +385,28 @@ extension SugargliderTests {
         _ = Self.makeSettings(defaults: defaults)
         #expect(defaults.double(forKey: "targetLow") == 70)
 
-        defaults.set(3.9, forKey: "targetLow")
-        #expect(Self.makeSettings(defaults: defaults).targetLow == 3.9)
+        defaults.set(4.0, forKey: "targetLow")
+        #expect(Self.makeSettings(defaults: defaults).targetLow == 4)  // not scaled to 72 again
+    }
+
+    @Test func migrationRoundsAThresholdStoredWithAFraction() {
+        let defaults = Self.makeDefaults()
+        _ = Self.makeSettings(defaults: defaults)
+        defaults.set(70.2, forKey: "targetLow")
+        #expect(Self.makeSettings(defaults: defaults).targetLow == 70)
+        #expect(defaults.double(forKey: "targetLow") == 70)
+    }
+
+    @Test func aThresholdTypedInMmolKeepsItsReadingInTheZoneNearerTheTarget() {
+        #expect(AppSettings.Units.mmol.thresholdMgdl(from: 3.9) == 70)
+        #expect(AppSettings.Units.mmol.thresholdMgdl(from: 13.9) == 250)
+        #expect(AppSettings.Units.mgdl.thresholdMgdl(from: 70.4) == 70)
+
+        let s = Self.makeSettings()
+        s.units = .mmol
+        s.targetLow = s.units.thresholdMgdl(from: 3.9)
+        #expect(s.thresholds.zone(of: 70) == .inRange)  // shown as 3.9, like the threshold
+        #expect(s.thresholds.zone(of: 69) == .low)
     }
 }
 

@@ -93,6 +93,12 @@
         }
       }
     },
+    "<%@" : {
+      "shouldTranslate" : false
+    },
+    ">%@" : {
+      "shouldTranslate" : false
+    },
     "A pump color applies once its item is switched on in the Pump tab." : {
       "localizations" : {
         "de" : {
@@ -889,7 +895,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gezählt werden die Werte, die das Diagramm zeigt. Klicke auf den Ring, um den Anteil jeder Zone zu sehen."
+            "value" : "Gezählt werden die Messwerte, die das Diagramm zeigt. Klicke auf den Ring, um den Anteil jeder Zone zu sehen."
           }
         }
       }
@@ -1318,7 +1324,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Messwert: %@"
+            "value" : "Gemessen %@"
           }
         }
       }
@@ -1328,7 +1334,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Messwert: %@ (veraltet)"
+            "value" : "Gemessen %@ (veraltet)"
           }
         }
       }
@@ -1701,7 +1707,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Anteil der Werte im Zielbereich, als Ring neben dem Messwert"
+            "value" : "Anteil der Messwerte im Zielbereich, als Ring neben dem Messwert"
           }
         }
       }
@@ -1821,7 +1827,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Solange die Werte nicht in dieser Reihenfolge stehen (sehr tief ≤ tief < hoch ≤ sehr hoch), kann das Diagramm die Zonen nicht einfärben und den Zielbereich nicht zeichnen, und das Menü zeigt keine Zeit im Zielbereich."
+            "value" : "Solange die Grenzwerte nicht in dieser Reihenfolge stehen (sehr tief ≤ tief < hoch ≤ sehr hoch), kann das Diagramm die Zonen nicht einfärben und den Zielbereich nicht zeichnen, und das Menü zeigt keine Zeit im Zielbereich."
           }
         }
       }
