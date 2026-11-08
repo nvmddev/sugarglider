@@ -41,4 +41,6 @@ echo "==> Compiling the renderer"
 xcrun swiftc "${SWIFT_FLAGS[@]}" -O "${SOURCES[@]}" "${WORK}/main.swift" -o "${WORK}/readme-art"
 
 echo "==> Rendering docs/"
-"${WORK}/readme-art"
+# Otherwise the chart's time axis follows the region of whoever renders. Launch
+# arguments, unlike UserDefaults.standard, leave no plist behind.
+"${WORK}/readme-art" -AppleLanguages '(en-US)' -AppleLocale en_US

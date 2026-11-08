@@ -77,8 +77,10 @@ trap 'rm -rf "${WORK}"' EXIT
 
 # Written through a file, not a process substitution: `set -e` doesn't see a
 # failing command inside `< <(...)`, and a silent empty log would pass for
-# "no changes" while prepend replaces the changelog.
-git log --no-merges --format='%H%x1f%s%x1f%b%x1e' "${RANGE}" > "${WORK}/records"
+# "no changes" while prepend replaces the changelog. The release's own
+# changelog commit (scripts/changelog-pr.sh) is bookkeeping, not a change.
+git log --no-merges --invert-grep --grep='^docs: changelog for v[0-9]' \
+    --format='%H%x1f%s%x1f%b%x1e' "${RANGE}" > "${WORK}/records"
 
 count=0
 while IFS= read -r -d $'\x1e' record; do

@@ -131,11 +131,11 @@ still one merge click.
   `scripts/make-readme-icon.sh` and commit the README pictures it writes. The
   app's own icon needs nothing, Xcode compiles it on every build.
 
-CI repeats the automated checks. Its required **Build & test** job runs on
-macOS 26 with Xcode 26.0.1, the oldest toolchain the project supports.
-**Build & test (newest Xcode)** repeats the build and tests with the newest
-Xcode, because the two compilers don't accept the same code. That one isn't a
-required check yet.
+CI repeats the automated checks. Its **Build & test** job runs on macOS 26 with
+Xcode 26.0.1, the oldest toolchain the project supports. **Build & test (newest
+Xcode)** repeats the build and tests with the newest stable Xcode, because the
+two compilers don't accept the same code. Both are required checks, so a new
+Xcode release can turn the second one red without a change here.
 
 ## A note on health data
 
