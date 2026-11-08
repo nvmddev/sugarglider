@@ -1,81 +1,106 @@
 # Contributing to Sugarglider
 
-Thanks for taking a look. Issues and pull requests are both welcome.
+Thanks for taking a look. [Issues](https://github.com/nvmddev/sugarglider/issues/new/choose),
+pull requests and translations are all welcome.
 
-Sugarglider intentionally stays small: a native menu-bar app in pure Swift and
-SwiftUI, **zero third-party dependencies**, talking to nothing but the
-Nightscout site the user configures. Changes that keep it that way are the
-easiest ones to merge.
+Sugarglider is a small native app. It is written in Swift and SwiftUI and has
+no third-party dependencies. It only talks to the Nightscout site that the user
+sets up. Changes that keep it this way are the easiest to merge. For a bigger
+change, please open an issue first, so we can agree on the approach.
 
-## Getting set up
+Please follow the [code of conduct](CODE_OF_CONDUCT.md). Report security
+problems privately, as [SECURITY.md](SECURITY.md) describes.
+
+## Development setup
+
+You need a Mac with Apple silicon, macOS 26 or later, and Xcode 26 or later.
+The Command Line Tools alone are not enough.
 
 ```sh
 git clone https://github.com/nvmddev/sugarglider.git
 cd sugarglider
 open Sugarglider.xcodeproj   # run with ⌘R, test with ⌘U
-./build.sh                   # release build, archived into Sugarglider.app
-open Sugarglider.app
 ```
 
-You need a Mac with **Apple silicon** running **macOS 26** or newer, and
-**Xcode 26 or newer** (Swift 6.2). The Command Line Tools alone won't do, the
-project builds with `xcodebuild`. The tests run from the command line the way
-CI runs them:
-
-```sh
-scripts/test.sh
-```
-
-It names the tests that failed. Extra options go to `xcodebuild`, so
-`scripts/test.sh '-only-testing:SugargliderTests/SugargliderTests/<name>()'`
-runs a single test. The tests run inside the app, which notices and stays out
-of the menu bar for them. The scheme runs them in English, so they pass whatever
-language your Mac uses.
-`build.sh` archives the Release configuration and copies the app here; the
-environment variables it reads are listed at its top.
-
-To relaunch after a rebuild, quit the running copy first:
+`./build.sh` builds the release version and puts `Sugarglider.app` into the
+project folder. The environment variables it reads, like the signing identity,
+are listed at the top of the script. Quit the running app before you start a
+new build:
 
 ```sh
 osascript -e 'quit app "Sugarglider"' ; ./build.sh && open Sugarglider.app
 ```
 
+## Tests
+
+Run the tests the way CI runs them:
+
+```sh
+scripts/test.sh
+```
+
+The script lists the tests that failed. Extra options go to `xcodebuild`. This
+runs a single test:
+
+```sh
+scripts/test.sh '-only-testing:SugargliderTests/SugargliderTests/<name>()'
+```
+
+The tests always run in English, whatever language your Mac uses.
+
 ## How the code fits together
 
-SwiftUI app lifecycle (`MenuBarExtra` and `Settings` scenes), no app delegate.
-`AppSettings` holds the persisted settings, `ReadingStore` the live state,
-`Nightscout` is a stateless API client and `KeychainTokenStore` keeps the
-access token in the Keychain. `ChartMath` and the pump models in
-`PumpData.swift` are pure logic, and the rest are views. View bodies can't be
-unit-tested, so logic lives in those types or in static helpers next to a view,
-where the tests can reach it. Keep view code thin and declarative.
+The app uses the SwiftUI app lifecycle, with a `MenuBarExtra` and a `Settings`
+scene. It has no app delegate.
 
-A few conventions span several files:
+- `AppSettings` holds the saved settings.
+- `ReadingStore` holds the live state and polls the site.
+- `Nightscout` is a stateless API client.
+- `KeychainTokenStore` keeps the access token in the Keychain.
+- `ChartMath` and the pump models in `PumpData.swift` are pure logic. Most
+  other files are views.
 
-- Every setting is a stored property whose `didSet` writes it through to
+Views can't be unit tested. So logic belongs in the types above, or in static
+helpers next to a view, where the tests can reach it. Keep view code thin.
+
+These rules apply across files:
+
+- Each setting is a stored property, and its `didSet` writes the value to
   `UserDefaults`. Observation only tracks stored properties, so a computed
-  property over `UserDefaults` would never redraw anything. The access token is
-  the one exception and goes to the Keychain ([docs/signing.md](docs/signing.md)).
-- Glucose is stored in mg/dL everywhere. The display unit only applies when a
-  value is shown.
-- Numbers, dates and durations follow the user's region: they go through a
-  `FormatStyle`, never `String(format:)`.
-- The app speaks English and German and follows the system language. Every
-  string a user sees is localizable: views take a `LocalizedStringKey`, models
-  use `String(localized:)`. The translations live in the String Catalog
-  `Sources/Sugarglider/Localizable.xcstrings`. Names, units and strings that
-  only join other strings are marked *Don't Translate* there.
-- The app target is isolated to the main actor by default, and macOS 26 is the
-  floor, so there are no `#available` checks.
+  property would never update the screen. The access token is the exception.
+  It goes to the Keychain ([docs/signing.md](docs/signing.md)).
+- Glucose is always stored in mg/dL. The display unit only applies when a value
+  is shown.
+- Numbers, dates and durations follow the user's region. Format them with a
+  `FormatStyle`, never with `String(format:)`.
+- All text that users see is localizable. Views take a `LocalizedStringKey`,
+  and models use `String(localized:)`.
+- The app target runs on the main actor by default. macOS 26 is the minimum, so
+  there are no `#available` checks.
 
-Anything else that isn't obvious has a comment where it happens, often about a
-platform quirk that was measured. Read it before simplifying code that looks
-more complicated than it needs to be.
+Code that looks more complicated than needed often has a comment that explains
+why. Read it before you simplify the code.
+
+## Adding a language
+
+Sugarglider is in English and German. All text is in one String Catalog,
+`Sources/Sugarglider/Localizable.xcstrings`. To add a language:
+
+1. Open the catalog in Xcode.
+2. Click **+** below the list of languages and choose yours.
+3. Translate every string. Strings marked *Don't Translate*, like names and
+   units, stay as they are.
+4. Check the app in your language. In Xcode, choose **Product → Scheme → Edit
+   Scheme → Run → Options → App Language**. Leave this change to the scheme out
+   of your pull request.
+5. Open a pull request.
+
+If you are not sure about a term, ask in the pull request.
 
 ## Commit messages
 
-The changelog and the version number are both generated from commit subjects, so
-this repo uses [Conventional Commits](https://www.conventionalcommits.org/):
+The changelog and the version number are made from commit subjects. That's why
+this project uses [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```text
 feat(chart): show the delta in the hover tooltip
@@ -83,78 +108,71 @@ fix: don't render a stale delta across a sensor gap
 docs: explain which Nightscout token role is needed
 ```
 
-| Type                  | Shows up as    | Version bump |
-| --------------------- | -------------- | ------------ |
-| `feat`                | Features       | minor        |
-| `fix`                 | Bug fixes      | patch        |
-| `perf`                | Performance    | patch        |
-| `refactor`            | Refactoring    | patch        |
-| `docs`                | Documentation  | patch        |
-| `build`, `ci`         | Build & CI     | patch        |
-| `test`                | Tests          | patch        |
-| `chore`, `style`      | Chores         | patch        |
-| anything else         | Other changes  | patch        |
+| Type             | Shows up as   | Version bump |
+| ---------------- | ------------- | ------------ |
+| `feat`           | Features      | minor        |
+| `fix`            | Bug fixes     | patch        |
+| `perf`           | Performance   | patch        |
+| `refactor`       | Refactoring   | patch        |
+| `docs`           | Documentation | patch        |
+| `build`, `ci`    | Build & CI    | patch        |
+| `test`           | Tests         | patch        |
+| `chore`, `style` | Chores        | patch        |
+| anything else    | Other changes | patch        |
 
-Append `!` before the colon (`feat!:`) or add a `BREAKING CHANGE:` trailer for a
-major bump. Those commits get a "Breaking changes" section of their own. Commits
-that don't match the pattern still appear in the release notes under "Other
-changes", so nothing gets dropped. They just count as a patch.
+For a major version, add `!` before the colon (`feat!:`) or a
+`BREAKING CHANGE:` trailer. These commits get their own "Breaking changes"
+section.
 
-Pull requests are squash-merged, so each one lands as a single commit whose
-subject is what the changelog shows: the PR title, or for a one-commit PR that
-commit's own subject. Make it count. The squash commit's body collects the PR's
-commit messages, so a `BREAKING CHANGE:` trailer in any of them makes the whole
-PR a major release.
+Pull requests are squash-merged. The PR title becomes the commit subject, so
+write it like one. A PR with only one commit uses that commit's subject. A
+`BREAKING CHANGE:` trailer in any commit of a PR makes the release a major one.
 
-Everything goes through a PR, maintainers included: `main` is protected by a
-repository ruleset, so no direct pushes, no force-pushes, no deletion, and CI
-has to be green before a merge. Approvals aren't required, so a solo change is
-still one merge click.
+Every change goes through a pull request, even from maintainers. CI must pass
+before a merge.
 
-## Before you open a PR
+## Before you open a pull request
 
-- The tests pass (⌘U, or `scripts/test.sh` as above).
-- `./build.sh` succeeds and you've actually run the app.
-- Anything touching drawing or colors was checked in **both** Light and Dark
-  mode, and with both mmol/L and mg/dL if it touches values.
-- New or changed text has a German translation. `scripts/check-localization.sh`
-  adds new strings to the String Catalog and lists the ones without German.
-  Xcode does the same when you build in it. No German? Say so in the PR and a
-  maintainer fills it in.
+- The tests pass.
+- `./build.sh` works, and you ran the app.
+- Changes to drawing or colors look right in light and dark mode. Changes to
+  values work in both mmol/L and mg/dL.
+- New or changed text has a German translation.
+  `scripts/check-localization.sh` adds new strings to the catalog and lists the
+  ones without German. If you don't speak German, say so in the pull request,
+  and a maintainer adds it.
 - Shell scripts pass `shellcheck build.sh scripts/*.sh`, and workflows pass
   `actionlint`.
-- If you changed the menu bar label, the dropdown or the chart, re-run
-  `scripts/make-readme-art.sh` and commit the pictures it writes into `docs/`.
-  They are rendered from the app's own views with invented readings, never
-  captured from the screen.
-- If you changed the icon artwork in `Resources/AppIcon.icon`, re-run
-  `scripts/make-readme-icon.sh` and commit the README pictures it writes. The
-  app's own icon needs nothing, Xcode compiles it on every build.
+- If you changed the menu bar item, the dropdown or the chart, run
+  `scripts/make-readme-art.sh` and commit the new pictures in `docs/`. The
+  script draws them from the app's own views with made-up data. Never add real
+  screenshots.
+- If you changed the icon in `Resources/AppIcon.icon`, run
+  `scripts/make-readme-icon.sh` and commit the new pictures.
 
-CI repeats the automated checks. Its **Build & test** job runs on macOS 26 with
-Xcode 26.0.1, the oldest toolchain the project supports. **Build & test (newest
-Xcode)** repeats the build and tests with the newest stable Xcode, because the
-two compilers don't accept the same code. Both are required checks, so a new
-Xcode release can turn the second one red without a change here.
+CI runs the same checks. It builds and tests with two Xcode versions: 26.0.1,
+the oldest one the project supports, and the newest stable one. The two
+compilers don't accept exactly the same code. So a change can build on your Mac
+and still fail in CI.
 
-## A note on health data
+## Health data
 
-This app displays medical data. Two things follow from that:
+Sugarglider shows medical data. Two rules follow from that.
 
-- **Real numbers are fine, personal data never.** Glucose readings, insulin
-  amounts, reservoir levels and their timestamps may go into tests and fixtures
-  exactly as a real site returned them: on their own they identify nobody.
-  Everything around them stays out of commits, screenshots and issue reports:
-  site URLs, access tokens, names, email addresses, device names and serial
-  numbers (an uploader's `device` field often carries its owner's name). Strip
-  those from a captured response before it becomes a fixture. Tests never talk
-  to a real site; a `URLProtocol` stub answers them with canned responses.
-- **Correctness beats cleverness.** A wrong or silently stale number on screen is
-  worse than a visibly missing one. This is why stale readings get a `⚠`, why
-  sensor gaps break the chart line instead of interpolating across them, and why
-  the delta hides itself when the previous reading is too old. Keep that bias.
+**Keep personal data out.** Tests and fixtures may contain real glucose
+readings, insulin amounts, reservoir levels and their times. These numbers
+alone don't identify anyone. Never commit site URLs, access tokens, names,
+email addresses, device names or serial numbers. Keep them out of screenshots
+and issues too. An uploader's `device` field often contains the owner's name.
+Remove all of these from a captured response before you use it as a fixture.
+Tests never talk to a real site. A `URLProtocol` stub answers them.
+
+**Show nothing rather than a wrong value.** A wrong or old number on screen is
+worse than a missing one. That's why old readings get a ⚠, why the chart line
+breaks at sensor gaps, and why the change since the last reading hides when
+that reading is too old. Keep it that way.
 
 ## Releasing
 
-Maintainers only, see [docs/releasing.md](docs/releasing.md). Signing and the
-Keychain are covered in [docs/signing.md](docs/signing.md).
+Only maintainers release. See [docs/releasing.md](docs/releasing.md). Signing
+and the Keychain are covered in [docs/signing.md](docs/signing.md).
