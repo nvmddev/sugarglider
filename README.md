@@ -7,145 +7,122 @@
 
 # Sugarglider
 
-Your Nightscout blood glucose, in the macOS menu bar.
+Your Nightscout blood glucose in the macOS menu bar.
 
 [![CI](https://github.com/nvmddev/sugarglider/actions/workflows/ci.yml/badge.svg)](https://github.com/nvmddev/sugarglider/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/nvmddev/sugarglider?sort=semver&label=release)](https://github.com/nvmddev/sugarglider/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/nvmddev/sugarglider/total?label=downloads)](https://github.com/nvmddev/sugarglider/releases)
-[![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000)](#requirements)
+[![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000)](#install)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 </div>
 
-Your latest reading and its trend arrow sit in the menu bar. Everything else,
-like the chart and the last few hours of history, is one click away. No Dock
-icon, no window in the way.
+Sugarglider shows your latest glucose reading and its trend arrow in the menu
+bar. Click it to see a chart and your time in range. If your Nightscout site
+has pump data, you see that too.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/menubar-dark.png">
   <img src="docs/menubar-light.png" width="257"
-       alt="The menu bar item showing 5.6 with a rising arrow, the same with the change since the last reading, and a stale reading flagged with its age">
+       alt="The menu bar item three times: 5.6 with a rising arrow, the same with the change +0.1, and an old reading of 12.4 with a warning sign and its age, 23m">
 </picture>
 
-<sub>Actual size. Plain, with the change since the last reading, and flagged
-once it goes stale.</sub>
+<sub>Actual size. A reading, the same with the change since the last one, and
+an old reading with its age.</sub>
 
-> Not a medical device. It shows what your Nightscout site already has, it can
-> show stale or wrong values, and it never alarms. Treatment decisions belong
-> with your approved CGM or meter and your care team.
+> [!WARNING]
+> Sugarglider is not a medical device. It only shows what your Nightscout site
+> reports. That data can be old or wrong. The app has no alarms. Don't use it
+> to make treatment decisions.
+
+## Features
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/dropdown-dark.png">
+  <img src="docs/dropdown-light.png" width="336" align="top"
+       alt="The dropdown: a six-hour chart with alert markers and a lane for boluses and the delivery rate, the reading 5.8 mmol/L with a rising arrow, a ring showing 83% time in range, and pump data below it">
+</picture>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/dropdown-colors-dark.png">
+  <img src="docs/dropdown-colors-light.png" width="364" align="top"
+       alt="The same dropdown in custom colors, with the time in range details open: very low 0%, low 6%, in range 83%, high 11%, very high 0%">
+</picture>
+
+<sub>The default look with all pump data turned on, and custom colors with the
+time in range details open. All data is made up.</sub>
+
+- Your latest reading and trend arrow in the menu bar. You can add the change
+  since the last reading.
+- When readings stop coming in, the menu bar shows ⚠ and how old the last one
+  is.
+- A chart of the last 2 to 72 hours. Hover over a reading to see its value and
+  time.
+- Your time in range for the hours the chart shows. Click the ring for details.
+- mmol/L or mg/dL, with your own target range.
+- Your own colors for each zone, from very low to very high. You can save them
+  as presets.
+- Pump data, if your site has it: active insulin, reservoir, battery, boluses
+  and more. Pick what you want to see in **Settings → Pump**.
+- How long ago you changed the reservoir, pump battery, cannula or sensor.
+- English and German. [More languages](#languages) are welcome.
 
 ## Install
+
+Sugarglider needs macOS 26 Tahoe or later on a Mac with Apple silicon.
 
 ```sh
 brew install --cask nvmddev/tap/sugarglider
 ```
 
-Or grab the `.dmg` from the [latest release](https://github.com/nvmddev/sugarglider/releases/latest)
-and drag **Sugarglider.app** into `/Applications`. Signed and notarized, so it
-opens without a Gatekeeper detour.
+Or download the `.dmg` from the
+[latest release](https://github.com/nvmddev/sugarglider/releases/latest) and
+drag Sugarglider into your Applications folder. The app is notarized by Apple.
 
-Want it running after a restart? Turn on **Open at Login** in its settings.
+To update, run `brew upgrade` or download the new release. The
+[changelog](CHANGELOG.md) lists what's new.
 
-## Set up
+## Setup
 
-The menu bar shows `CGM ⚙` until you point it at a site. Click it, then the
-gear button (or press ⌘,), and fill in:
+1. Click `CGM ⚙` in the menu bar, then the gear button.
+2. Enter your **Nightscout URL**, for example `https://your-site.nightscout.app`.
+3. If your site needs a token, enter it in the **Access token** field. You can
+   create one in Nightscout under **Admin Tools → Subjects**. The `readable`
+   role is enough.
 
-- **Nightscout URL**, e.g. `https://your-site.nightscout.app`
-- **Access token**, if your site needs one. Make it in Nightscout under
-  *Admin Tools → Subjects* with the `readable` role. Leave it empty for a site
-  that allows unauthenticated reads.
+There is no Save button. Changes apply right away, and the window shows whether
+the connection works.
 
-There's no Save button. Settings apply as you type, and the tab tells you
-straight away whether the connection works.
+To start Sugarglider when you log in, turn on **Open at Login** in the settings.
 
-## What it shows
+## Languages
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/dropdown-dark.png">
-  <img src="docs/dropdown-light.png" width="336" align="top"
-       alt="The dropdown with every pump item switched on: a six-hour chart with a target band, two alert markers at the top, and boluses and the delivery rate under it, a range slider, the current reading with its trend and change next to a ring showing 83% time in range. Below that: active insulin, auto mode with the delivery rate, reservoir and pump battery with the time since each change, the cannula and sensor ages, total insulin and average glucose for today and yesterday, and refresh, settings and quit buttons">
-</picture>
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/dropdown-colors-dark.png">
-  <img src="docs/dropdown-colors-light.png" width="364" align="top"
-       alt="The same dropdown in custom colors: the line green in range, yellow above and red below, a green ring and blue pump data. The ring's popover is open and lists each zone: very low 0%, low 6%, in range 83%, high 11%, very high 0%">
-</picture>
+Sugarglider comes in English and German. It follows the language of your Mac.
+To use a different language for Sugarglider only, go to **System Settings →
+General → Language & Region → Applications**.
 
-<sub>The stock look with every pump item switched on, then your own colors with
-the time in range popover open. Made up readings and pump data, not anyone's
-real data.</sub>
-
-- The current value and trend arrow in the menu bar, optionally with the change
-  since the last reading. When a reading gets old (11 minutes by default, you
-  can change that), it picks up a `⚠` and its age, so a short gap is easy to
-  tell from a feed that died.
-- A chart of the last 2 to 72 hours, an hour per step on the slider. Hover any
-  point for its value and time. Gaps longer than 15 minutes break the line
-  instead of pretending there was data.
-- When a reading is past what your sensor can measure, you see LOW or HIGH,
-  as in Nightscout, and the chart line turns dotted for that stretch.
-- Your time in range for whatever span the chart shows, as a ring next to the
-  reading. Click it for all five zones. A single low never rounds away to 0%:
-  it shows as `<1%`. Don't want the ring? Switch it off in **Settings → Glucose**.
-- Color by zone: very low, below, in range, above, very high. Pick every
-  color yourself, or blend them smoothly, or save a look as a preset and
-  switch back to it later. The stock palette is monochrome and follows
-  light and dark mode. The dropdown itself can be see-through glass or solid.
-- mmol/L or mg/dL, switchable any time. Your target range and the very
-  low/high bounds are yours to set.
-- English or German, whichever your Mac uses. Want Sugarglider in a different
-  language than the rest of your Mac? Pick one under **System Settings →
-  General → Language & Region → Applications**.
-- Pump data, if your site has it: active insulin, the current delivery rate,
-  reservoir and battery under the reading, plus boluses, the rate history and
-  pump or sensor alerts on the chart, in colors you pick. If your uploader also
-  sends the pump mode or daily figures, you get those too. Every item has its
-  own switch in **Settings → Pump**, and a site with only CGM data shows none
-  of it.
-- How long ago you changed the reservoir, the pump battery, the cannula or the
-  sensor, if your site has those changes on record. These are off until you
-  switch them on in **Settings → Pump**.
-- No notifications, ever. Sugarglider only sees your Nightscout site, so it
-  can't tell a sensor gap from a flat uploader, and it won't pretend otherwise.
-
-Sugarglider misses or misreads something your uploader sends, or you'd like an
-option it doesn't have? [Open an issue](https://github.com/nvmddev/sugarglider/issues/new/choose)
-or a pull request. For pump values, paste a record from your site's
-`/api/v1/devicestatus.json` and take out any personal information.
-
-## Trend arrows
-
-| Arrow | Nightscout direction |
-|-------|----------------------|
-| ↑↑    | DoubleUp             |
-| ↑     | SingleUp             |
-| ↗     | FortyFiveUp          |
-| →     | Flat                 |
-| ↘     | FortyFiveDown        |
-| ↓     | SingleDown           |
-| ↓↓    | DoubleDown           |
+More languages are welcome. [Open an issue](https://github.com/nvmddev/sugarglider/issues/new/choose)
+to ask for one, or add it yourself in a pull request. All of the app's text is
+in `Sources/Sugarglider/Localizable.xcstrings`. You can edit that file in Xcode.
 
 ## Privacy
 
-Sugarglider talks to your Nightscout site and nothing else. No telemetry, no
-analytics, no third-party anything. Your site URL stays in the app's preferences
-on your Mac, and the access token goes into your Keychain, where other programs
-can't read it. The app runs in macOS's App Sandbox, allowed to make network
-requests and nothing more.
+Sugarglider only connects to your Nightscout site. It has no analytics or
+tracking. Your access token is stored in the macOS Keychain. The app runs in
+the App Sandbox.
 
-It polls your site once a minute by default, which you can change, and only
-pulls chart history and pump data when you open the dropdown or
-**Settings → Pump**, plus the history again when you change the site settings.
-After the first fetch it only asks for what's new.
+By default it checks for a new reading once a minute. The chart history and
+pump data load when you open the dropdown.
 
-## Requirements
+## Feedback
 
-macOS 26 Tahoe or newer, on a Mac with Apple silicon. Sugarglider is built for
-Tahoe's Liquid Glass design, so it won't run on older versions. Intel Macs
-aren't supported.
+For bugs and ideas, [open an issue](https://github.com/nvmddev/sugarglider/issues/new/choose).
+If a pump value is missing or wrong, include a record from your site's
+`/api/v1/devicestatus.json`. Remove names, serial numbers and other personal
+details first.
 
-## Build
+## Build from source
+
+You need Xcode 26 or later.
 
 ```sh
 git clone https://github.com/nvmddev/sugarglider.git
@@ -154,13 +131,11 @@ cd sugarglider
 open Sugarglider.app
 ```
 
-You'll need Xcode 26 or newer. Or skip the script, open `Sugarglider.xcodeproj`
-and hit ⌘R. Pure Swift and SwiftUI, zero dependencies, and the binary stays
-under a megabyte.
+Or open `Sugarglider.xcodeproj` and press ⌘R. The app is written in Swift and
+SwiftUI and has no third-party dependencies.
 
-Pull requests welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup, how
-the code fits together, and the commit message format. Past releases are in
-[CHANGELOG.md](CHANGELOG.md).
+Pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how the
+code fits together and how to write commit messages.
 
 ## License
 
