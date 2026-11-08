@@ -42,14 +42,16 @@ an old reading with its age.</sub>
   <img src="docs/dropdown-light.png" width="336" align="top"
        alt="The dropdown: a six-hour chart with alert markers and a lane for boluses and the delivery rate, the reading 5.8 mmol/L with a rising arrow, a ring showing 83% time in range, and pump data below it">
 </picture>
+<!-- The second picture shows the other appearance, so every reader sees both. -->
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/dropdown-colors-dark.png">
-  <img src="docs/dropdown-colors-light.png" width="364" align="top"
+  <source media="(prefers-color-scheme: dark)" srcset="docs/dropdown-colors-light.png">
+  <img src="docs/dropdown-colors-dark.png" width="364" align="top"
        alt="The same dropdown in custom colors, with the time in range details open: very low 0%, low 6%, in range 83%, high 11%, very high 0%">
 </picture>
 
 <sub>The default look with all pump data turned on, and custom colors with the
-time in range details open. All data is made up.</sub>
+time in range details open. One is in light mode, the other in dark mode. All
+data is made up.</sub>
 
 - Your latest reading and trend arrow in the menu bar. You can add the change
   since the last reading.
@@ -61,6 +63,7 @@ time in range details open. All data is made up.</sub>
 - mmol/L or mg/dL, with your own target range.
 - Your own colors for each zone, from very low to very high. You can save them
   as presets.
+- Light and dark mode, following your Mac.
 - Pump data, if your site has it: active insulin, reservoir, battery, boluses
   and more. Pick what you want to see in **Settings → Pump**.
 - How long ago you changed the reservoir, pump battery, cannula or sensor.
