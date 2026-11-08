@@ -63,11 +63,18 @@ straight away whether the connection works.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/dropdown-dark.png">
-  <img src="docs/dropdown-light.png" width="336"
-       alt="The dropdown: a six-hour chart with a target band, a range slider, the current reading with its trend and change, and refresh, settings and quit buttons">
+  <img src="docs/dropdown-light.png" width="336" align="top"
+       alt="The dropdown with every pump item switched on: a six-hour chart with a target band, two alert markers at the top, and boluses and the delivery rate under it, a range slider, the current reading with its trend and change next to a ring showing 83% time in range. Below that: active insulin, auto mode with the delivery rate, reservoir and pump battery with the time since each change, the cannula and sensor ages, total insulin and average glucose for today and yesterday, and refresh, settings and quit buttons">
+</picture>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/dropdown-colors-dark.png">
+  <img src="docs/dropdown-colors-light.png" width="364" align="top"
+       alt="The same dropdown in custom colors: the line green in range, yellow above and red below, a green ring and blue pump data. The ring's popover is open and lists each zone: very low 0%, low 6%, in range 83%, high 11%, very high 0%">
 </picture>
 
-<sub>Made up readings, not anyone's real data.</sub>
+<sub>The stock look with every pump item switched on, then your own colors with
+the time in range popover open. Made up readings and pump data, not anyone's
+real data.</sub>
 
 - The current value and trend arrow in the menu bar, optionally with the change
   since the last reading. When a reading gets old (11 minutes by default, you
@@ -78,6 +85,9 @@ straight away whether the connection works.
   instead of pretending there was data.
 - When a reading is past what your sensor can measure, you see LOW or HIGH,
   as in Nightscout, and the chart line turns dotted for that stretch.
+- Your time in range for whatever span the chart shows, as a ring next to the
+  reading. Click it for all five zones. A single low never rounds away to 0%:
+  it shows as `<1%`. Don't want the ring? Switch it off in **Settings → Glucose**.
 - Color by zone: very low, below, in range, above, very high. Pick every
   color yourself, or blend them smoothly, or save a look as a preset and
   switch back to it later. The stock palette is monochrome and follows
@@ -93,6 +103,9 @@ straight away whether the connection works.
   sends the pump mode or daily figures, you get those too. Every item has its
   own switch in **Settings → Pump**, and a site with only CGM data shows none
   of it.
+- How long ago you changed the reservoir, the pump battery, the cannula or the
+  sensor, if your site has those changes on record. These are off until you
+  switch them on in **Settings → Pump**.
 - No notifications, ever. Sugarglider only sees your Nightscout site, so it
   can't tell a sensor gap from a flat uploader, and it won't pretend otherwise.
 

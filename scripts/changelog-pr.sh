@@ -43,13 +43,17 @@ git add CHANGELOG.md
 git commit -m "docs: changelog for v${VERSION}"
 
 # GH_TOKEN authenticates gh, never git, so the push needs the credential in
-# the remote URL.
+# the remote URL. actions/checkout stores GITHUB_TOKEN as an extra header that
+# reaches this worktree too and wins over the URL. The push clears it, or a
+# re-run's push would start no CI on the open PR.
+push=(git push)
 if [[ "${HAS_PAT}" == "true" ]]; then
     git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+    push=(git -c "http.https://github.com/.extraheader=" push)
 fi
 # -f rather than --force-with-lease: a re-run of the same version owns this
 # branch outright, and there's no lease for a ref never fetched.
-git push -f origin "${BRANCH}" || {
+"${push[@]}" -f origin "${BRANCH}" || {
     echo "::warning::Could not push ${BRANCH}. Run 'scripts/changelog.sh prepend ${VERSION}' locally and open the PR yourself."
     exit 0
 }

@@ -24,6 +24,8 @@ A `!` before the colon (or a BREAKING CHANGE trailer) triggers a major bump.
       (if this touches drawing or colors)
 - [ ] Numbers show and accept correctly in **both** mmol/L and mg/dL
       (if this touches values or the threshold fields)
+- [ ] New or changed text has German, and `scripts/check-localization.sh` passes
+      (if this touches text)
 - [ ] `shellcheck build.sh scripts/*.sh` and `actionlint` are clean
       (if this touches shell scripts or workflows)
 - [ ] `scripts/make-readme-art.sh` and `scripts/make-readme-icon.sh` ran, and the

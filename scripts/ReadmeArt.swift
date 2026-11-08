@@ -1,9 +1,9 @@
 // Draws the README pictures with the app's own views; run through
 // scripts/make-readme-art.sh.
 //
-// The glucose data is invented: six plausible hours (a dip, a meal spike above
-// range, a soft low) from fixed control points, so no real readings end up in
-// the repository and an unchanged view renders the same curve.
+// The data is invented: six plausible hours (a dip, a meal spike above range, a
+// soft low) from fixed control points, with pump data that fits them, so no real
+// readings end up in the repository and an unchanged view renders the same curve.
 
 import AppKit
 import SwiftUI
@@ -12,11 +12,12 @@ import SwiftUI
 let scale = 3.0
 let outputDirectory = URL(filePath: "docs", directoryHint: .isDirectory)
 
-// Crosses four of the five zones at the stock thresholds (54/70/180/250 mg/dL).
+// Crosses three of the five zones at the stock thresholds (54/70/180/250 mg/dL):
+// the low is deep enough to show its color.
 let curve: [(hoursAgo: Double, mgdl: Double)] = [
     (6.00, 124), (5.50, 117), (5.00, 106), (4.50,  97), (4.00,  92),
     (3.50, 116), (3.00, 167), (2.60, 196), (2.20, 185), (1.80, 157),
-    (1.40, 131), (1.00, 104), (0.70,  82), (0.50,  68), (0.35,  74),
+    (1.40, 131), (1.00, 104), (0.70,  80), (0.50,  64), (0.35,  66),
     (0.15,  96), (0.00, 112),
 ]
 
@@ -72,11 +73,39 @@ func fixtureReadings(now: Date) -> [Reading] {
     }
 }
 
-func makeStore(_ settings: AppSettings, readings: [Reading]) -> ReadingStore {
+// A meal bolus before the spike and a correction near its top. The rate climbs
+// with the rise and stops in the low; each one runs until the next. An alert
+// marks the top of the spike and one the low.
+func fixtureTreatments(now: Date) -> [Treatment] {
+    func hoursAgo(_ hours: Double) -> Date { now.addingTimeInterval(-hours * 3600) }
+    let rates: [(hoursAgo: Double, rate: Double)] = [
+        (6.5, 0.8), (4.3, 0.6), (3.4, 1.3), (2.8, 1.9), (2.1, 1.2),
+        (1.4, 0.8), (0.9, 0.3), (0.6, 0.0), (0.25, 0.7),
+    ]
+    let steps = rates.enumerated().map { index, step in
+        Treatment(id: "rate-\(index)", date: hoursAgo(step.hoursAgo), kind: .tempBasal(rate: step.rate, minutes: 180))
+    }
+    let boluses = [Treatment(id: "meal", date: hoursAgo(3.45), kind: .bolus(units: 5.5)),
+                   Treatment(id: "correction", date: hoursAgo(2.5), kind: .bolus(units: 1.5))]
+    let alerts = [Treatment(id: "high", date: hoursAgo(2.6), kind: .note("High glucose")),
+                  Treatment(id: "low", date: hoursAgo(0.45), kind: .note("Low glucose"))]
+    return (steps + boluses + alerts).sorted { $0.date < $1.date }
+}
+
+// Every pump value the dropdown can show. The settings decide which of them it does.
+func makeStore(_ settings: AppSettings, readings: [Reading], now: Date) -> ReadingStore {
+    func daysAgo(_ days: Double) -> Date { now.addingTimeInterval(-days * 86400) }
     let store = ReadingStore(settings: settings)   // inert until start(): no timer, no network
     store.readings = readings
     store.lastReading = readings.last
     store.previousReading = readings.dropLast().last
+    store.treatments = fixtureTreatments(now: now)
+    store.pumpStatus = PumpStatus(date: now.addingTimeInterval(-4 * 60), insulinOnBoard: 1.35,
+                                  reservoir: 142, batteryPercent: 75, mode: .auto, deliveryRate: 0.7,
+                                  insulinToday: 24.6, insulinYesterday: 41.3,
+                                  averageToday: 128, averageYesterday: 139)
+    store.changed = [.reservoir: daysAgo(2.2), .cannula: daysAgo(2.2),
+                     .battery: daysAgo(6.1), .sensor: daysAgo(4.4)]
     return store
 }
 
@@ -87,14 +116,30 @@ struct NoTokenStore: TokenStorage {
 }
 
 // Fresh defaults: the pictures show the stock look, not the settings of whoever renders them.
+// A suite named by a path keeps its plist out of ~/Library/Preferences, where no API removes it.
+// This one lands next to the binary, in the work directory make-readme-art.sh deletes.
 func makeSettings(_ configure: (AppSettings) -> Void = { _ in }) -> AppSettings {
-    let suiteName = "dev.nevermind.sugarglider.readme-art"
-    guard let suite = UserDefaults(suiteName: suiteName) else { fatalError("no defaults suite \(suiteName)") }
-    suite.removePersistentDomain(forName: suiteName)
+    let path = URL(filePath: CommandLine.arguments[0]).deletingLastPathComponent()
+        .appending(path: UUID().uuidString).path(percentEncoded: false)
+    guard let suite = UserDefaults(suiteName: path) else { fatalError("no defaults suite at \(path)") }
     let settings = AppSettings(defaults: suite, tokens: NoTokenStore())
     settings.baseURL = "https://cgm.example.invalid"   // configured, unreachable
     configure(settings)
     return settings
+}
+
+// The stock palette is monochrome. This one shows what your own colors look like,
+// in the zone colors of the standard time in range report (AGP).
+func useZoneColors(_ settings: AppSettings) {
+    settings.extremeLowColor = Color(red: 0.64, green: 0.09, blue: 0.11)
+    settings.belowColor = Color(red: 0.91, green: 0.24, blue: 0.22)
+    settings.inRangeColor = Color(red: 0.20, green: 0.66, blue: 0.35)
+    settings.aboveColor = Color(red: 0.96, green: 0.69, blue: 0.05)
+    settings.extremeHighColor = Color(red: 0.95, green: 0.46, blue: 0.11)
+    settings.bandColor = settings.inRangeColor.opacity(0.12)
+    settings.sliderColor = settings.inRangeColor
+    settings.bolusColor = Color(red: 0.22, green: 0.49, blue: 0.95)
+    settings.deliveryRateColor = Color(red: 0.22, green: 0.49, blue: 0.95).opacity(0.6)
 }
 
 enum Appearance: String, CaseIterable {
@@ -102,8 +147,10 @@ enum Appearance: String, CaseIterable {
 
     var colorScheme: ColorScheme { self == .dark ? .dark : .light }
     var nsAppearance: NSAppearance { NSAppearance(named: self == .dark ? .darkAqua : .aqua)! }
-    // Stands in for the panel's material, which renders as clear off-screen.
+    // Stand in for the materials of the panel and the popover, which render as clear off-screen.
     var panelBackground: Color { self == .dark ? Color(white: 0.16) : Color(white: 0.97) }
+    var popoverBackground: Color { self == .dark ? Color(white: 0.23) : Color(white: 0.995) }
+    var border: Color { Color.primary.opacity(self == .dark ? 0.18 : 0.10) }
 }
 
 struct MenuBarStrip: View {
@@ -143,10 +190,64 @@ struct DropdownShot: View {
             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(appearance == .dark ? 0.18 : 0.10),
-                                  lineWidth: 0.5)
+                    .strokeBorder(appearance.border, lineWidth: 0.5)
             }
             .padding(10)
+    }
+}
+
+// A rounded box with the arrow on top, centered.
+nonisolated struct PopoverShape: Shape {
+    static let arrowHeight = 10.0
+    static let arrowWidth = 22.0
+    static let cornerRadius = 13.0
+
+    func path(in rect: CGRect) -> Path {
+        let box = CGRect(x: rect.minX, y: rect.minY + Self.arrowHeight,
+                         width: rect.width, height: rect.height - Self.arrowHeight)
+        var path = Path(roundedRect: box, cornerRadius: Self.cornerRadius, style: .continuous)
+        path.move(to: CGPoint(x: rect.midX - Self.arrowWidth / 2, y: box.minY + 0.5))
+        path.addQuadCurve(to: CGPoint(x: rect.midX, y: rect.minY),
+                          control: CGPoint(x: rect.midX - 3, y: box.minY))
+        path.addQuadCurve(to: CGPoint(x: rect.midX + Self.arrowWidth / 2, y: box.minY + 0.5),
+                          control: CGPoint(x: rect.midX + 3, y: box.minY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+// The dropdown with the time in range popover open. A popover is a window of its
+// own, so ImageRenderer can't draw the real one: this places the app's popover
+// content below the ring, where the real one opens (measured).
+struct ZonesShot: View {
+    // The ring's horizontal center and bottom edge in DropdownShot, measured on its render.
+    // Check them after changing the dropdown's layout.
+    nonisolated static let ringCenterX = 287.5
+    nonisolated static let ringBottom = 273.0
+
+    let appearance: Appearance
+    let settings: AppSettings
+    let store: ReadingStore
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            DropdownShot(appearance: appearance, settings: settings, store: store)
+            if let summary = TimeInRangeView.summary(readings: store.readings, windowEnd: store.now,
+                                                     settings: settings) {
+                ZoneShares(summary: summary)
+                    .padding(.top, PopoverShape.arrowHeight)
+                    .background {
+                        PopoverShape()
+                            .fill(appearance.popoverBackground)
+                            .shadow(color: .black.opacity(appearance == .dark ? 0.5 : 0.18), radius: 8, y: 3)
+                    }
+                    .overlay { PopoverShape().stroke(appearance.border, lineWidth: 0.5) }
+                    .fixedSize()
+                    .alignmentGuide(.leading) { $0.width / 2 - Self.ringCenterX }
+                    .alignmentGuide(.top) { _ in -Self.ringBottom }
+            }
+        }
+        .padding([.trailing, .bottom], 14)   // room for the popover's shadow
     }
 }
 
@@ -168,10 +269,6 @@ func write(_ view: some View, appearance: Appearance, to name: String) throws {
 }
 
 func main() throws {
-    // Otherwise the chart's time axis follows the region of whoever renders.
-    UserDefaults.standard.set(["en-US"], forKey: "AppleLanguages")
-    UserDefaults.standard.set("en_US", forKey: "AppleLocale")
-
     _ = NSApplication.shared
     NSApp.setActivationPolicy(.prohibited)
 
@@ -183,10 +280,27 @@ func main() throws {
     for appearance in Appearance.allCases {
         try write(MenuBarStrip(now: now), appearance: appearance, to: "menubar")
 
-        let settings = makeSettings()
+        // Every pump item on, also those off by default, so one picture shows them all.
+        let settings = makeSettings {
+            $0.chartShowsDeliveryRate = true
+            $0.chartShowsAnnouncements = true
+            $0.showChangeAge = true
+            $0.showCannulaAge = true
+            $0.showSensorAge = true
+            $0.showDailyInsulin = true
+            $0.showAverageGlucose = true
+        }
         try write(DropdownShot(appearance: appearance, settings: settings,
-                               store: makeStore(settings, readings: readings)),
+                               store: makeStore(settings, readings: readings, now: now)),
                   appearance: appearance, to: "dropdown")
+
+        let colored = makeSettings {
+            $0.chartShowsDeliveryRate = true
+            useZoneColors($0)
+        }
+        try write(ZonesShot(appearance: appearance, settings: colored,
+                            store: makeStore(colored, readings: readings, now: now)),
+                  appearance: appearance, to: "dropdown-colors")
     }
 }
 

@@ -107,6 +107,8 @@ expect "1.1.0" "$(scripts/version.sh next minor)" "next minor"
 expect "2.0.0" "$(scripts/version.sh next major)" "next major"
 expect "1.0.1" "$(scripts/version.sh next auto)" "next auto on an empty range"
 
+# The squash merge of the release's changelog PR, which the notes leave out.
+commit "docs: changelog for v1.0.0 [skip ci]"
 commit "docs: mention an upcoming BREAKING CHANGE"
 commit "Feat: another case insensitive feature"
 commit "feat:"
@@ -126,6 +128,9 @@ expect_exit 1 "app-changed rejects an unknown tag" scripts/version.sh app-change
 
 notes="$(scripts/changelog.sh notes 1.1.0 v1.0.0 "$(git rev-parse HEAD~3)")"
 expect_not "Breaking changes" "${notes}" "prose mention is not breaking"
+expect_not "changelog for v1.0.0" "${notes}" "the release's changelog commit is left out"
+grep -q "mention an upcoming" <<<"${notes}" || {
+    echo "::error::smoke: a docs commit next to the changelog commit went missing"; exit 1; }
 grep -q "another case insensitive feature" <<<"${notes}" || {
     echo "::error::smoke: capitalized feat not under Features"; exit 1; }
 grep -q "^- feat: " <<<"${notes}" || {

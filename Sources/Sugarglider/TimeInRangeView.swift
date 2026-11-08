@@ -91,8 +91,8 @@ struct TimeInRangeView: View {
     }
 }
 
-/// Every zone's share, in the ring's popover.
-private struct ZoneShares: View {
+/// Every zone's share, in the ring's popover. Not private, because scripts/ReadmeArt.swift draws it.
+struct ZoneShares: View {
     var summary: TimeInRangeView.Summary
 
     var body: some View {

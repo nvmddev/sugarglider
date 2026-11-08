@@ -18,8 +18,9 @@ git tag v1.2.0 && git push origin v1.2.0
 ```
 
 The workflow runs the tests, builds a signed bundle, packages a `.zip`, a `.dmg`
-and `checksums.txt`, generates the release notes from the commit log, publishes
-the GitHub release and updates the Homebrew cask. The new `CHANGELOG.md` goes
+and `checksums.txt`, attests their build provenance (`gh attestation verify`
+checks it, see SECURITY.md), generates the release notes from the commit log,
+publishes the GitHub release and updates the Homebrew cask. The new `CHANGELOG.md` goes
 out as a `docs/changelog-vX.Y.Z` pull request, because `main` is protected and
 can't be pushed to. That PR merges itself once CI is green, provided a
 `RELEASE_PAT` secret exists (see below). Without one it waits for you to close
