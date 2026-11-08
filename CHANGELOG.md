@@ -6,6 +6,58 @@ All notable changes to this project are documented here. The format follows
 from [Conventional Commits](https://www.conventionalcommits.org/) by
 `scripts/changelog.sh`, so edit commit messages, not this file.
 
+## [1.0.0](https://github.com/nvmddev/sugarglider/releases/tag/v1.0.0) (2026-11-08)
+
+### ⚠️ Breaking changes
+
+- require macOS 26 with the Liquid Glass design ([`0ce9dc3`](https://github.com/nvmddev/sugarglider/commit/0ce9dc340b2810ea13fc3514ea6bd1c0fcdc6c97))
+
+### Features
+
+- show the time in range as a ring beside the reading ([`0b8eced`](https://github.com/nvmddev/sugarglider/commit/0b8eced857726aca90552effa9ca5c43967d1fe7))
+- show the cannula and sensor ages ([`9306e25`](https://github.com/nvmddev/sugarglider/commit/9306e25cacd30782addb71cffa257590c33594c1))
+- translate the app into German ([`837c782`](https://github.com/nvmddev/sugarglider/commit/837c7827a8207e9e2205101b27801c74ae2ec0d7))
+- describe the chart and the trend to VoiceOver ([`fe2d37e`](https://github.com/nvmddev/sugarglider/commit/fe2d37e6a61e7481dc15d17d313cb208c4330c97))
+- offer a switch for each extra pump value the site sends ([`d159041`](https://github.com/nvmddev/sugarglider/commit/d159041fe85f25f8d2575e74a8899c56aa1e7c1a))
+- run in the App Sandbox ([`fe9d348`](https://github.com/nvmddev/sugarglider/commit/fe9d348e2411a59091af1cd8d91baa02184e057b))
+- follow the system's light or dark appearance ([`77a105d`](https://github.com/nvmddev/sugarglider/commit/77a105d0cc795998c90a178399ba0e0c3f961cbc))
+- **settings:** add an Open at Login switch ([`50dd299`](https://github.com/nvmddev/sugarglider/commit/50dd29981ac228030932ee7d31a28d3ea82b1293))
+- follow the region's formats and the system's text styles ([`825a0c0`](https://github.com/nvmddev/sugarglider/commit/825a0c0057b394a04a9220ebb79d75a138bbd767))
+- offer a solid dropdown background besides glass ([`711953c`](https://github.com/nvmddev/sugarglider/commit/711953c6bd8c5a4bec55563c69dca35daa2bd12a))
+- show readings beyond the sensor's range as LOW and HIGH ([`57c4f77`](https://github.com/nvmddev/sugarglider/commit/57c4f77bfb8cb8fb28f509101870f1a43a731c62))
+- show pump data from Nightscout in the dropdown and the chart ([`311afa1`](https://github.com/nvmddev/sugarglider/commit/311afa158fb6a1cb585a1ce051f2ebcfbcb3a747))
+
+### Bug fixes
+
+- keep a reading on a threshold in the zone nearer the target ([`ce84ce8`](https://github.com/nvmddev/sugarglider/commit/ce84ce8ab97cbc3e70063f9cd2516db099d060c7))
+- **security:** keep the access token out of the URL ([`6e1f1f6`](https://github.com/nvmddev/sugarglider/commit/6e1f1f6eb98d1d2c506f9ecf961c952424ec7605))
+- keep sensor error codes off the chart, follow Open at Login changes ([`e5bdd0d`](https://github.com/nvmddev/sugarglider/commit/e5bdd0d6914a652388b9b395a2ad3582ce1ee772))
+- steadier polling after sleep and safer token handling ([`c5bc57a`](https://github.com/nvmddev/sugarglider/commit/c5bc57ab0d582199c3f0ff45d80e0714d3413732))
+- read each uploader's pump records the way it sends them ([`dad1a26`](https://github.com/nvmddev/sugarglider/commit/dad1a2659a26dc27fc525616a898cd716ff46431))
+- **menubar:** keep the reading's age current while polls fail ([`eac1809`](https://github.com/nvmddev/sugarglider/commit/eac1809b2f1eef0a6638580cf42a383a174a20e3))
+
+### Performance
+
+- redraw only the chart's hover layer while the pointer moves ([`6375216`](https://github.com/nvmddev/sugarglider/commit/6375216e41e6973f56f83f7a882f3278f3b5c417))
+
+### Refactoring
+
+- native SwiftUI and Swift Charts throughout ([`c163eb0`](https://github.com/nvmddev/sugarglider/commit/c163eb056be6a083d22eea2073ed6815fb31d930))
+
+### Documentation
+
+- simplify CONTRIBUTING.md and explain how to add a language ([`eb72811`](https://github.com/nvmddev/sugarglider/commit/eb72811b2b0b86f0f52980297e89d547db0500f5))
+- show light and dark mode in the README ([`86d5fbb`](https://github.com/nvmddev/sugarglider/commit/86d5fbb54f810da9544fc21392398d29ab8baf2c))
+- rewrite the README in short, plain sentences ([`00a1944`](https://github.com/nvmddev/sugarglider/commit/00a19444dbb3ffc268c43fb2f26ca81a0efa01b2))
+- show the 1.0 features in the README ([`e447745`](https://github.com/nvmddev/sugarglider/commit/e44774552378963ef612bcd6f4e1956fdf9aa4bf))
+
+### Build & CI
+
+- test and release with the newest stable Xcode ([`00bce85`](https://github.com/nvmddev/sugarglider/commit/00bce8520483c22b050e950126a4ddd80475e918))
+- build with an Xcode project instead of SwiftPM ([`8a473b9`](https://github.com/nvmddev/sugarglider/commit/8a473b9560b9b0121acf5dfc0c243571d3829592))
+
+**Full changelog**: https://github.com/nvmddev/sugarglider/compare/v0.5.0...v1.0.0
+
 ## [0.5.0](https://github.com/nvmddev/sugarglider/releases/tag/v0.5.0) (2026-08-30)
 
 ### Features
