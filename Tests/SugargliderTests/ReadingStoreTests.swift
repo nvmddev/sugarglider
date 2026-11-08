@@ -304,8 +304,14 @@ extension SugargliderTests {
         #expect(server.requests.count == 5)
         #expect(server.requests.dropFirst(3).allSatisfy { $0.contains("eventType") })
 
+        // The reservoir and battery ages wait out their minute; the sensor age is new.
+        settings.showSensorAge = true
+        await store.refreshDetails(force: false)
+        #expect(server.requests.count == 7)
+        #expect(server.requests.dropFirst(5).allSatisfy { $0.contains("=Sensor%20") })
+
         await store.refreshDetails(force: true)
-        #expect(server.requests.count == 9)
+        #expect(server.requests.count == 13)  // device status, treatments, four change types
     }
 
     /// A failed request leaves what's shown and isn't throttled, so the next open asks again.

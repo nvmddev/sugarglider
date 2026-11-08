@@ -49,6 +49,10 @@ final class AppSettings {
 
         func value(fromMgdl mgdl: Double) -> Double { self == .mmol ? mgdl / Self.mgdlPerMmol : mgdl }
         func mgdl(from value: Double) -> Double { self == .mmol ? value * Self.mgdlPerMmol : value }
+
+        /// Whole mg/dL, like the readings: 3.9 mmol/L is 70.2 mg/dL, which would put a reading
+        /// of 70, shown as 3.9, below a threshold shown as 3.9.
+        func thresholdMgdl(from value: Double) -> Double { mgdl(from: value).rounded() }
         func text(fromMgdl sgv: Int, locale: Locale = .autoupdatingCurrent) -> String {
             self == .mmol
                 ? value(fromMgdl: Double(sgv)).formatted(.number.locale(locale).precision(.fractionLength(1)))
@@ -366,7 +370,6 @@ final class AppSettings {
             || showDailyInsulin || showAverageGlucose
     }
     var needsTreatments: Bool { chartShowsBoluses || chartShowsDeliveryRate || chartShowsAnnouncements }
-    var needsChangeDates: Bool { ChangeEvent.allCases.contains { showsAge(of: $0) } }
 
     /// Reservoir and battery ages are notes on their rows, so they need the row too.
     func showsAge(of change: ChangeEvent) -> Bool {
@@ -383,7 +386,7 @@ final class AppSettings {
     init(defaults: UserDefaults = .standard, tokens: any TokenStorage = KeychainTokenStore()) {
         self.defaults = defaults
         self.tokens = tokens
-        Self.migrateThresholdsToMgdl(in: defaults)
+        Self.migrateThresholds(in: defaults)
         (token, tokenStorageFailed) = Self.migrateTokenToKeychain(defaults: defaults, tokens: tokens)
 
         load(\.baseURL, "baseURL")
@@ -447,15 +450,16 @@ final class AppSettings {
         }
     }
 
-    /// Older versions stored thresholds in mmol/L, and below 40 a value can only be that.
-    private static func migrateThresholdsToMgdl(in defaults: UserDefaults) {
-        guard !defaults.bool(forKey: "thresholdsMgdl") else { return }
+    /// Older versions stored thresholds in mmol/L, and below 40 a value can only be that. Later
+    /// ones stored a typed 3.9 mmol/L as 70.2 mg/dL. Both become whole mg/dL.
+    private static func migrateThresholds(in defaults: UserDefaults) {
+        let inMmol = !defaults.bool(forKey: "thresholdsMgdl")
         for key in ["targetLow", "targetHigh", "extremeLow", "extremeHigh"] {
-            if let value = defaults.object(forKey: key) as? Double, value > 0, value < 40 {
-                defaults.set(Units.mmol.mgdl(from: value).rounded(), forKey: key)
-            }
+            guard let value = defaults.object(forKey: key) as? Double else { continue }
+            let mgdl = inMmol && value > 0 && value < 40 ? Units.mmol.thresholdMgdl(from: value) : value.rounded()
+            if mgdl != value { defaults.set(mgdl, forKey: key) }
         }
-        defaults.set(true, forKey: "thresholdsMgdl")
+        if inMmol { defaults.set(true, forKey: "thresholdsMgdl") }
     }
 
     /// Moves a token that older versions kept in the plist. The plist copy goes even

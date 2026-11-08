@@ -521,10 +521,15 @@ extension SugargliderTests {
     }
 
     /// Loop and xDrip+ record a new sensor as a start, AAPS as a change, and a site may hold both.
-    @Test func sensorAgeIsTheNewestOfItsTwoEventTypes() async throws {
+    /// The older record answers last, so keeping the last answer instead of the newest fails.
+    @Test(arguments: [("Sensor Start", "Sensor Change"), ("Sensor Change", "Sensor Start")])
+    func sensorAgeIsTheNewestOfItsTwoEventTypes(older: String, newer: String) async throws {
+        func fragment(_ eventType: String) -> String { "=" + eventType.replacing(" ", with: "%20") }
         let server = StubbedSite(json: "[]")
-        server.answer(#"[{"eventType":"Sensor Start","created_at":"2030-01-01T08:00:00Z"}]"#, whenRequestContains: "=Sensor%20Start")
-        server.answer(#"[{"eventType":"Sensor Change","created_at":"2030-01-03T08:00:00Z"}]"#, whenRequestContains: "=Sensor%20Change")
+        server.answer(#"[{"eventType":"\#(older)","created_at":"2030-01-01T08:00:00Z"}]"#,
+                      whenRequestContains: fragment(older), after: 0.3)
+        server.answer(#"[{"eventType":"\#(newer)","created_at":"2030-01-03T08:00:00Z"}]"#,
+                      whenRequestContains: fragment(newer))
         server.answer(#"[{"eventType":"Site Change","created_at":"2030-01-02T08:00:00Z"}]"#, whenRequestContains: "=Site%20Change")
         let settings = Self.makeSettings()
         for flag in Self.pumpSwitches { settings[keyPath: flag] = false }
@@ -701,14 +706,14 @@ extension SugargliderTests {
 
     @Test func fetchNeedsFollowTheSwitches() {
         let s = Self.makeSettings()
-        #expect(s.needsPumpStatus && s.needsTreatments && !s.needsChangeDates)
+        #expect(s.needsPumpStatus && s.needsTreatments && !ChangeEvent.allCases.contains { s.showsAge(of: $0) })
         s.showChangeAge = true
-        #expect(s.needsChangeDates)
+        #expect(s.showsAge(of: .reservoir) && s.showsAge(of: .battery))
         s.showReservoir = false
         s.showPumpBattery = false
-        #expect(!s.needsChangeDates)                 // nothing to put the age next to
+        #expect(!s.showsAge(of: .reservoir) && !s.showsAge(of: .battery))  // nothing to put the age next to
         s.showSensorAge = true
-        #expect(s.needsChangeDates)                  // a row of its own
+        #expect(s.showsAge(of: .sensor))                                  // a row of its own
         s.chartShowsBoluses = false
         #expect(!s.needsTreatments)
         let rows: [ReferenceWritableKeyPath<AppSettings, Bool>] = [\.showActiveInsulin, \.showPumpMode, \.showDeliveryRate]

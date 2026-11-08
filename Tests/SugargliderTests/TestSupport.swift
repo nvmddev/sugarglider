@@ -97,9 +97,10 @@ final class StubbedSite: Sendable {
 
     deinit { SiteProtocol.sites.withLock { $0[host] = nil } }
 
-    /// Answers a request whose path and query contain `fragment` with `json` instead.
-    func answer(_ json: String, whenRequestContains fragment: String) {
-        SiteProtocol.sites.withLock { $0[host]?.answers.append((fragment, Data(json.utf8))) }
+    /// Answers a request whose path and query contain `fragment` with `json` instead, at the
+    /// earliest after `delay`.
+    func answer(_ json: String, whenRequestContains fragment: String, after delay: TimeInterval = 0) {
+        SiteProtocol.sites.withLock { $0[host]?.answers.append((fragment, Data(json.utf8), delay)) }
     }
 
     @MainActor func nightscout(token: String = "", baseURL: String? = nil) -> Nightscout {
@@ -120,7 +121,7 @@ private final class SiteProtocol: URLProtocol {
         var delay: TimeInterval = 0
         var requests: [String] = []
         var secrets: [String?] = []
-        var answers: [(fragment: String, body: Data)] = []
+        var answers: [(fragment: String, body: Data, delay: TimeInterval)] = []
     }
 
     static let sites = Mutex<[String: Site]>([:])
@@ -139,12 +140,13 @@ private final class SiteProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard let url = request.url, let host = url.host(), let (site, body) = Self.sites.withLock({ sites in
+        guard let url = request.url, let host = url.host(), let (site, body, delay) = Self.sites.withLock({ sites in
             let request = url.path(percentEncoded: true) + (url.query(percentEncoded: true).map { "?\($0)" } ?? "")
             sites[host]?.requests.append(request)
             sites[host]?.secrets.append(self.request.value(forHTTPHeaderField: "api-secret"))
             return sites[host].map { site in
-                (site, site.answers.first { request.contains($0.fragment) }?.body ?? site.body)
+                let answer = site.answers.first { request.contains($0.fragment) }
+                return (site, answer?.body ?? site.body, max(site.delay, answer?.delay ?? 0))
             }
         }) else {
             client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
@@ -159,8 +161,8 @@ private final class SiteProtocol: URLProtocol {
             client.urlProtocol(self, didLoad: body)
             client.urlProtocolDidFinishLoading(self)
         }
-        if site.delay > 0 {
-            DispatchQueue.global().asyncAfter(deadline: .now() + site.delay, execute: answer)
+        if delay > 0 {
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: answer)
         } else {
             answer()
         }

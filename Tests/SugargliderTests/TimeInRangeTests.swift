@@ -73,6 +73,27 @@ extension SugargliderTests {
         #expect(summary.inRangeText == "50\u{A0}%")
     }
 
+    /// One reading in 288 is 0.35 %: rounded, it would read as none, and the other 287 as all.
+    @Test func aShareNeverRoundsToNoneOrAll() throws {
+        let settings = Self.makeSettings()
+        settings.rangeHours = 24
+        let now = Date.now
+        let values = readings([40] + Array(repeating: 100, count: 287), endingAt: now)
+        let summary = try #require(TimeInRangeView.summary(readings: values, windowEnd: now,
+                                                           settings: settings, locale: english))
+        #expect(summary.inRangeText == ">99%")
+        #expect(summary.zones.map(\.value) == ["<1%", "0%", ">99%", "0%", "0%"])
+        let german = try #require(TimeInRangeView.summary(readings: values, windowEnd: now, settings: settings,
+                                                          locale: Locale(identifier: "de_DE")))
+        #expect(german.zones.map(\.value) == ["<1\u{A0}%", "0\u{A0}%", ">99\u{A0}%", "0\u{A0}%", "0\u{A0}%"])
+
+        // One in a hundred is exactly 1 % and 99 %, which need no sign.
+        let even = readings([40] + Array(repeating: 100, count: 99), endingAt: now)
+        let exact = try #require(TimeInRangeView.summary(readings: even, windowEnd: now,
+                                                         settings: settings, locale: english))
+        #expect(exact.zones.map(\.value) == ["1%", "0%", "99%", "0%", "0%"])
+    }
+
     @Test func timeInRangeSummaryHidesWhenOffOrMeaningless() {
         let now = Date.now
         let values = readings([60, 100, 200], endingAt: now)
